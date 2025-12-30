@@ -500,7 +500,7 @@ void MainWindow::renderTopBar() {
             }
 #endif
             if (renderer->IsItemClicked(0)) {
-                safeOpenUrl("https://discord.gg/c9ZEXu6QKr");
+                safeOpenUrl(std::string(Constants::URL_DISCORD).c_str());
             }
         }
     } else {
@@ -512,7 +512,7 @@ void MainWindow::renderTopBar() {
         discordButtonSpec.enabled = true;
         discordButtonSpec.visible = true;
         discordButtonSpec.onClick = []() {
-            safeOpenUrl("https://discord.gg/c9ZEXu6QKr");
+            safeOpenUrl(std::string(Constants::URL_DISCORD).c_str());
         };
         createButton(discordButtonSpec);
         if (renderer->IsItemHovered()) {
@@ -542,7 +542,7 @@ void MainWindow::renderTopBar() {
             }
 #endif
             if (renderer->IsItemClicked(0)) {
-                safeOpenUrl("https://github.com/Tanyrus/FFXIFriendList");
+                safeOpenUrl(std::string(Constants::URL_GITHUB).c_str());
             }
         }
     } else {
@@ -554,7 +554,7 @@ void MainWindow::renderTopBar() {
         githubButtonSpec.enabled = true;
         githubButtonSpec.visible = true;
         githubButtonSpec.onClick = []() {
-            safeOpenUrl("https://github.com/Tanyrus/FFXIFriendList");
+            safeOpenUrl(std::string(Constants::URL_GITHUB).c_str());
         };
         createButton(githubButtonSpec);
         if (renderer->IsItemHovered()) {

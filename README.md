@@ -1,5 +1,9 @@
 
-<a href="https://discord.gg/PxsTH7ZR97"><img width="800" height="133" alt="Discord" src="https://github.com/user-attachments/assets/8b11b946-7b6d-402c-b19d-a3c24021dddc" /></a>
+<p align="center">
+  <a href="https://discord.gg/JXsx7zf3Dx">
+    <img src="assets/discord_banner.png" alt="Join the FFXI Friend List Discord">
+  </a>
+</p>
 
 ## Data Privacy & Terms of Service
 

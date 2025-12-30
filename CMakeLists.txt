@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.15)
 
 project(FFXIFriendList
-    VERSION 0.9.5
+    VERSION 0.9.6
     LANGUAGES CXX
 )
 

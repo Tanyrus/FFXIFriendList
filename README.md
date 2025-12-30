@@ -143,7 +143,7 @@ Alternatively, use the command:
 ### Reporting Issues
 
 When reporting issues, please include:
-- Plugin version (0.9.5)
+- Plugin version (0.9.6)
 - Ashita version
 - Realm (Horizon, Eden, Nasomi, etc.)
 - Steps to reproduce the issue

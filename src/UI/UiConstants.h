@@ -159,6 +159,10 @@ inline constexpr std::string_view LABEL_NOTE = "Note";
 // Additional Buttons
 inline constexpr std::string_view BUTTON_CLEAR = "Clear";
 
+// External Links
+inline constexpr std::string_view URL_DISCORD = "https://discord.gg/JXsx7zf3Dx";
+inline constexpr std::string_view URL_GITHUB = "https://github.com/Tanyrus/FFXIFriendList";
+
 } // namespace Constants
 } // namespace UI
 } // namespace XIFriendList

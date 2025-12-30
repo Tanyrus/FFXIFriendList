@@ -6,11 +6,11 @@
 namespace Plugin {
 
 // Current plugin version (as string for display)
-constexpr const char* PLUGIN_VERSION_STRING = "0.9.5";
+constexpr const char* PLUGIN_VERSION_STRING = "0.9.6";
 
 // Current plugin version (as double for Ashita API)
 // Format: major.minor -> 0.90 for version 0.9.0
-constexpr double PLUGIN_VERSION = 0.95;
+constexpr double PLUGIN_VERSION = 0.96;
 
 } // namespace Plugin
 

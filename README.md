@@ -7,15 +7,15 @@
 
 ## Data Privacy & Terms of Service
 
-**IMPORTANT**: This plugin requires a remote server to function. By using it, you agree to the following terms. This plugin is community-developed and is not affiliated with or endorsed by Square Enix or any private server operators. The service processes only in-game character data required to provide friend list functionality, including character name and realm, friend relationships and requests, presence and heartbeat timestamps used to compute online status and last seen, character metadata such as job, nation, rank, and zone when sharing is enabled, account associations, and server-synced preferences. Friend notes are stored locally and never transmitted to the server. No real-world personal information such as name, email, or address is collected. Data is used only to operate the service, is not sold, tracked, advertised, or shared with third parties, raw IP addresses are not stored by the application though infrastructure providers may process them, server-side data may be backed up for reliability, and data is retained while your account remains active with account deletion available upon request. The service is provided “as-is” with no uptime guarantees, access may be revoked for abuse or operational reasons, you are responsible for protecting your API key, and use of the plugin and service is at your own risk. Continued use constitutes acceptance of these terms, which may change over time.
+**IMPORTANT**: This addon requires a remote server to function. By using it, you agree to the following terms. This addon is community-developed and is not affiliated with or endorsed by Square Enix or any private server operators. The service processes only in-game character data required to provide friend list functionality, including character name and realm, friend relationships and requests, presence and heartbeat timestamps used to compute online status and last seen, character metadata such as job, nation, rank, and zone when sharing is enabled, account associations, and server-synced preferences. Friend notes are stored locally and never transmitted to the server. No real-world personal information such as name, email, or address is collected. Data is used only to operate the service, is not sold, tracked, advertised, or shared with third parties, raw IP addresses are not stored by the application though infrastructure providers may process them, server-side data may be backed up for reliability, and data is retained while your account remains active with account deletion available upon request. The service is provided "as-is" with no uptime guarantees, access may be revoked for abuse or operational reasons, you are responsible for protecting your API key, and use of the addon and service is at your own risk. Continued use constitutes acceptance of these terms, which may change over time.
 
 ### Donations & Monetization
 
-No donations, payments, subscriptions, or other financial contributions are accepted or solicited for this plugin or its associated service. This project is non-commercial and provided purely as a community service.
+No donations, payments, subscriptions, or other financial contributions are accepted or solicited for this addon or its associated service. This project is non-commercial and provided purely as a community service.
 
-# FriendList
+# FFXIFriendList
 
-A comprehensive friend list management plugin for Horizon XI (FFXI) using the Ashita v4 framework. This plugin provides real-time friend status tracking, account-based character linking, notes (local), and more through a modern ImGui interface.
+A comprehensive friend list management addon for FFXI private servers using the Ashita v4 framework. This addon provides real-time friend status tracking, account-based character linking, notes (local), and more through a modern ImGui interface.
 
 ## Features
 
@@ -64,7 +64,13 @@ A comprehensive friend list management plugin for Horizon XI (FFXI) using the As
 - **Font Scaling**: Customize font size
 - **Column Visibility**: Show/hide columns (Job, Rank, Nation, Zone, Last Seen)
 - **Column Resizing**: Resize table columns to your preference
-- **Color Customization**: Fine-tune colors for all UI elements
+- **Color Customization**: Fine-tune colors for all UI elements (RGBA)
+- **Custom Assets**: Override sounds and icons with your own files
+
+### Quick Online View
+- **Condensed Window**: A minimal, name-only view of online friends
+- **Hover Details**: Hold mouse over a friend to see full details
+- **SHIFT Override**: Hold SHIFT while hovering to show all fields regardless of settings
 
 ## Commands
 
@@ -78,32 +84,42 @@ A comprehensive friend list management plugin for Horizon XI (FFXI) using the As
 
 ### Prerequisites
 
-1. **Ashita v4**: This plugin requires Ashita v4 framework
+1. **Ashita v4**: This addon requires Ashita v4 framework
 
 ### Installation Steps
 
-1. Download the latest release of FriendList plugin
-2. Extract the plugin files to your Ashita plugins directory:
-3. Ensure the plugin DLL (`FFXIFriendList.dll`) is in the plugins directory
-4. Launch Ashita and the plugin will load automatically
+1. Download the latest release (`FFXIFriendList-x.x.x.zip`)
+2. Extract the `FFXIFriendList` folder to your Ashita addons directory:
+   - `addons/FFXIFriendList/`
+3. Load the addon in-game with `/addon load FFXIFriendList`
+4. (Optional) Add to your default script to load automatically
 
 ## Configuration
 
 ### Configuration Files
 
 Configuration files are stored in:
-- `HorizonXI\Game\config\FFXIFriendList\`
+- `config/addons/FFXIFriendList/`
+
+### Custom Assets
+
+You can override default sounds and icons by placing custom files in the config folder:
+- `config/addons/FFXIFriendList/sounds/` - Custom notification sounds (.wav)
+- `config/addons/FFXIFriendList/images/` - Custom icons (.png)
+
+See the README.txt in the config folder for available file names.
 
 ### Realm Detection
 
-**To set your realm**: The plugin will request your server on first load. If your server is not listed, submit an issue on Github and I will add it to the server.
+**To set your realm**: The addon will request your server on first load. If your server is not listed, submit an issue on GitHub and it will be added.
 
 ### Local Data
 
 Local-only data (not synced to server):
-- Local notes (default; stored locally per-account, shared across characters on the same account)
+- Local notes (stored locally per-account, shared across characters on the same account)
 - Theme preference
 - Notification duration
+- Window positions
 
 ## Usage Examples
 
@@ -123,26 +139,29 @@ Alternatively, use the command:
 ### Adding a Note
 
 1. Open the friend list window
-2. Right-click on a friend amd select "Edit Note" (or just left click)
+2. Right-click on a friend and select "Edit Note" (or just left click)
 3. Enter your note in the editor
 4. Click "Save"
 
 **Note Storage**:
-- **Local notes** (default): Notes are stored locally on your device (per-account) and are not synced to the server. Notes are shared across all characters on the same account.
+- Notes are stored locally on your device (per-account) and are not synced to the server
+- Notes are shared across all characters on the same account
 
 ### Switching Characters
 
 1. Log out and log in with a different character
-2. Plugin automatically detects character change
+2. Addon automatically detects character change
 3. Server handles account association automatically
 4. Friend list and notes are shared if characters are on the same account
 
-**Note**: The server automatically merges accounts if you switch to a character that belongs to a different account. Notes are stored per-account and are shared across all characters on the same account (local notes are local-only).
+**Note**: The server automatically merges accounts if you switch to a character that belongs to a different account.
 
-## Plugin Not Loading
+## Troubleshooting
+
+### Addon Not Loading
 
 - **Check Ashita version**: Ensure you're using Ashita v4
-- **Check plugin location**: Verify `FFXIFriendList.dll` is in the `plugins` directory
+- **Check addon location**: Verify `FFXIFriendList.lua` is in the `addons/FFXIFriendList` directory
 - **Check Ashita logs**: Look for error messages in Ashita's log files
 
 ## Support
@@ -150,9 +169,9 @@ Alternatively, use the command:
 ### Reporting Issues
 
 When reporting issues, please include:
-- Plugin version (0.9.6)
+- Addon version
 - Ashita version
-- Realm (Horizon, Eden, Nasomi, etc.)
+- Server/Realm name
 - Steps to reproduce the issue
 - Screenshots (if applicable)
 
@@ -161,11 +180,13 @@ When reporting issues, please include:
 This project is licensed under the GNU General Public License v3 (GPLv3). You can find the full license text [here](LICENSE).
 
 **Key aspects of GPLv3:**
-*   **Free Software:** Grants users the freedom to run, study, modify, and share the software [7, 10].
-*   **Strong Copyleft:** Any software derived from or linked with this code must also be released under GPLv3 [1, 4, 5].
-*   **Patent Protection:** Explicitly protects users from patent claims by contributors [9, 10].
+- **Free Software:** Grants users the freedom to run, study, modify, and share the software.
+- **Strong Copyleft:** Any software derived from or linked with this code must also be released under GPLv3.
+- **Patent Protection:** Explicitly protects users from patent claims by contributors.
 
 ## Acknowledgments
 
-- Uses the Ashita v4 plugin framework
+- Uses the Ashita v4 addon framework
 - Powered by ImGui for the user interface
+- Uses [nonBlockingRequests](https://github.com/loonsies/nonBlockingRequests) for async networking
+

@@ -1,0 +1,232 @@
+local imgui = require('imgui')
+
+local M = {}
+
+function M.Render(state, dataModule, callbacks)
+    local app = _G.FFXIFriendListApp
+    local prefs = nil
+    if app and app.features and app.features.preferences then
+        prefs = app.features.preferences:getPrefs()
+    end
+    
+    if not prefs then
+        imgui.Text("Preferences not available")
+        return
+    end
+    
+    local prefsDuration = tonumber(prefs.notificationDuration) or 8.0
+    if prefsDuration < 1.0 then prefsDuration = 8.0 end
+    
+    if not state.notificationDuration then
+        state.notificationDuration = prefsDuration
+        state.lastNotificationDurationValue = prefsDuration
+    end
+    if not state.soundVolumeDisplay then
+        state.soundVolumeDisplay = (tonumber(prefs.notificationSoundVolume) or 0.6) * 100.0
+        state.lastSoundVolumeValue = tonumber(prefs.notificationSoundVolume) or 0.6
+    end
+    
+    if math.abs(state.notificationDuration - prefsDuration) > 0.1 and 
+       math.abs(state.lastNotificationDurationValue - prefsDuration) < 0.01 then
+        state.notificationDuration = prefsDuration
+        state.lastNotificationDurationValue = prefsDuration
+    end
+    
+    local currentVolume = prefs.notificationSoundVolume or 0.6
+    local currentVolumeDisplay = currentVolume * 100.0
+    if math.abs(state.soundVolumeDisplay - currentVolumeDisplay) > 5.0 and
+       math.abs(state.lastSoundVolumeValue - currentVolume) < 0.01 then
+        state.soundVolumeDisplay = currentVolumeDisplay
+        state.lastSoundVolumeValue = currentVolume
+    end
+    
+    local soundsEnabled = {prefs.notificationSoundsEnabled ~= false}
+    if imgui.Checkbox("Enable Notification Sounds", soundsEnabled) then
+        if app and app.features and app.features.preferences then
+            app.features.preferences:setPref("notificationSoundsEnabled", soundsEnabled[1])
+            app.features.preferences:save()
+        end
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("Enable or disable all notification sounds.")
+    end
+    
+    imgui.Spacing()
+    
+    local soundOnOnline = {prefs.soundOnFriendOnline ~= false}
+    if imgui.Checkbox("Play Sound on Friend Online", soundOnOnline) then
+        if app and app.features and app.features.preferences then
+            app.features.preferences:setPref("soundOnFriendOnline", soundOnOnline[1])
+            app.features.preferences:save()
+        end
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("Play a sound when a friend comes online.")
+    end
+    
+    if not soundsEnabled[1] then
+        imgui.PushStyleColor(ImGuiCol_Text, {0.5, 0.5, 0.5, 1.0})
+        imgui.PushStyleColor(ImGuiCol_CheckMark, {0.5, 0.5, 0.5, 1.0})
+    end
+    
+    imgui.Spacing()
+    
+    local soundOnRequest = {prefs.soundOnFriendRequest ~= false}
+    local checkboxChanged = false
+    if soundsEnabled[1] then
+        checkboxChanged = imgui.Checkbox("Play Sound on Friend Request", soundOnRequest)
+    else
+        local disabledValue = {prefs.soundOnFriendRequest ~= false}
+        imgui.Checkbox("Play Sound on Friend Request", disabledValue)
+    end
+    
+    if checkboxChanged then
+        if app and app.features and app.features.preferences then
+            app.features.preferences:setPref("soundOnFriendRequest", soundOnRequest[1])
+            app.features.preferences:save()
+        end
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("Play a sound when you receive a friend request.")
+    end
+    
+    if not soundsEnabled[1] then
+        imgui.PopStyleColor(2)
+    end
+    
+    imgui.Spacing()
+    
+    local volumeValue = {state.soundVolumeDisplay}
+    if imgui.SliderFloat("Notification Sound Volume", volumeValue, 0.0, 100.0, "%.0f%%") then
+        local normalizedValue = volumeValue[1] / 100.0
+        if app and app.features and app.features.preferences then
+            app.features.preferences:setPref("notificationSoundVolume", normalizedValue)
+            state.lastSoundVolumeValue = normalizedValue
+        end
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("Adjust the volume for notification sounds.")
+    end
+    if imgui.IsItemDeactivatedAfterEdit() then
+        local normalizedValue = volumeValue[1] / 100.0
+        if app and app.features and app.features.preferences then
+            app.features.preferences:save()
+        end
+    end
+    state.soundVolumeDisplay = volumeValue[1]
+    
+    if not soundsEnabled[1] then
+        imgui.PushStyleColor(ImGuiCol_Text, {0.5, 0.5, 0.5, 1.0})
+        imgui.PushStyleColor(ImGuiCol_SliderGrab, {0.5, 0.5, 0.5, 1.0})
+    end
+    
+    imgui.Spacing()
+    
+    local durationValue = {state.notificationDuration}
+    local sliderChanged = false
+    if soundsEnabled[1] then
+        sliderChanged = imgui.SliderFloat("Notification Duration (seconds)", durationValue, 1.0, 30.0, "%.1f")
+    else
+        imgui.SliderFloat("Notification Duration (seconds)", durationValue, 1.0, 30.0, "%.1f")
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("How long notification toasts remain visible on screen.")
+    end
+    
+    if sliderChanged then
+        if app and app.features and app.features.preferences then
+            app.features.preferences:setPref("notificationDuration", durationValue[1])
+            state.lastNotificationDurationValue = durationValue[1]
+        end
+    end
+    if soundsEnabled[1] and imgui.IsItemDeactivatedAfterEdit() then
+        if app and app.features and app.features.preferences then
+            app.features.preferences:save()
+        end
+    end
+    state.notificationDuration = durationValue[1]
+    
+    if not soundsEnabled[1] then
+        imgui.PopStyleColor(2)
+    end
+    
+    imgui.Spacing()
+    
+    M.RenderNotificationPosition(state, prefs)
+end
+
+function M.RenderNotificationPosition(state, prefs)
+    local app = _G.FFXIFriendListApp
+    
+    imgui.Text("Position (X, Y pixels):")
+    
+    if not state.notificationPosXBuffer then
+        state.notificationPosXBuffer = {string.format("%.3f", prefs.notificationPositionX or 0.0)}
+        state.notificationPosYBuffer = {string.format("%.3f", prefs.notificationPositionY or 0.0)}
+        state.lastPosX = prefs.notificationPositionX or 0.0
+        state.lastPosY = prefs.notificationPositionY or 0.0
+    end
+    
+    local currentPosX = prefs.notificationPositionX or 0.0
+    local currentPosY = prefs.notificationPositionY or 0.0
+    if math.abs(state.lastPosX - currentPosX) > 0.01 then
+        state.notificationPosXBuffer[1] = string.format("%.3f", currentPosX)
+        state.lastPosX = currentPosX
+    end
+    if math.abs(state.lastPosY - currentPosY) > 0.01 then
+        state.notificationPosYBuffer[1] = string.format("%.3f", currentPosY)
+        state.lastPosY = currentPosY
+    end
+    
+    imgui.Text("X:")
+    imgui.SameLine(0, 5)
+    imgui.PushItemWidth(100)
+    if imgui.InputText("##x_pos", state.notificationPosXBuffer, 64) then
+        local x = tonumber(state.notificationPosXBuffer[1])
+        if x then
+            if app and app.features and app.features.preferences then
+                app.features.preferences:setPref("notificationPositionX", x)
+                state.lastPosX = x
+            end
+        end
+    end
+    if imgui.IsItemDeactivatedAfterEdit() then
+        local x = tonumber(state.notificationPosXBuffer[1])
+        if x then
+            if app and app.features and app.features.preferences then
+                app.features.preferences:save()
+            end
+        else
+            state.notificationPosXBuffer[1] = string.format("%.3f", state.lastPosX)
+        end
+    end
+    imgui.PopItemWidth()
+    
+    imgui.SameLine(0, 10)
+    imgui.Text("Y:")
+    imgui.SameLine(0, 5)
+    imgui.PushItemWidth(100)
+    if imgui.InputText("##y_pos", state.notificationPosYBuffer, 64) then
+        local y = tonumber(state.notificationPosYBuffer[1])
+        if y then
+            if app and app.features and app.features.preferences then
+                app.features.preferences:setPref("notificationPositionY", y)
+                state.lastPosY = y
+            end
+        end
+    end
+    if imgui.IsItemDeactivatedAfterEdit() then
+        local y = tonumber(state.notificationPosYBuffer[1])
+        if y then
+            if app and app.features and app.features.preferences then
+                app.features.preferences:save()
+            end
+        else
+            state.notificationPosYBuffer[1] = string.format("%.3f", state.lastPosY)
+        end
+    end
+    imgui.PopItemWidth()
+end
+
+return M
+

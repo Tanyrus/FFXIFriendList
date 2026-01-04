@@ -21,13 +21,17 @@ jobs:
           VERSION=${GITHUB_REF#refs/tags/v}
 
           # Create temporary directory for release
-          mkdir -p release
+          mkdir -p release/FFXIFriendList
 
-          # Copy addon files (excluding dev-only folders)
+          # Copy addon files (excluding dev-only folders and git files)
           rsync -av --exclude='docs/' \
                     --exclude='tests/' \
                     --exclude='scripts/' \
-                    FFXIFriendList/ release/FFXIFriendList/
+                    --exclude='.github/' \
+                    --exclude='.git/' \
+                    --exclude='.gitignore' \
+                    --exclude='.gitattributes' \
+                    ./ release/FFXIFriendList/
 
           # Verify the addon entry file exists
           echo "Addon entry file:"
@@ -35,7 +39,7 @@ jobs:
 
           # Show version info
           echo "Version from addon:"
-          grep "addon.version" release/FFXIFriendList/FFXIFriendList.lua
+          grep "addon.version" release/FFXIFriendList/FFXIFriendList.lua || echo "Version line not found"
 
           # Create zip file with version-specific name
           cd release

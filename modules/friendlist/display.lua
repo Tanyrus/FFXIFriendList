@@ -565,6 +565,44 @@ function M.RenderTaggedFriendSections(dataModule, callbacks)
             end
         end
         imgui.TableHeadersRow()
+        
+        if imgui.BeginPopupContextWindow("##header_column_context", 1) then
+            imgui.Text("Show Columns:")
+            imgui.Separator()
+            
+            local jobVisible = {state.columnVisible.job}
+            if imgui.Checkbox("Job##ctx_col_job", jobVisible) then
+                state.columnVisible.job = jobVisible[1]
+                if callbacks.onSaveState then callbacks.onSaveState() end
+            end
+            
+            local zoneVisible = {state.columnVisible.zone}
+            if imgui.Checkbox("Zone##ctx_col_zone", zoneVisible) then
+                state.columnVisible.zone = zoneVisible[1]
+                if callbacks.onSaveState then callbacks.onSaveState() end
+            end
+            
+            local nationRankVisible = {state.columnVisible.nationRank}
+            if imgui.Checkbox("Nation/Rank##ctx_col_nation", nationRankVisible) then
+                state.columnVisible.nationRank = nationRankVisible[1]
+                if callbacks.onSaveState then callbacks.onSaveState() end
+            end
+            
+            local lastSeenVisible = {state.columnVisible.lastSeen}
+            if imgui.Checkbox("Last Seen##ctx_col_lastseen", lastSeenVisible) then
+                state.columnVisible.lastSeen = lastSeenVisible[1]
+                if callbacks.onSaveState then callbacks.onSaveState() end
+            end
+            
+            local addedAsVisible = {state.columnVisible.addedAs}
+            if imgui.Checkbox("Added As##ctx_col_addedas", addedAsVisible) then
+                state.columnVisible.addedAs = addedAsVisible[1]
+                if callbacks.onSaveState then callbacks.onSaveState() end
+            end
+            
+            imgui.EndPopup()
+        end
+        
         imgui.EndTable()
     end
     

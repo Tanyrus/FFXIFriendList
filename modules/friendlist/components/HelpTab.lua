@@ -25,24 +25,24 @@ function M.RenderCommandsSection()
     if imgui.CollapsingHeader("Commands", ImGuiTreeNodeFlags_DefaultOpen) then
         imgui.Indent()
         
-        imgui.TextColored({0.9, 0.9, 0.6, 1.0}, "/flist")
-        imgui.SameLine()
-        imgui.TextDisabled(" - ")
-        imgui.SameLine()
-        imgui.Text("Open the main Friend List window")
-        
         imgui.TextColored({0.9, 0.9, 0.6, 1.0}, "/fl")
         imgui.SameLine()
         imgui.TextDisabled(" - ")
         imgui.SameLine()
-        imgui.Text("Open the Compact Friend List window")
-        
-        imgui.TextColored({0.9, 0.9, 0.6, 1.0}, "/flistclose")
+        imgui.Text("Open the main Friend List window")  
+       
+        imgui.TextColored({0.9, 0.9, 0.6, 1.0}, "/flist")
         imgui.SameLine()
         imgui.TextDisabled(" - ")
         imgui.SameLine()
-        imgui.Text("Close all addon windows")
-        
+        imgui.Text("Open the Compact Friend List window")
+
+        imgui.TextColored({0.9, 0.9, 0.6, 1.0}, "/befriend <name> <tag-optional>")
+        imgui.SameLine()
+        imgui.TextDisabled(" - ")
+        imgui.SameLine()
+        imgui.Text("Sends a friend request to the specified player with an optional tag")
+
         imgui.Unindent()
     end
 end
@@ -54,10 +54,10 @@ function M.RenderFriendRequestsSection()
         imgui.TextWrapped("To add a friend:")
         imgui.Bullet()
         imgui.SameLine()
-        imgui.TextWrapped("Target a player in-game and type the character name in the \"Add Friend\" box")
+        imgui.TextWrapped("Type the character name in the \"Add Friend\" box")
         imgui.Bullet()
         imgui.SameLine()
-        imgui.TextWrapped("Click \"Send Request\" to send them a friend request")
+        imgui.TextWrapped("Click \"Add Friend\" to send them a friend request")
         
         imgui.Spacing()
         

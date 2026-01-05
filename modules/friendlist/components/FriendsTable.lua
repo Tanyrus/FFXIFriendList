@@ -190,7 +190,7 @@ function M.Render(state, dataModule, callbacks)
 end
 
 function M.RenderNameCell(friend, index, state, callbacks)
-    local friendName = utils.capitalizeName(friend.name or "Unknown")
+    local friendName = utils.capitalizeName(utils.getDisplayName(friend))
     local isOnline = friend.isOnline or false
     local isPending = friend.isPending or false
     

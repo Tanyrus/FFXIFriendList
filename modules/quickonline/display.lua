@@ -13,6 +13,7 @@ local HoverTooltip = require('ui.widgets.HoverTooltip')
 -- Use same components as main friend list window
 local FriendContextMenu = require('modules.friendlist.components.FriendContextMenu')
 local FriendDetailsPopup = require('modules.friendlist.components.FriendDetailsPopup')
+local utils = require('modules.friendlist.components.helpers.utils')
 
 local M = {}
 
@@ -431,7 +432,7 @@ function M.RenderFriendsTable(dataModule)
             imgui.TableNextRow()
             imgui.TableNextColumn()
             
-            local friendName = capitalizeName(friend.name or "Unknown")
+            local friendName = utils.capitalizeName(utils.getDisplayName(friend))
             local isOnline = friend.isOnline == true
             
             if not icons.RenderStatusIcon(isOnline, false, 12) then

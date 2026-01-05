@@ -56,7 +56,7 @@ local icons = require('libs.icons')
 local inputHandler = require('handlers.input')
 local controllerInputHandler = require('handlers.controller_input')
 
--- Load UI close handling (centralized ESC/controller close - C++ parity)
+-- Load UI close handling (centralized ESC/controller close)
 local closeInputHandler = require('ui.input.close_input')
 
 -- Load sound player service
@@ -333,12 +333,17 @@ ashita.events.register('d3d_present', 'ffxifriendlist_present', function()
         App.tick(app, deltaTime)  -- deltaTime is already in seconds from os.clock()
     end
     
+    -- Don't render or process input until character is loaded
+    if not App.isGameReady() then
+        return nil
+    end
+    
     -- Update menu detection (polling method, every frame but throttled internally)
     if initialized then
         inputHandler.update(deltaTime)
     end
     
-    -- Centralized close key handling (ESC/controller B - C++ parity)
+    -- Process close key before window draws
     -- Must run BEFORE render so close is processed before window draws
     if initialized then
         closeInputHandler.update()
@@ -391,8 +396,7 @@ ashita.events.register('packet_in', 'ffxifriendlist_packet', function(e)
     if e.id == 0x00A then
         parsedPacket = packets.ParseZonePacket(e)
         if parsedPacket and app and app.features.friends then
-            -- Schedule zone change handling (C++ spawns thread with 1s delay)
-            -- We'll handle it in the tick method after delay
+            -- Schedule zone change handling (processed after debounce delay)
             local _ = app.features.friends:scheduleZoneChange(parsedPacket)
         end
     else
@@ -585,7 +589,7 @@ ashita.events.register('command', 'ffxifriendlist_command', function(e)
             -- Toggle showFriendList config
             gConfig.showFriendList = not gConfig.showFriendList
             
-            -- Update module visibility via registry (like XIUI does)
+            -- Update module visibility via registry
             moduleRegistry.CheckVisibility(gConfig)
             
             -- Also ensure the module's window is open when showing

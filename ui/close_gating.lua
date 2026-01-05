@@ -1,15 +1,13 @@
 -- close_gating.lua
--- Popup/menu detection for window close gating (C++ UiCloseCoordinator parity)
--- Returns true if close should be deferred due to open popups/menus
+-- Popup/menu detection for window close gating
 
 local imgui = require('imgui')
 
 local M = {}
 
 -- Check if any popup is open
--- Matches C++ isUiMenuCleanForClose() which checks renderer->IsAnyPopupOpen()
 function M.isAnyPopupOpen()
-    -- Try imgui.IsAnyPopupOpen if available (exact C++ match)
+    -- Try imgui.IsAnyPopupOpen if available
     if imgui.IsAnyPopupOpen then
         local success, result = pcall(imgui.IsAnyPopupOpen)
         if success then
@@ -41,7 +39,6 @@ function M.isAnyPopupOpen()
 end
 
 -- Check if close should be deferred
--- Matches C++ applyWindowCloseGating() logic
 function M.shouldDeferClose()
     return M.isAnyPopupOpen()
 end

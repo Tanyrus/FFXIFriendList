@@ -86,6 +86,14 @@ function M.RenderFriendViewSettingsSection(state, callbacks)
     if imgui.IsItemHovered() then
         imgui.SetTooltip("Show the Last Seen column (when the friend was last online).\nDisplays 'Now' for online friends.")
     end
+    
+    if imgui.Checkbox("Show Added As", {state.columnVisible.addedAs}) then
+        state.columnVisible.addedAs = not state.columnVisible.addedAs
+        if callbacks.onSaveState then callbacks.onSaveState() end
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("Show the Added As column (the character name used when adding this friend).")
+    end
 end
 
 function M.RenderHoverTooltipSettings(state, callbacks)

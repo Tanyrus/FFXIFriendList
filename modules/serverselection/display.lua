@@ -205,7 +205,7 @@ function M.DrawWindow(settings, dataModule)
         imgui.Text("No servers available.")
     else
         -- Build server names list (with "NONE" option)
-        -- Use direct value comparison like XIUI pattern, not index-based
+        -- Use direct value comparison, not index-based
         local serverItems = {}
         local currentValue = ""  -- Empty string = "NONE"
         
@@ -245,7 +245,7 @@ function M.DrawWindow(settings, dataModule)
             imgui.Spacing()
         end
         
-        -- Server combo box (using value-based comparison like XIUI)
+        -- Server combo box
         if imgui.BeginCombo("Server", previewText) then
             for _, item in ipairs(serverItems) do
                 local itemValue = item.id or ""  -- Empty string for "NONE"
@@ -262,7 +262,7 @@ function M.DrawWindow(settings, dataModule)
                 end
                 
                 -- When Selectable is clicked, it returns true
-                -- Only update if this item is different from current selection (matching XIUI pattern)
+                -- Only update if this item is different from current selection
                 local clicked = imgui.Selectable(itemText, isSelected)
                 if clicked and itemValue ~= currentValue then
                     -- User clicked on this item - set it as selected

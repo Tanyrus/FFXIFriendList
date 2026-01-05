@@ -92,7 +92,7 @@ function M.NoteMerger.formatTimestamp(timestamp, formattedString)
     if timestamp > 10000000000 then
         seconds = math.floor(timestamp / 1000)
     end
-    -- Format as YYYY-MM-DD HH:MM:SS (matches C++ behavior)
+    -- Format: YYYY-MM-DD HH:MM:SS
     local formatted = os.date("%Y-%m-%d %H:%M:%S", seconds)
     if formatted then
         return formatted

@@ -13,6 +13,7 @@ local HoverTooltip = require('ui.widgets.HoverTooltip')
 -- Use same components as main friend list window
 local FriendContextMenu = require('modules.friendlist.components.FriendContextMenu')
 local FriendDetailsPopup = require('modules.friendlist.components.FriendDetailsPopup')
+local utils = require('modules.friendlist.components.helpers.utils')
 
 local M = {}
 
@@ -184,8 +185,7 @@ function M.DrawWindow(settings, dataModule)
         state.locked = gConfig.windows.quickOnline.locked or false
     end
     
-    -- NOTE: ESC/close key handling is now centralized in ui/input/close_input.lua
-    -- This matches C++ handleEscapeKey() being in AshitaAdapter, not per-window
+    -- ESC/close key handling is centralized in ui/input/close_input.lua
     
     -- Apply theme styles (only if not default theme)
     local themePushed = false
@@ -225,7 +225,7 @@ function M.DrawWindow(settings, dataModule)
     
     -- Handle X button close attempt
     if xButtonClicked then
-        -- Block close if locked (C++ parity: locked windows don't close via X)
+        -- Locked windows ignore X button close
         if state.locked then
             -- Keep window open - locked windows can't be closed via X
             -- (do nothing, gConfig.showQuickOnline stays true)
@@ -432,7 +432,7 @@ function M.RenderFriendsTable(dataModule)
             imgui.TableNextRow()
             imgui.TableNextColumn()
             
-            local friendName = capitalizeName(friend.name or "Unknown")
+            local friendName = utils.capitalizeName(utils.getDisplayName(friend))
             local isOnline = friend.isOnline == true
             
             if not icons.RenderStatusIcon(isOnline, false, 12) then

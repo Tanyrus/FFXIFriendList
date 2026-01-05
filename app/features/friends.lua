@@ -39,6 +39,11 @@ function M.Friends.new(deps)
     
     self.pendingZoneChange = nil
     self.zoneChangeScheduledAt = nil
+    
+    -- Notification state tracking
+    self.previousOnlineStatus = {}      -- table: lowercase name -> bool
+    self.initialStatusScanComplete = false
+    self.processedRequestIds = {}       -- set: requestId -> true
 
     return self
 end
@@ -346,6 +351,11 @@ function M.Friends:handleRefreshResponse(success, response)
         self.deps.logger.debug(string.format("[Friends] [%d] Refresh complete: %d friends, %d statuses (decode: %dms, state: %dms)", 
             stateUpdateEndMs, friendCount, statusCount, decodeTime, stateUpdateTime))
     end
+    
+    -- Check for status changes and trigger notifications
+    if result.statuses and type(result.statuses) == "table" then
+        self:checkForStatusChanges(self.friendList:getFriendStatuses())
+    end
 end
 
 function M.Friends:scheduleRetry()
@@ -597,6 +607,9 @@ function M.Friends:handleFriendRequestsResponse(success, response)
             #self.incomingRequests .. " incoming, " .. 
             #self.outgoingRequests .. " outgoing")
     end
+    
+    -- Check for new friend requests and trigger notifications
+    self:checkForNewFriendRequests(self.incomingRequests)
 end
 
 function M.Friends:getIncomingRequests()
@@ -640,13 +653,13 @@ function M.Friends:updatePresence()
         return false
     end
     
+    -- isAnonymous = gameIsAnonymous AND NOT shareJobWhenAnonymous
     local app = _G.FFXIFriendListApp
-    if app and app.features and app.features.preferences then
-        local prefs = app.features.preferences:getPreferences()
-        if prefs and prefs.shareJobWhenAnonymous then
-            if prefs.shareJobWhenAnonymous then
-                presence.isAnonymous = false
-            end
+    if app and app.features and app.features.preferences and app.features.preferences.getPrefs then
+        local prefs = app.features.preferences:getPrefs()
+        if prefs then
+            local gameIsAnonymous = presence.isAnonymous
+            presence.isAnonymous = gameIsAnonymous and not prefs.shareJobWhenAnonymous
         end
     end
     
@@ -795,6 +808,155 @@ function M.Friends:updateFriendStatuses(statuses)
     end
     
     self.lastUpdatedAt = getTime(self)
+    
+    -- Check for status changes and trigger notifications (heartbeat path)
+    self:checkForStatusChanges(self.friendList:getFriendStatuses())
+end
+
+local function capitalizeName(name)
+    if not name or name == "" then
+        return name
+    end
+    local result = name:sub(1, 1):upper() .. name:sub(2):lower()
+    return result
+end
+
+-- Check for online status changes and trigger notifications
+function M.Friends:checkForStatusChanges(currentStatuses)
+    if not currentStatuses then
+        return
+    end
+    
+    -- Build current online status map
+    local currentOnlineStatus = {}
+    local displayNames = {}
+    
+    for _, status in ipairs(currentStatuses) do
+        local friendNameLower = string.lower(status.characterName or "")
+        if friendNameLower ~= "" then
+            currentOnlineStatus[friendNameLower] = status.isOnline == true
+            displayNames[friendNameLower] = capitalizeName(status.displayName or status.characterName or friendNameLower)
+        end
+    end
+    
+    -- On first scan, store baseline and return (no notifications)
+    if not self.initialStatusScanComplete then
+        self.previousOnlineStatus = currentOnlineStatus
+        self.initialStatusScanComplete = true
+        if self.deps.logger and self.deps.logger.debug then
+            self.deps.logger.debug("[Friends] Initial status scan complete, notifications enabled")
+        end
+        return
+    end
+    
+    -- Compare current vs previous to find transitions
+    local onlineTransitions = {}
+    local offlineTransitions = {}
+    
+    for friendName, isCurrentlyOnline in pairs(currentOnlineStatus) do
+        local wasPreviouslyOnline = self.previousOnlineStatus[friendName] == true
+        
+        if not wasPreviouslyOnline and isCurrentlyOnline then
+            -- Friend came online
+            table.insert(onlineTransitions, displayNames[friendName] or friendName)
+        elseif wasPreviouslyOnline and not isCurrentlyOnline then
+            -- Friend went offline
+            table.insert(offlineTransitions, displayNames[friendName] or friendName)
+        end
+    end
+    
+    -- Log transitions for debugging
+    if self.deps.logger and self.deps.logger.debug then
+        if #onlineTransitions > 0 or #offlineTransitions > 0 then
+            self.deps.logger.debug(string.format(
+                "[NotificationDiff] onlineTransitions=[%s] offlineTransitions=[%s]",
+                table.concat(onlineTransitions, ", "),
+                table.concat(offlineTransitions, ", ")
+            ))
+        end
+    end
+    
+    -- Get notifications feature from app
+    local app = _G.FFXIFriendListApp
+    if app and app.features and app.features.notifications then
+        local Notifications = require("app.features.notifications")
+        
+        -- Create toasts for friends coming online
+        for _, displayName in ipairs(onlineTransitions) do
+            if self.deps.logger and self.deps.logger.debug then
+                self.deps.logger.debug(string.format("[ToastQueue] enqueue type=FriendOnline name=%s", displayName))
+            end
+            app.features.notifications:push(Notifications.ToastType.FriendOnline, {
+                title = "Friend Online",
+                message = displayName .. " is now online",
+                dedupeKey = "online_" .. string.lower(displayName)
+            })
+        end
+        
+        -- Create toasts for friends going offline (optional, can be enabled)
+        -- Uncomment if offline notifications are desired:
+        -- for _, displayName in ipairs(offlineTransitions) do
+        --     app.features.notifications:push(Notifications.ToastType.FriendOffline, {
+        --         title = "Friend Offline",
+        --         message = displayName .. " went offline",
+        --         dedupeKey = "offline_" .. string.lower(displayName)
+        --     })
+        -- end
+    end
+    
+    -- Update previous status with current
+    self.previousOnlineStatus = currentOnlineStatus
+end
+
+-- Check for new friend requests and trigger notifications
+function M.Friends:checkForNewFriendRequests(incomingRequests)
+    if not incomingRequests then
+        return
+    end
+    
+    local newRequests = {}
+    
+    for _, request in ipairs(incomingRequests) do
+        local requestId = request.id or request.requestId
+        if requestId and not self.processedRequestIds[requestId] then
+            -- Mark as processed
+            self.processedRequestIds[requestId] = true
+            
+            -- Get display name from the request
+            local displayName = request.fromCharacterName or request.name or request.senderName or "Unknown"
+            displayName = capitalizeName(displayName)
+            
+            table.insert(newRequests, displayName)
+        end
+    end
+    
+    -- Log new requests for debugging
+    if self.deps.logger and self.deps.logger.debug then
+        if #newRequests > 0 then
+            self.deps.logger.debug(string.format(
+                "[NotificationDiff] requestTransitions=[%s]",
+                table.concat(newRequests, ", ")
+            ))
+        end
+    end
+    
+    -- Get notifications feature from app
+    local app = _G.FFXIFriendListApp
+    if app and app.features and app.features.notifications then
+        local Notifications = require("app.features.notifications")
+        
+        -- Create toasts for new friend requests
+        for _, displayName in ipairs(newRequests) do
+            if self.deps.logger and self.deps.logger.debug then
+                self.deps.logger.debug(string.format("[ToastQueue] enqueue type=FriendRequest name=%s", displayName))
+            end
+            app.features.notifications:push(Notifications.ToastType.FriendRequestReceived, {
+                title = "Friend Request",
+                message = displayName .. " sent you a friend request",
+                dedupeKey = "request_" .. string.lower(displayName)
+            })
+        end
+    end
 end
 
 function M.Friends:queryPlayerPresence()
@@ -808,44 +970,46 @@ function M.Friends:queryPlayerPresence()
         timestamp = getTime(self)
     }
     
-    if memoryMgr then
-        local party = memoryMgr:GetParty()
-        if party then
-            local playerName = party:GetMemberName(0)
-            if playerName and playerName ~= "" then
-                presence.characterName = string.lower(playerName)
-            end
-        end
-        
-        if presence.characterName == "" then
-            local entityMgr = memoryMgr:GetEntity()
-            if entityMgr then
-                local resourceMgr = AshitaCore:GetResourceManager()
-                if resourceMgr then
-                    local entityCount = resourceMgr:GetEntityCount()
-                    for i = 0, entityCount - 1 do
-                        local entityType = entityMgr:GetType(i)
-                        local namePtr = entityMgr:GetName(i)
-                        if entityType == 0 and namePtr and namePtr ~= "" then
-                            presence.characterName = string.lower(namePtr)
-                            break
-                        end
-                    end
-                end
-            end
-        end
-    end
-    
-    if presence.characterName == "" then
-        return presence
-    end
-    
     if not AshitaCore then
         return presence
     end
     
     local memoryMgr = AshitaCore:GetMemoryManager()
     if not memoryMgr then
+        return presence
+    end
+    
+    -- Try to get character name from party first
+    local party = memoryMgr:GetParty()
+    if party then
+        local success, playerName = pcall(function()
+            return party:GetMemberName(0)
+        end)
+        if success and playerName and playerName ~= "" then
+            presence.characterName = string.lower(playerName)
+        end
+    end
+    
+    -- Fallback: try entity manager (wrapped in pcall for safety)
+    if presence.characterName == "" then
+        local success, result = pcall(function()
+            local entityMgr = memoryMgr:GetEntity()
+            if entityMgr then
+                -- Check player entity (index 0 is typically the player)
+                local entityType = entityMgr:GetType(0)
+                local namePtr = entityMgr:GetName(0)
+                if entityType == 0 and namePtr and namePtr ~= "" then
+                    return string.lower(namePtr)
+                end
+            end
+            return ""
+        end)
+        if success and result and result ~= "" then
+            presence.characterName = result
+        end
+    end
+    
+    if presence.characterName == "" then
         return presence
     end
     

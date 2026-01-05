@@ -7,9 +7,7 @@ local Json = require("protocol.Json")
 
 local M = {}
 
--- Helper to create directory recursively (creates parent directories if needed)
--- Based on C++ NotesPersistence::ensureNotesDirectory pattern
--- Creates each subdirectory level incrementally by looping through the path
+-- Create directory recursively (creates parent directories if needed)
 local function createDirectoryRecursive(dir, createDirFunc)
     if not createDirFunc then
         return false, "No createDirectory function provided"
@@ -20,7 +18,6 @@ local function createDirectoryRecursive(dir, createDirFunc)
     
     -- Extract the directory path (remove filename if present)
     -- Create each subdirectory level incrementally
-    -- This matches the C++ pattern: for (size_t i = 0; i < dir.length(); ++i) { if (dir[i] == '\\' || dir[i] == '/') { CreateDirectoryA(subDir.c_str(), nullptr); } }
     for i = 1, #dir do
         local char = dir:sub(i, i)
         if char == "\\" or char == "/" then

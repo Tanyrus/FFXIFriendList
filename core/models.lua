@@ -101,7 +101,7 @@ function M.Preferences.new()
     self.showOnlineStatus = true
     self.shareLocation = true
     self.notificationDuration = 8.0
-    -- Default notification position matches C++ (10, 15)
+    -- Default notification position
     self.notificationPositionX = 10.0
     self.notificationPositionY = 15.0
     self.customCloseKeyCode = 0

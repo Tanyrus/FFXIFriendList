@@ -86,7 +86,8 @@ local state = {
         job = true,
         zone = false,
         nationRank = false,
-        lastSeen = false
+        lastSeen = false,
+        addedAs = false
     }
 }
 
@@ -464,7 +465,6 @@ function M.RenderAboutPopup()
         
         imgui.Text("Special Thanks")
         imgui.BulletText("Ashita Team - Plugin framework")
-        imgui.BulletText("XIUI - UI inspiration and patterns")
         
         imgui.Separator()
         

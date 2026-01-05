@@ -26,6 +26,18 @@ function M.capitalizeName(name)
     return result
 end
 
+function M.getDisplayName(friend)
+    local isOnline = friend.isOnline or false
+    local name = friend.name or ""
+    local friendedAs = friend.friendedAs or ""
+    
+    -- Offline and on an alt: show friendedAs
+    if not isOnline and friendedAs ~= "" and name ~= friendedAs then
+        return friendedAs
+    end
+    return name ~= "" and name or "Unknown"
+end
+
 function M.formatRelativeTime(timestampMs)
     if type(timestampMs) ~= "number" or timestampMs <= 0 then
         return "Unknown"

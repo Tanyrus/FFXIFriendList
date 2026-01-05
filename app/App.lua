@@ -87,10 +87,45 @@ function App.initialize(app)
     return nil
 end
 
+-- Check if game is ready and character is loaded
+-- Exported as App.isGameReady() for use by entry file and other modules
+function App.isGameReady()
+    if not AshitaCore then
+        return false
+    end
+    
+    local success, result = pcall(function()
+        local memoryMgr = AshitaCore:GetMemoryManager()
+        if not memoryMgr then
+            return false
+        end
+        
+        local party = memoryMgr:GetParty()
+        if not party then
+            return false
+        end
+        
+        -- Check if character name is available
+        local playerName = party:GetMemberName(0)
+        if not playerName or playerName == "" then
+            return false
+        end
+        
+        return true
+    end)
+    
+    return success and result == true
+end
+
 -- Tick app state machines (called with deltaTime in seconds)
 -- dtSeconds: delta time in seconds
 function App.tick(app, dtSeconds)
     if not app.initialized then
+        return
+    end
+    
+    -- Wait for game to be ready and character to be loaded before doing anything
+    if not App.isGameReady() then
         return
     end
     
@@ -109,9 +144,8 @@ function App.tick(app, dtSeconds)
     end
 end
 
--- Trigger startup refresh (matches C++ behavior after auto-connect completes)
--- This performs a full refresh: friend list, preferences, friend requests, and presence
--- All requests are fired in parallel for maximum speed
+-- Trigger startup refresh after auto-connect completes
+-- Fires all requests in parallel for maximum speed
 function App._triggerStartupRefresh(app)
     if not app.features.connection or not app.features.connection:isConnected() then
         return
@@ -130,7 +164,7 @@ function App._triggerStartupRefresh(app)
     end
     
     -- Fire all requests in parallel (they're independent)
-    -- 1. Send heartbeat (primary "I'm online" signal, matching C++ presenceHeartbeatTick)
+    -- 1. Send heartbeat (primary "I'm online" signal)
     if app.features.friends and app.features.friends.sendHeartbeat then
         if app.deps.logger and app.deps.logger.debug then
             app.deps.logger.debug(string.format("[App] [%d] Startup: Firing heartbeat", timeMs))

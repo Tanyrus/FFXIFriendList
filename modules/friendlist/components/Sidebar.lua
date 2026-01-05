@@ -3,8 +3,18 @@ local UIConstants = require('core.UIConstants')
 
 local M = {}
 
-function M.Render(state, onTabChange, onSaveState)
-    local tabs = {"Friends", "General", "Privacy", "Tags", "Notifications", "Controls", "Themes"}
+function M.Render(state, dataModule, onSaveState)
+    local incomingCount = 0
+    if dataModule and dataModule.GetIncomingRequestsCount then
+        incomingCount = dataModule.GetIncomingRequestsCount()
+    end
+    
+    local requestsLabel = "Requests"
+    if incomingCount > 0 then
+        requestsLabel = "Requests (" .. incomingCount .. ")"
+    end
+    
+    local tabs = {"Friends", requestsLabel, "General", "Privacy", "Tags", "Notifications", "Controls", "Themes"}
     
     imgui.PushStyleVar(ImGuiStyleVar_FramePadding, UIConstants.FRAME_PADDING)
     
@@ -20,9 +30,6 @@ function M.Render(state, onTabChange, onSaveState)
         
         if imgui.Button(tabLabel .. "##tab_" .. i, UIConstants.BUTTON_SIZE) then
             state.selectedTab = i
-            if onTabChange then
-                onTabChange(i)
-            end
             if onSaveState then
                 onSaveState()
             end

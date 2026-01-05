@@ -6,7 +6,7 @@ local scaling = require('scaling')
 local Sidebar = require('modules.friendlist.components.Sidebar')
 local TopBar = require('modules.friendlist.components.TopBar')
 local AddFriendSection = require('modules.friendlist.components.AddFriendSection')
-local PendingRequests = require('modules.friendlist.components.PendingRequests')
+local RequestsTab = require('modules.friendlist.components.RequestsTab')
 local FriendsTable = require('modules.friendlist.components.FriendsTable')
 local FriendContextMenu = require('modules.friendlist.components.FriendContextMenu')
 local FriendDetailsPopup = require('modules.friendlist.components.FriendDetailsPopup')
@@ -457,7 +457,7 @@ function M.RenderContent(dataModule)
     imgui.Spacing()
     
     imgui.BeginChild("Sidebar", {UIConstants.SIDEBAR_WIDTH, 0}, false)
-    Sidebar.Render(state, nil, M.SaveWindowState)
+    Sidebar.Render(state, dataModule, M.SaveWindowState)
     imgui.EndChild()
     
     imgui.SameLine()
@@ -471,16 +471,18 @@ function M.RenderContentArea(dataModule, callbacks)
     if state.selectedTab == 0 then
         M.RenderFriendsTab(dataModule, callbacks)
     elseif state.selectedTab == 1 then
-        M.RenderGeneralTab(dataModule, callbacks)
+        RequestsTab.Render(state, dataModule, callbacks)
     elseif state.selectedTab == 2 then
-        M.RenderPrivacyTab(dataModule, callbacks)
+        M.RenderGeneralTab(dataModule, callbacks)
     elseif state.selectedTab == 3 then
-        M.RenderTagsTab()
+        M.RenderPrivacyTab(dataModule, callbacks)
     elseif state.selectedTab == 4 then
-        NotificationsTab.Render(state, dataModule, callbacks)
+        M.RenderTagsTab()
     elseif state.selectedTab == 5 then
-        ControlsTab.Render(state, dataModule, callbacks)
+        NotificationsTab.Render(state, dataModule, callbacks)
     elseif state.selectedTab == 6 then
+        ControlsTab.Render(state, dataModule, callbacks)
+    elseif state.selectedTab == 7 then
         ThemesTab.Render(state, dataModule, callbacks)
     end
 end
@@ -587,10 +589,6 @@ end
 
 function M.RenderFriendsTab(dataModule, callbacks)
     AddFriendSection.Render(state, dataModule, callbacks.onAddFriend)
-    
-    imgui.Dummy({0, 6})
-    
-    PendingRequests.Render(state, dataModule, callbacks)
     
     imgui.Dummy({0, 6})
     

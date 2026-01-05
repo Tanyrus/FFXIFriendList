@@ -93,6 +93,17 @@ local state = {
         lastSeen = false,
         addedAs = false
     },
+    columnOrder = {"Name", "Job", "Zone", "Nation/Rank", "Last Seen", "Added As"},
+    columnWidths = {
+        Name = 120.0,
+        Job = 100.0,
+        Zone = 120.0,
+        ["Nation/Rank"] = 80.0,
+        ["Last Seen"] = 120.0,
+        ["Added As"] = 100.0
+    },
+    draggingColumn = nil,
+    hoveredColumn = nil,
     tagManagerExpanded = false
 }
 
@@ -162,6 +173,17 @@ function M.Initialize(settings)
                 end
             end
         end
+        if settings.columnOrder and type(settings.columnOrder) == "table" and #settings.columnOrder > 0 then
+            state.columnOrder = {}
+            for i, col in ipairs(settings.columnOrder) do
+                state.columnOrder[i] = col
+            end
+        end
+        if settings.columnWidths and type(settings.columnWidths) == "table" then
+            for colName, width in pairs(settings.columnWidths) do
+                state.columnWidths[colName] = width
+            end
+        end
     end
 end
 
@@ -222,6 +244,14 @@ function M.SaveWindowState()
     gConfig.friendListSettings.columns = {}
     for colName, visible in pairs(state.columnVisible) do
         gConfig.friendListSettings.columns[colName] = {visible = visible}
+    end
+    gConfig.friendListSettings.columnOrder = {}
+    for i, col in ipairs(state.columnOrder) do
+        gConfig.friendListSettings.columnOrder[i] = col
+    end
+    gConfig.friendListSettings.columnWidths = {}
+    for colName, width in pairs(state.columnWidths) do
+        gConfig.friendListSettings.columnWidths[colName] = width
     end
 end
 
@@ -538,33 +568,66 @@ function M.RenderTaggedFriendSections(dataModule, callbacks)
         FriendsTable.RenderGroupTable(groupFriends, state, callbacks, sectionTag)
     end
     
-    local visibleColumns = {}
-    table.insert(visibleColumns, "Name")
-    if state.columnVisible and state.columnVisible.job then table.insert(visibleColumns, "Job") end
-    if state.columnVisible and state.columnVisible.zone then table.insert(visibleColumns, "Zone") end
-    if state.columnVisible and state.columnVisible.nationRank then table.insert(visibleColumns, "Nation/Rank") end
-    if state.columnVisible and state.columnVisible.lastSeen then table.insert(visibleColumns, "Last Seen") end
-    if state.columnVisible and state.columnVisible.addedAs then table.insert(visibleColumns, "Added As") end
+    local columnVisibilityMap = {
+        Name = true,
+        Job = state.columnVisible and state.columnVisible.job,
+        Zone = state.columnVisible and state.columnVisible.zone,
+        ["Nation/Rank"] = state.columnVisible and state.columnVisible.nationRank,
+        ["Last Seen"] = state.columnVisible and state.columnVisible.lastSeen,
+        ["Added As"] = state.columnVisible and state.columnVisible.addedAs
+    }
     
-    local headerTableFlags = bit.bor(ImGuiTableFlags_Borders, ImGuiTableFlags_NoBordersInBody)
+    local visibleColumns = {}
+    for _, colName in ipairs(state.columnOrder) do
+        if columnVisibilityMap[colName] then
+            table.insert(visibleColumns, colName)
+        end
+    end
+    
+    local headerTableFlags = bit.bor(
+        ImGuiTableFlags_Borders,
+        ImGuiTableFlags_NoBordersInBody
+    )
     if imgui.BeginTable("##friends_header_table", #visibleColumns, headerTableFlags) then
         for _, colName in ipairs(visibleColumns) do
-            local flags = ImGuiTableColumnFlags_WidthFixed
-            if colName == "Name" then
-                imgui.TableSetupColumn("Name", flags, 120.0)
-            elseif colName == "Job" then
-                imgui.TableSetupColumn("Job", flags, 100.0)
-            elseif colName == "Zone" then
-                imgui.TableSetupColumn("Zone", flags, 120.0)
-            elseif colName == "Nation/Rank" then
-                imgui.TableSetupColumn("Nation/Rank", flags, 80.0)
-            elseif colName == "Last Seen" then
-                imgui.TableSetupColumn("Last Seen", flags, 120.0)
-            elseif colName == "Added As" then
-                imgui.TableSetupColumn("Added As", flags, 100.0)
+            local width = state.columnWidths[colName] or 100.0
+            imgui.TableSetupColumn(colName, ImGuiTableColumnFlags_WidthFixed, width)
+        end
+        
+        imgui.TableNextRow(ImGuiTableRowFlags_Headers)
+        for colIdx, colName in ipairs(visibleColumns) do
+            imgui.TableSetColumnIndex(colIdx - 1)
+            
+            local isSelected = (state.draggingColumn == colName)
+            if imgui.Selectable(colName .. "##col_header_" .. colIdx, isSelected, ImGuiSelectableFlags_None) then
+            end
+            
+            if imgui.BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID) then
+                state.draggingColumn = colName
+                imgui.Text("Move: " .. colName)
+                imgui.EndDragDropSource()
+            elseif state.draggingColumn == colName and not imgui.IsMouseDragging(0) then
+                if state.hoveredColumn and state.hoveredColumn ~= colName then
+                    local fromIdx, toIdx
+                    for i, col in ipairs(state.columnOrder) do
+                        if col == state.draggingColumn then fromIdx = i end
+                        if col == state.hoveredColumn then toIdx = i end
+                    end
+                    if fromIdx and toIdx and fromIdx ~= toIdx then
+                        table.remove(state.columnOrder, fromIdx)
+                        table.insert(state.columnOrder, toIdx, state.draggingColumn)
+                        if callbacks.onSaveState then callbacks.onSaveState() end
+                    end
+                end
+                state.draggingColumn = nil
+                state.hoveredColumn = nil
+            end
+            
+            if state.draggingColumn and imgui.IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) then
+                state.hoveredColumn = colName
             end
         end
-        imgui.TableHeadersRow()
+        
         
         if imgui.BeginPopupContextWindow("##header_column_context", 1) then
             imgui.Text("Show Columns:")
@@ -598,6 +661,23 @@ function M.RenderTaggedFriendSections(dataModule, callbacks)
             if imgui.Checkbox("Added As##ctx_col_addedas", addedAsVisible) then
                 state.columnVisible.addedAs = addedAsVisible[1]
                 if callbacks.onSaveState then callbacks.onSaveState() end
+            end
+            
+            imgui.Spacing()
+            imgui.Separator()
+            imgui.Text("Column Widths:")
+            imgui.Separator()
+            
+            for _, colName in ipairs(state.columnOrder) do
+                imgui.PushID("col_width_" .. colName)
+                local currentWidth = {state.columnWidths[colName] or 100.0}
+                imgui.PushItemWidth(100)
+                if imgui.SliderFloat(colName, currentWidth, 50.0, 250.0, "%.0f") then
+                    state.columnWidths[colName] = currentWidth[1]
+                    if callbacks.onSaveState then callbacks.onSaveState() end
+                end
+                imgui.PopItemWidth()
+                imgui.PopID()
             end
             
             imgui.EndPopup()

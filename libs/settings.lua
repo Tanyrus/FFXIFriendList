@@ -81,6 +81,15 @@ local defaultSettings = T{
             controlsSettings = T{ expanded = true },
             themeSettings = T{ expanded = true },
             tagManager = T{ expanded = false }
+        },
+        columnOrder = T{ "Name", "Job", "Zone", "Nation/Rank", "Last Seen", "Added As" },
+        columnWidths = T{
+            Name = 120.0,
+            Job = 100.0,
+            Zone = 120.0,
+            ["Nation/Rank"] = 80.0,
+            ["Last Seen"] = 120.0,
+            ["Added As"] = 100.0
         }
     },
     

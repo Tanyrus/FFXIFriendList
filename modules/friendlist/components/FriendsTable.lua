@@ -444,31 +444,30 @@ function M.RenderGroupTable(friends, state, callbacks, sectionTag)
         return
     end
     
+    local columnOrder = state.columnOrder or {"Name", "Job", "Zone", "Nation/Rank", "Last Seen", "Added As"}
+    local columnWidths = state.columnWidths or {}
+    
+    local columnVisibilityMap = {
+        Name = true,
+        Job = state.columnVisible and state.columnVisible.job,
+        Zone = state.columnVisible and state.columnVisible.zone,
+        ["Nation/Rank"] = state.columnVisible and state.columnVisible.nationRank,
+        ["Last Seen"] = state.columnVisible and state.columnVisible.lastSeen,
+        ["Added As"] = state.columnVisible and state.columnVisible.addedAs
+    }
+    
     local visibleColumns = {}
-    table.insert(visibleColumns, "Name")
-    if state.columnVisible and state.columnVisible.job then table.insert(visibleColumns, "Job") end
-    if state.columnVisible and state.columnVisible.zone then table.insert(visibleColumns, "Zone") end
-    if state.columnVisible and state.columnVisible.nationRank then table.insert(visibleColumns, "Nation/Rank") end
-    if state.columnVisible and state.columnVisible.lastSeen then table.insert(visibleColumns, "Last Seen") end
-    if state.columnVisible and state.columnVisible.addedAs then table.insert(visibleColumns, "Added As") end
+    for _, colName in ipairs(columnOrder) do
+        if columnVisibilityMap[colName] then
+            table.insert(visibleColumns, colName)
+        end
+    end
     
     local tableId = "##friends_table_" .. (sectionTag or "default")
     if imgui.BeginTable(tableId, #visibleColumns, 0) then
         for _, colName in ipairs(visibleColumns) do
-            local flags = ImGuiTableColumnFlags_WidthFixed
-            if colName == "Name" then
-                imgui.TableSetupColumn("Name", flags, 120.0)
-            elseif colName == "Job" then
-                imgui.TableSetupColumn("Job", flags, 100.0)
-            elseif colName == "Zone" then
-                imgui.TableSetupColumn("Zone", flags, 120.0)
-            elseif colName == "Nation/Rank" then
-                imgui.TableSetupColumn("Nation/Rank", flags, 80.0)
-            elseif colName == "Last Seen" then
-                imgui.TableSetupColumn("Last Seen", flags, 120.0)
-            elseif colName == "Added As" then
-                imgui.TableSetupColumn("Added As", flags, 100.0)
-            end
+            local width = columnWidths[colName] or 100.0
+            imgui.TableSetupColumn(colName, ImGuiTableColumnFlags_WidthFixed, width)
         end
         
         for i, friend in ipairs(friends) do

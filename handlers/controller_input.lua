@@ -1,10 +1,58 @@
+local ffi = require('ffi')
+
 local M = {}
 
 local activeController = nil
 local activeControllerName = nil
 
+-- Define XINPUT structures for FFI access (matching XIUI's approach)
+ffi.cdef[[
+    typedef struct {
+        uint16_t wButtons;
+        uint8_t  bLeftTrigger;
+        uint8_t  bRightTrigger;
+        int16_t  sThumbLX;
+        int16_t  sThumbLY;
+        int16_t  sThumbRX;
+        int16_t  sThumbRY;
+    } XINPUT_GAMEPAD;
+
+    typedef struct {
+        uint32_t       dwPacketNumber;
+        XINPUT_GAMEPAD Gamepad;
+    } XINPUT_STATE;
+]]
+
+-- Button bitmasks for xinput_state (from XIUI devices.lua)
+-- Names match xinput.lua's Buttons list
+local ButtonMasks = {
+    A = 0x1000,
+    B = 0x2000,
+    X = 0x4000,
+    Y = 0x8000,
+    L1 = 0x0100,  -- LEFT_SHOULDER
+    R1 = 0x0200,  -- RIGHT_SHOULDER
+    L3 = 0x0040,  -- LEFT_THUMB
+    R3 = 0x0080,  -- RIGHT_THUMB
+    Dpad_Up = 0x0001,
+    Dpad_Down = 0x0002,
+    Dpad_Left = 0x0004,
+    Dpad_Right = 0x0008,
+    Menu = 0x0010,  -- START
+    View = 0x0020,  -- BACK
+}
+
+-- Trigger threshold (0-255, triggers are analog)
+local TRIGGER_THRESHOLD = 30
+
+-- State tracking for button press detection
+local previousButtons = 0
+local previousL2 = false
+local previousR2 = false
+
 -- Global handle binding function to be called by controller files
-_G.FFXIFriendList_HandleBinding = function(buttonName, newState)
+-- Using a TRUE global (no _G. prefix) so Lua resolves it at call time, matching cBind's pattern
+HandleBinding = function(buttonName, newState)
     return M.HandleBinding(buttonName, newState)
 end
 
@@ -25,6 +73,52 @@ function M.HandleBinding(buttonName, newState)
         end
         return true
     end
+end
+
+-- Handle XInput state event (polled every frame)
+-- This is more reliable than xinput_button which doesn't fire on all systems
+function M.HandleXInputState(e)
+    if not e.state then
+        return
+    end
+
+    local xinputState = ffi.cast('XINPUT_STATE*', e.state)
+    if not xinputState then
+        return
+    end
+
+    local gamepad = xinputState.Gamepad
+    local currentButtons = gamepad.wButtons
+    local leftTrigger = gamepad.bLeftTrigger
+    local rightTrigger = gamepad.bRightTrigger
+
+    -- Detect newly pressed buttons (was 0, now 1)
+    local newPresses = bit.band(currentButtons, bit.bnot(previousButtons))
+
+    -- Check each button for new presses
+    for buttonName, mask in pairs(ButtonMasks) do
+        if bit.band(newPresses, mask) ~= 0 then
+            -- Button was just pressed
+            M.HandleBinding(buttonName, true)
+        end
+    end
+
+    -- Handle L2 trigger (analog, use threshold)
+    local currentL2 = leftTrigger >= TRIGGER_THRESHOLD
+    if currentL2 and not previousL2 then
+        M.HandleBinding('L2', true)
+    end
+    previousL2 = currentL2
+
+    -- Handle R2 trigger (analog, use threshold)
+    local currentR2 = rightTrigger >= TRIGGER_THRESHOLD
+    if currentR2 and not previousR2 then
+        M.HandleBinding('R2', true)
+    end
+    previousR2 = currentR2
+
+    -- Update previous state for next frame
+    previousButtons = currentButtons
 end
 
 function M.Initialize()
@@ -51,21 +145,27 @@ function M.LoadController(name)
         return -- Already loaded
     end
 
-    local path = string.format('%s/addons/%s/controllers/%s.lua', AshitaCore:GetInstallPath(), 'FFXIFriendList', name)
+    -- Use addon path from gConfig (set during addon load)
+    local addonPath = gConfig and gConfig.addonPath or nil
+    if not addonPath then
+        return
+    end
+    
+    local path = addonPath .. 'controllers/' .. name .. '.lua'
+    -- Normalize path separators for Windows
+    path = path:gsub('/', '\\')
+    
     if not ashita.fs.exists(path) then
-        print('[FFXIFriendList] Controller file not found: ' .. path)
         return
     end
 
     local f, err = loadfile(path)
     if not f then
-        print('[FFXIFriendList] Error loading controller file: ' .. err)
         return
     end
 
     local success, result = pcall(f)
     if not success then
-        print('[FFXIFriendList] Error executing controller file: ' .. result)
         return
     end
 
@@ -94,16 +194,28 @@ function M.GetActiveControllerName()
 end
 
 function M.GetAvailableControllers()
-    local path = string.format('%s/addons/%s/controllers/', AshitaCore:GetInstallPath(), 'FFXIFriendList')
-    local controllers = {}
-    if not (ashita.fs.exists(path)) then
-        ashita.fs.create_directory(path)
+    -- Use addon path from gConfig (set during addon load)
+    local addonPath = gConfig and gConfig.addonPath or nil
+    if not addonPath then
+        return {}
     end
+    
+    local path = addonPath .. 'controllers/'
+    -- Normalize path separators for Windows
+    path = path:gsub('/', '\\')
+    
+    local controllers = {}
+    if not ashita.fs.exists(path) then
+        return controllers
+    end
+    
     local contents = ashita.fs.get_directory(path, '.*\\.lua')
-    for _, file in pairs(contents) do
-        file = string.sub(file, 1, -5)
-        if file ~= 'init' then
-            table.insert(controllers, file)
+    if contents then
+        for _, file in pairs(contents) do
+            file = string.sub(file, 1, -5)
+            if file ~= 'init' then
+                table.insert(controllers, file)
+            end
         end
     end
     return controllers

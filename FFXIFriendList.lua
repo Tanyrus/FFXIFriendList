@@ -203,6 +203,7 @@ ashita.events.register('load', 'ffxifriendlist_load', function()
     
     -- Initialize handlers
     local _ = inputHandler.initialize()
+    local _ = controllerInputHandler.Initialize()
     
     -- Load and register UI modules
     local friendListModule = require('modules.friendlist')
@@ -368,6 +369,13 @@ end)
 ashita.events.register('xinput_button', 'ffxifriendlist_xinput_button', function(e)
     if initialized then
         controllerInputHandler.HandleXInput(e)
+    end
+end)
+
+-- XInput state polling (more reliable than xinput_button on some systems)
+ashita.events.register('xinput_state', 'ffxifriendlist_xinput_state', function(e)
+    if initialized then
+        controllerInputHandler.HandleXInputState(e)
     end
 end)
 

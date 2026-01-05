@@ -41,7 +41,7 @@ function M.Render(tagGroup, state, callbacks, renderFriendsTable, idSuffix, over
         tagHeaderBgEnabled = gConfig.quickOnlineSettings.compact_overlay_tag_header_bg or false
     end
     
-    if (overlayEnabled and not tagHeaderBgEnabled) or disableInteraction then
+    if overlayEnabled and not tagHeaderBgEnabled then
         imgui.PushStyleColor(ImGuiCol_Header, {0.0, 0.0, 0.0, 0.0})
         imgui.PushStyleColor(ImGuiCol_HeaderHovered, {0.0, 0.0, 0.0, 0.0})
         imgui.PushStyleColor(ImGuiCol_HeaderActive, {0.0, 0.0, 0.0, 0.0})
@@ -51,7 +51,7 @@ function M.Render(tagGroup, state, callbacks, renderFriendsTable, idSuffix, over
     
     local headerOpen = imgui.CollapsingHeader(headerLabel .. "##tag_" .. tag .. idSuffix, flags)
     
-    if (overlayEnabled and not tagHeaderBgEnabled) or disableInteraction then
+    if overlayEnabled and not tagHeaderBgEnabled then
         imgui.PopStyleColor(3)
     end
     

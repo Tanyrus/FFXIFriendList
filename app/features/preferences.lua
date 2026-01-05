@@ -90,6 +90,17 @@ function M.Preferences:load()
     self.prefs.soundOnFriendOnline = getVal(prefs.soundOnFriendOnline, true)
     self.prefs.soundOnFriendRequest = getVal(prefs.soundOnFriendRequest, true)
     self.prefs.notificationSoundVolume = getVal(prefs.notificationSoundVolume, 0.6)
+    -- Notification background color (nil = use theme, otherwise {r, g, b, a})
+    if prefs.notificationBgColor and type(prefs.notificationBgColor) == "table" then
+        self.prefs.notificationBgColor = {
+            r = prefs.notificationBgColor.r or 0.0,
+            g = prefs.notificationBgColor.g or 0.0,
+            b = prefs.notificationBgColor.b or 0.0,
+            a = prefs.notificationBgColor.a or 1.0
+        }
+    else
+        self.prefs.notificationBgColor = nil
+    end
     self.prefs.controllerLayout = getVal(prefs.controllerLayout, 'xinput')
     self.prefs.flistBindButton = getVal(prefs.flistBindButton, '')
     self.prefs.closeBindButton = getVal(prefs.closeBindButton, '')
@@ -131,6 +142,7 @@ function M.Preferences:save()
         soundOnFriendOnline = self.prefs.soundOnFriendOnline,
         soundOnFriendRequest = self.prefs.soundOnFriendRequest,
         notificationSoundVolume = self.prefs.notificationSoundVolume,
+        notificationBgColor = self.prefs.notificationBgColor,
         controllerLayout = self.prefs.controllerLayout,
         flistBindButton = self.prefs.flistBindButton,
         closeBindButton = self.prefs.closeBindButton,
@@ -154,7 +166,20 @@ function M.Preferences:getPrefs()
 end
 
 function M.Preferences:setPref(key, value)
-    if self.prefs[key] ~= nil then
+    -- Check if key exists in prefs (even if value is nil)
+    -- Use rawget to check for key existence without triggering __index
+    if rawget(self.prefs, key) ~= nil or 
+       key == "notificationBgColor" or  -- Allow notificationBgColor even if nil
+       (self.prefs[key] == nil and key ~= nil) then  -- Key exists but value is nil
+        self.prefs[key] = value
+        return true
+    end
+    -- Fallback: if it's a known preference field, allow setting it
+    local knownPrefs = {
+        notificationBgColor = true,
+        -- Add other optional fields here if needed
+    }
+    if knownPrefs[key] then
         self.prefs[key] = value
         return true
     end

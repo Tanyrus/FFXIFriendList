@@ -113,6 +113,8 @@ function M.Preferences.new()
     self.soundOnFriendOnline = true
     self.soundOnFriendRequest = true
     self.notificationSoundVolume = 0.6
+    -- Notification background color (nil = use theme, otherwise {r, g, b, a})
+    self.notificationBgColor = nil
     self.controllerLayout = 'xinput'
     self.flistBindButton = ''
     self.closeBindButton = ''

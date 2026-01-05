@@ -280,7 +280,55 @@ local function renderToast(toast, targetY)
     imgui.PushStyleVar(ImGuiStyleVar_WindowRounding, 4.0)
     imgui.PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0)
     imgui.PushStyleVar(ImGuiStyleVar_WindowPadding, {10, 8})
-    imgui.PushStyleColor(ImGuiCol_WindowBg, {0.1, 0.1, 0.1, 0.9 * alpha})
+    
+    local app = _G.FFXIFriendListApp
+    local fontSizePx = 14
+    local windowBgColor = {0.1, 0.1, 0.1, 0.9 * alpha}
+    
+    -- Check for custom notification background color
+    local useCustomColor = false
+    if app and app.features and app.features.preferences then
+        local prefs = app.features.preferences:getPrefs()
+        if prefs and prefs.notificationBgColor and type(prefs.notificationBgColor) == "table" then
+            local customColor = prefs.notificationBgColor
+            -- Ensure we have valid color values
+            if customColor.r ~= nil and customColor.g ~= nil and customColor.b ~= nil then
+                windowBgColor = {
+                    customColor.r or 0.1,
+                    customColor.g or 0.1,
+                    customColor.b or 0.1,
+                    (customColor.a or 0.9) * alpha
+                }
+                useCustomColor = true
+            end
+        end
+    end
+    
+    -- If no custom color, use theme color
+    if not useCustomColor and app and app.features and app.features.themes then
+        fontSizePx = app.features.themes:getFontSizePx() or 14
+        local themeIndex = app.features.themes:getThemeIndex()
+        if themeIndex ~= -2 then
+            local success, themeColors, backgroundAlpha = pcall(function()
+                local colors = app.features.themes:getCurrentThemeColors()
+                local bgAlpha = app.features.themes:getBackgroundAlpha()
+                return colors, bgAlpha
+            end)
+            if success and themeColors and themeColors.windowBgColor then
+                local bgAlpha = backgroundAlpha or 0.95
+                windowBgColor = {
+                    themeColors.windowBgColor.r,
+                    themeColors.windowBgColor.g,
+                    themeColors.windowBgColor.b,
+                    (themeColors.windowBgColor.a or 1.0) * bgAlpha * 0.9 * alpha
+                }
+            end
+        end
+    elseif app and app.features and app.features.themes then
+        fontSizePx = app.features.themes:getFontSizePx() or 14
+    end
+    
+    imgui.PushStyleColor(ImGuiCol_WindowBg, windowBgColor)
     
     local beginResult = imgui.Begin(windowId, true, TOAST_WINDOW_FLAGS)
     if not beginResult then
@@ -288,12 +336,6 @@ local function renderToast(toast, targetY)
         imgui.PopStyleVar(3)
         imgui.End()
         return 60
-    end
-    
-    local app = _G.FFXIFriendListApp
-    local fontSizePx = 14
-    if app and app.features and app.features.themes then
-        fontSizePx = app.features.themes:getFontSizePx() or 14
     end
     
     local windowHeight = 60

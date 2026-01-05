@@ -152,6 +152,10 @@ function M.Render(state, dataModule, callbacks)
     
     imgui.Spacing()
     
+    M.RenderNotificationBackgroundColor(state, prefs)
+    
+    imgui.Spacing()
+    
     M.RenderNotificationPosition(state, prefs)
 end
 
@@ -226,6 +230,159 @@ function M.RenderNotificationPosition(state, prefs)
         end
     end
     imgui.PopItemWidth()
+end
+
+function M.RenderNotificationBackgroundColor(state, prefs)
+    local app = _G.FFXIFriendListApp
+    if not app or not app.features or not app.features.preferences then
+        return
+    end
+    
+    -- Get current theme color for default/display
+    local function getThemeColor()
+        local themeColor = {0.1, 0.1, 0.1, 0.9}
+        if app.features.themes then
+            local themeIndex = app.features.themes:getThemeIndex()
+            if themeIndex ~= -2 then
+                local success, themeColors, backgroundAlpha = pcall(function()
+                    local colors = app.features.themes:getCurrentThemeColors()
+                    local bgAlpha = app.features.themes:getBackgroundAlpha()
+                    return colors, bgAlpha
+                end)
+                if success and themeColors and themeColors.windowBgColor then
+                    local bgAlpha = backgroundAlpha or 0.95
+                    themeColor = {
+                        themeColors.windowBgColor.r,
+                        themeColors.windowBgColor.g,
+                        themeColors.windowBgColor.b,
+                        (themeColors.windowBgColor.a or 1.0) * bgAlpha * 0.9
+                    }
+                end
+            end
+        end
+        return themeColor
+    end
+    
+    -- Initialize frame counter if needed
+    state.notificationBgColorSaveFrame = state.notificationBgColorSaveFrame or 0
+    
+    -- Initialize buffer if needed (only on first load or when explicitly reset)
+    if not state.notificationBgColorBuffer then
+        if prefs.notificationBgColor and type(prefs.notificationBgColor) == "table" and
+           prefs.notificationBgColor.r ~= nil and prefs.notificationBgColor.g ~= nil and prefs.notificationBgColor.b ~= nil then
+            state.notificationBgColorBuffer = {
+                prefs.notificationBgColor.r,
+                prefs.notificationBgColor.g,
+                prefs.notificationBgColor.b,
+                prefs.notificationBgColor.a or 0.9
+            }
+        else
+            state.notificationBgColorBuffer = getThemeColor()
+        end
+    end
+    
+    -- Color picker flags
+    local ImGuiColorEditFlags_AlphaBar = 0x00010000
+    local ImGuiColorEditFlags_AlphaPreviewHalf = 0x00040000
+    local colorEditFlags = ImGuiColorEditFlags_AlphaBar + ImGuiColorEditFlags_AlphaPreviewHalf
+    
+    imgui.Text("Background Color:")
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("Customize the notification background color. Defaults to theme window background.")
+    end
+    
+    -- Render the color picker
+    local colorChanged = imgui.ColorEdit4("##notification_bg_color", state.notificationBgColorBuffer, colorEditFlags)
+    
+    -- Track if user is currently editing (must be called after ColorEdit4)
+    local isEditing = imgui.IsItemActive()
+    local wasEditing = state.notificationBgColorEditing or false
+    state.notificationBgColorEditing = isEditing
+    
+    -- Increment frame counter each frame when not editing (resets to 0 when saving)
+    if not isEditing and not wasEditing then
+        state.notificationBgColorSaveFrame = state.notificationBgColorSaveFrame + 1
+    end
+    
+    -- Only sync from preferences if:
+    -- 1. Not currently editing
+    -- 2. Was not editing last frame
+    -- 3. At least 3 frames have passed since last save (to prevent immediate overwrites)
+    local framesSinceSave = state.notificationBgColorSaveFrame
+    local shouldSync = not isEditing and not wasEditing and framesSinceSave >= 3
+    
+    if shouldSync then
+        local currentColor = prefs.notificationBgColor
+        if currentColor and type(currentColor) == "table" and
+           currentColor.r ~= nil and currentColor.g ~= nil and currentColor.b ~= nil then
+            -- Only update if buffer is different from preference (external change)
+            if math.abs((state.notificationBgColorBuffer[1] or 0) - (currentColor.r or 0)) > 0.01 or
+               math.abs((state.notificationBgColorBuffer[2] or 0) - (currentColor.g or 0)) > 0.01 or
+               math.abs((state.notificationBgColorBuffer[3] or 0) - (currentColor.b or 0)) > 0.01 or
+               math.abs((state.notificationBgColorBuffer[4] or 0) - (currentColor.a or 0)) > 0.01 then
+                state.notificationBgColorBuffer = {
+                    currentColor.r,
+                    currentColor.g,
+                    currentColor.b,
+                    currentColor.a or 0.9
+                }
+            end
+        elseif not currentColor then
+            -- If preference is nil, update buffer to theme color
+            local themeColor = getThemeColor()
+            if math.abs((state.notificationBgColorBuffer[1] or 0) - themeColor[1]) > 0.01 or
+               math.abs((state.notificationBgColorBuffer[2] or 0) - themeColor[2]) > 0.01 or
+               math.abs((state.notificationBgColorBuffer[3] or 0) - themeColor[3]) > 0.01 or
+               math.abs((state.notificationBgColorBuffer[4] or 0) - themeColor[4]) > 0.01 then
+                state.notificationBgColorBuffer = themeColor
+            end
+        end
+    end
+    
+    -- Handle color changes from user input
+    if colorChanged then
+        if app and app.features and app.features.preferences then
+            local savedColor = {
+                r = state.notificationBgColorBuffer[1],
+                g = state.notificationBgColorBuffer[2],
+                b = state.notificationBgColorBuffer[3],
+                a = state.notificationBgColorBuffer[4]
+            }
+            app.features.preferences:setPref("notificationBgColor", savedColor)
+            app.features.preferences:save()
+            -- Reset frame counter to prevent immediate overwrites
+            state.notificationBgColorSaveFrame = 0
+        end
+    end
+    
+    -- Handle deactivation (user finished editing)
+    if imgui.IsItemDeactivatedAfterEdit() then
+        if app and app.features and app.features.preferences then
+            local savedColor = {
+                r = state.notificationBgColorBuffer[1],
+                g = state.notificationBgColorBuffer[2],
+                b = state.notificationBgColorBuffer[3],
+                a = state.notificationBgColorBuffer[4]
+            }
+            app.features.preferences:setPref("notificationBgColor", savedColor)
+            app.features.preferences:save()
+            -- Reset frame counter to prevent immediate overwrites
+            state.notificationBgColorSaveFrame = 0
+        end
+    end
+    
+    imgui.SameLine(0, 10)
+    if imgui.Button("Use Theme##notification_bg_theme") then
+        if app and app.features and app.features.preferences then
+            app.features.preferences:setPref("notificationBgColor", nil)
+            app.features.preferences:save()
+            state.notificationBgColorBuffer = nil
+            state.notificationBgColorSaveFrame = 0
+        end
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("Use the theme's window background color for notifications.")
+    end
 end
 
 return M

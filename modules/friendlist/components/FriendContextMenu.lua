@@ -13,6 +13,12 @@ function M.Render(friend, state, callbacks)
         state.selectedFriendForDetails = friend
     end
     
+    if imgui.MenuItem("Send Tell") then
+        if callbacks.onSendTell then
+            callbacks.onSendTell(friend.name)
+        end
+    end
+    
     imgui.Separator()
     
     if imgui.MenuItem("Remove Friend") then

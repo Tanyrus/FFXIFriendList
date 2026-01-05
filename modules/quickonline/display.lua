@@ -494,6 +494,21 @@ function M.GetCallbacks(dataModule)
             end
         end,
         
+        onSendTell = function(friendName)
+            local chatManager = AshitaCore:GetChatManager()
+            if chatManager then
+                -- Use sendkey to open chat with "/"
+                chatManager:QueueCommand(-1, '/sendkey / down')
+                -- Wait for chat input to open, then set the tell command
+                ashita.tasks.once(0, function()
+                    while chatManager:IsInputOpen() ~= 0x11 do
+                        coroutine.sleepf(1)
+                    end
+                    chatManager:SetInputText('/tell ' .. capitalizeName(friendName) .. ' ')
+                end)
+            end
+        end,
+        
         onOpenNoteEditor = function(friendName)
             local noteEditorModule = require('modules.noteeditor')
             if noteEditorModule and noteEditorModule.OpenEditor then

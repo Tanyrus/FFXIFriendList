@@ -59,6 +59,7 @@ A comprehensive friend list management addon for FFXI private servers using the 
   - Modern Dark
   - Green Nature
   - Purple Mystic
+  - Ashita
 - **Custom Themes**: Create and save your own color schemes
 - **Transparency Controls**: Adjust window and text transparency
 - **Font Scaling**: Customize font size

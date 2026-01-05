@@ -5,6 +5,7 @@
 ]]
 
 local PathUtils = require('platform.assets.PathUtils')
+local Models = require('core.models')
 
 local M = {}
 
@@ -185,7 +186,7 @@ function M.loadFromFile()
     local themeIndexStr = readIniValue(configPath, "Theme")
     if themeIndexStr and themeIndexStr ~= "" then
         local themeIndex = tonumber(themeIndexStr)
-        if themeIndex and themeIndex >= -2 and themeIndex <= 3 then
+        if themeIndex and themeIndex >= -2 and themeIndex <= Models.MAX_BUILTIN_THEME_INDEX then
             state.themeIndex = themeIndex
         end
     end

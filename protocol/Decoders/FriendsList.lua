@@ -43,7 +43,7 @@ function M.decode(payload)
         end
     end
     
-    -- Legacy: Also check for separate statuses array if server sends it
+    -- Also check for separate statuses array if server sends it
     if payload.statuses and type(payload.statuses) == "table" then
         for _, status in ipairs(payload.statuses) do
             table.insert(result.statuses, status)

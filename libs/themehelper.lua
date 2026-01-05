@@ -96,7 +96,7 @@ local ImGuiCol_PopupBg = (_G.ImGuiCol_PopupBg ~= nil) and _G.ImGuiCol_PopupBg or
 local styleVarPushCount = 0
 local styleColorPushCount = 0
 
--- Default style variables (matching C++ ThemeTokens defaults)
+-- Default style variables
 local DEFAULT_WINDOW_PADDING = {12.0, 12.0}
 local DEFAULT_WINDOW_ROUNDING = 6.0
 local DEFAULT_FRAME_PADDING = {6.0, 3.0}

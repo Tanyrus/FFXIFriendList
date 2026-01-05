@@ -1,7 +1,6 @@
 --[[
 * FFXIFriendList Icon Manager
-* Texture loading via D3D8 (XIUI-style)
-* Loads icons from assets/icons/ folder
+* Texture loading and caching for UI icons
 ]]--
 
 require('common');
@@ -60,7 +59,7 @@ local iconFiles = {
 };
 
 -- ========================================
--- Texture Loading (XIUI-style)
+-- Texture Loading
 -- ========================================
 
 -- Initialize the icon manager with addon path
@@ -72,8 +71,7 @@ function M.Initialize(path)
     end
 end
 
--- Load a texture from the assets/icons folder (XIUI pattern)
--- Checks custom images folder first, then falls back to bundled assets
+-- Load a texture from the assets/icons folder
 local function LoadTexture(textureName)
     local device = GetD3D8Device();
     if device == nil then 
@@ -146,7 +144,7 @@ function M.ClearCache()
 end
 
 -- ========================================
--- ImGui Rendering Helpers (XIUI-style)
+-- ImGui Rendering Helpers
 -- ========================================
 
 -- Render an icon with imgui.Image
@@ -242,7 +240,7 @@ function M.GetStatusIconName(isOnline, isPending)
     end
 end
 
--- Get tint color for status (matches C++ plugin)
+-- Get tint color for status
 function M.GetStatusTint(isOnline, isPending)
     if isPending then
         return { 1.0, 0.8, 0.0, 1.0 };

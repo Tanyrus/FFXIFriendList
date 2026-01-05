@@ -465,7 +465,6 @@ function M.RenderAboutPopup()
         
         imgui.Text("Special Thanks")
         imgui.BulletText("Ashita Team - Plugin framework")
-        imgui.BulletText("XIUI - UI inspiration and patterns")
         
         imgui.Separator()
         

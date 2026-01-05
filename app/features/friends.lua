@@ -40,7 +40,7 @@ function M.Friends.new(deps)
     self.pendingZoneChange = nil
     self.zoneChangeScheduledAt = nil
     
-    -- Notification state tracking (matches legacy C++ checkForStatusChanges pattern)
+    -- Notification state tracking
     self.previousOnlineStatus = {}      -- table: lowercase name -> bool
     self.initialStatusScanComplete = false
     self.processedRequestIds = {}       -- set: requestId -> true
@@ -653,10 +653,7 @@ function M.Friends:updatePresence()
         return false
     end
     
-    -- Apply anonymous logic: isAnonymous should be true only when:
-    -- 1. The game detects the player is anonymous in-game (gameIsAnonymous = true)
-    -- 2. AND the user has NOT checked "Share Job When Anonymous" (shareJobWhenAnonymous = false)
-    -- This matches the legacy C++ logic: presence.isAnonymous = gameIsAnonymous && !shareJobWhenAnonymous
+    -- isAnonymous = gameIsAnonymous AND NOT shareJobWhenAnonymous
     local app = _G.FFXIFriendListApp
     if app and app.features and app.features.preferences and app.features.preferences.getPrefs then
         local prefs = app.features.preferences:getPrefs()
@@ -816,7 +813,6 @@ function M.Friends:updateFriendStatuses(statuses)
     self:checkForStatusChanges(self.friendList:getFriendStatuses())
 end
 
--- Helper to capitalize friend display name (matches legacy C++ logic)
 local function capitalizeName(name)
     if not name or name == "" then
         return name
@@ -825,7 +821,7 @@ local function capitalizeName(name)
     return result
 end
 
--- Check for online status changes and trigger notifications (matches legacy C++ checkForStatusChanges)
+-- Check for online status changes and trigger notifications
 function M.Friends:checkForStatusChanges(currentStatuses)
     if not currentStatuses then
         return
@@ -912,7 +908,7 @@ function M.Friends:checkForStatusChanges(currentStatuses)
     self.previousOnlineStatus = currentOnlineStatus
 end
 
--- Check for new friend requests and trigger notifications (matches legacy C++ pattern)
+-- Check for new friend requests and trigger notifications
 function M.Friends:checkForNewFriendRequests(incomingRequests)
     if not incomingRequests then
         return

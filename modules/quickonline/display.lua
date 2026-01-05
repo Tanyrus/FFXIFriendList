@@ -184,8 +184,7 @@ function M.DrawWindow(settings, dataModule)
         state.locked = gConfig.windows.quickOnline.locked or false
     end
     
-    -- NOTE: ESC/close key handling is now centralized in ui/input/close_input.lua
-    -- This matches C++ handleEscapeKey() being in AshitaAdapter, not per-window
+    -- ESC/close key handling is centralized in ui/input/close_input.lua
     
     -- Apply theme styles (only if not default theme)
     local themePushed = false
@@ -225,7 +224,7 @@ function M.DrawWindow(settings, dataModule)
     
     -- Handle X button close attempt
     if xButtonClicked then
-        -- Block close if locked (C++ parity: locked windows don't close via X)
+        -- Locked windows ignore X button close
         if state.locked then
             -- Keep window open - locked windows can't be closed via X
             -- (do nothing, gConfig.showQuickOnline stays true)

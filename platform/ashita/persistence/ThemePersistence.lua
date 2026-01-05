@@ -1,7 +1,6 @@
 --[[
 * ThemePersistence
 * Loads and saves theme state from/to INI files
-* Matches C++ ThemePersistence behavior
 ]]
 
 local PathUtils = require('platform.assets.PathUtils')

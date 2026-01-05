@@ -69,7 +69,7 @@ M.Themes.__index = M.Themes
 function M.Themes.new(deps)
     local self = setmetatable({}, M.Themes)
     self.deps = deps or {}
-    self.themeIndex = 0  -- Default to Classic (was Warm Brown/FFXIClassic)
+    self.themeIndex = 0  -- Default to Classic
     self.presetName = ""
     self.customThemeName = ""
     self.customThemes = {}
@@ -236,7 +236,7 @@ function M.Themes:setTextAlpha(alpha)
     return true
 end
 
--- Helper: Apply theme from color palette (matches C++ applyThemeFromPalette)
+-- Apply theme from color palette
 local function applyThemeFromPalette(bgDark, bgMedium, bgLight, bgLighter, accent, accentDark, accentDarker, borderDark, textLight, textMuted, childBg, outTheme)
     outTheme.windowBgColor = bgDark
     outTheme.childBgColor = childBg
@@ -282,7 +282,6 @@ local function applyThemeFromPalette(bgDark, bgMedium, bgLight, bgLighter, accen
     outTheme.borderColor = borderDark
 end
 
--- Initialize built-in theme by index (matches C++ initializeBuiltInTheme)
 -- themeIndex: 0 = Classic, 1 = ModernDark, 2 = GreenNature, 3 = PurpleMystic, 4 = Ashita
 local function initializeBuiltInTheme(themeIndex)
     local theme = {
@@ -416,7 +415,6 @@ local function initializeBuiltInTheme(themeIndex)
 end
 
 -- Get current theme colors (returns CustomTheme structure)
--- Matches C++ getCurrentCustomTheme() behavior
 function M.Themes:getCurrentThemeColors()
     -- If default/no theme (themeIndex == -2), return empty theme (uses ImGui defaults)
     if self.themeIndex == -2 then
@@ -694,7 +692,7 @@ function M.Themes:deleteCustomTheme(themeName)
             table.remove(self.customThemes, i)
             -- If this was the current theme, reset to default (Classic)
             if self.customThemeName == themeName then
-                self.themeIndex = 0  -- Classic (was Warm Brown/FFXIClassic) is the default
+                self.themeIndex = 0  -- Reset to Classic
                 self.customThemeName = ""
             end
             -- Save to persistence

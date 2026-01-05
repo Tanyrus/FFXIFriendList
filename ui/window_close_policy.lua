@@ -1,5 +1,5 @@
 -- window_close_policy.lua
--- Centralized window close policy with priority order (C++ WindowClosePolicy parity)
+-- Centralized window close policy with priority order
 -- Priority order: NoteEditor (highest) → QuickOnline → Main
 
 local M = {}

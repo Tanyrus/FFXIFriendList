@@ -5,7 +5,7 @@ local M = {}
 local activeController = nil
 local activeControllerName = nil
 
--- Define XINPUT structures for FFI access (matching XIUI's approach)
+-- XINPUT structures for FFI access
 -- Wrap in pcall to handle case where another addon already defined these
 pcall(function()
     ffi.cdef[[
@@ -26,8 +26,7 @@ pcall(function()
     ]]
 end)
 
--- Button bitmasks for xinput_state (from XIUI devices.lua)
--- Names match xinput.lua's Buttons list
+-- Button bitmasks for xinput_state
 local ButtonMasks = {
     A = 0x1000,
     B = 0x2000,

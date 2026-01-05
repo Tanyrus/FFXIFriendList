@@ -1,4 +1,5 @@
 local imgui = require('imgui')
+local controllerInputHandler = require('handlers.controller_input')
 
 local M = {}
 
@@ -91,35 +92,168 @@ function M.Render(state, dataModule, callbacks)
     
     imgui.TextWrapped("Press the configured key to close the topmost unlocked window.")
     imgui.TextWrapped("Windows can be locked via the Lock button to prevent accidental closing.")
+    
+    imgui.Spacing()
+    imgui.Separator()
+    imgui.Spacing()
+    
+    M.RenderControllerSection(prefs)
+end
+
+function M.RenderControllerSection(prefs)
+    local app = _G.FFXIFriendListApp
+    
+    imgui.Text("Controller Settings")
+    imgui.Separator()
+    imgui.Spacing()
+
+    -- Controller Selection
+    local controllers = controllerInputHandler.GetAvailableControllers()
+    local currentController = prefs.controllerLayout or 'xinput'
+    
+    if imgui.BeginCombo("Controller Type", currentController) then
+        for _, controller in ipairs(controllers) do
+            local isSelected = (controller == currentController)
+            if imgui.Selectable(controller, isSelected) then
+                if app and app.features and app.features.preferences then
+                    app.features.preferences:setPref("controllerLayout", controller)
+                    app.features.preferences:save()
+                    controllerInputHandler.LoadController(controller)
+                end
+            end
+            if isSelected then
+                imgui.SetItemDefaultFocus()
+            end
+        end
+        imgui.EndCombo()
+    end
+
+    imgui.Spacing()
+    
+    local buttons = controllerInputHandler.GetActiveControllerButtons()
+    
+    if #buttons > 0 then
+        -- 1. Open Main Window (/flist)
+        local currentButton = prefs.flistBindButton or ''
+        if imgui.BeginCombo("Open Main Window", currentButton == '' and "None" or currentButton) then
+            if imgui.Selectable("None", (currentButton == '')) then
+                 if app and app.features and app.features.preferences then
+                    app.features.preferences:setPref("flistBindButton", '')
+                    app.features.preferences:save()
+                end
+            end
+
+            for _, btn in ipairs(buttons) do
+                local isSelected = (btn == currentButton)
+                if imgui.Selectable(btn, isSelected) then
+                    if app and app.features and app.features.preferences then
+                        app.features.preferences:setPref("flistBindButton", btn)
+                        app.features.preferences:save()
+                    end
+                end
+                if isSelected then
+                    imgui.SetItemDefaultFocus()
+                end
+            end
+            imgui.EndCombo()
+        end
+        imgui.SameLine()
+        imgui.ShowHelp("Select a button to toggle the main friend list window.")
+        
+        -- 2. Open Compact Friend List (/fl)
+        imgui.Spacing()
+        local currentFlButton = prefs.flBindButton or ''
+        
+        if imgui.BeginCombo("Open Compact Friend List", currentFlButton == '' and "None" or currentFlButton) then
+            if imgui.Selectable("None", (currentFlButton == '')) then
+                if app and app.features and app.features.preferences then
+                    app.features.preferences:setPref("flBindButton", '')
+                    app.features.preferences:save()
+                end
+            end
+
+            for _, btn in ipairs(buttons) do
+                local isSelected = (btn == currentFlButton)
+                if imgui.Selectable(btn, isSelected) then
+                    if app and app.features and app.features.preferences then
+                        app.features.preferences:setPref("flBindButton", btn)
+                        app.features.preferences:save()
+                    end
+                end
+                if isSelected then
+                    imgui.SetItemDefaultFocus()
+                end
+            end
+            imgui.EndCombo()
+        end
+        imgui.SameLine()
+        imgui.ShowHelp("Select a button to toggle the compact friend list.")
+        
+        -- 3. Close Window Button
+        imgui.Spacing()
+        local currentCloseButton = prefs.closeBindButton or ''
+        
+        if imgui.BeginCombo("Close Window Button", currentCloseButton == '' and "None" or currentCloseButton) then
+            if imgui.Selectable("None", (currentCloseButton == '')) then
+                if app and app.features and app.features.preferences then
+                    app.features.preferences:setPref("closeBindButton", '')
+                    app.features.preferences:save()
+                end
+            end
+
+            for _, btn in ipairs(buttons) do
+                local isSelected = (btn == currentCloseButton)
+                if imgui.Selectable(btn, isSelected) then
+                    if app and app.features and app.features.preferences then
+                        app.features.preferences:setPref("closeBindButton", btn)
+                        app.features.preferences:save()
+                    end
+                end
+                if isSelected then
+                    imgui.SetItemDefaultFocus()
+                end
+            end
+            imgui.EndCombo()
+        end
+        imgui.SameLine()
+        imgui.ShowHelp("Select a button to close the top-most unlocked window.")
+    else
+        imgui.TextDisabled("No buttons available (Controller not loaded?)")
+    end
 end
 
 function M.RenderCloseKeySection(prefs)
-    local app = _G.FFXIFriendListApp
-    local currentKeyCode = tonumber(prefs.customCloseKeyCode) or 27
-    if currentKeyCode == 0 then
-        currentKeyCode = 27
-    end
+    local currentKeyName = "None"
+    local currentKeyCode = prefs.customCloseKeyCode or 0
     
-    local currentKeyIndex = 0
-    for i, option in ipairs(KEY_OPTIONS) do
-        if option.code == currentKeyCode then
-            currentKeyIndex = i - 1
-            break
+    if currentKeyCode > 0 then
+        for _, option in ipairs(KEY_OPTIONS) do
+            if option.code == currentKeyCode then
+                currentKeyName = option.name
+                break
+            end
+        end
+        -- Handle unknown keys
+        if currentKeyName == "None" then
+            currentKeyName = string.format("Key %d", currentKeyCode)
         end
     end
-    
-    local keyNames = {}
-    for _, option in ipairs(KEY_OPTIONS) do
-        table.insert(keyNames, option.name)
-    end
-    
-    if imgui.BeginCombo("Close Key", keyNames[currentKeyIndex + 1]) then
-        for i, name in ipairs(keyNames) do
-            local isSelected = (i - 1 == currentKeyIndex)
-            if imgui.Selectable(name, isSelected) then
-                currentKeyIndex = i - 1
+
+    if imgui.BeginCombo("Keyboard Key", currentKeyName) then
+        if imgui.Selectable("None", (currentKeyCode == 0)) then
+            local app = _G.FFXIFriendListApp
+            if app and app.features and app.features.preferences then
+                app.features.preferences:setPref("customCloseKeyCode", 0)
+                app.features.preferences:save()
+            end
+        end
+        
+        for _, option in ipairs(KEY_OPTIONS) do
+            local isSelected = (option.code == currentKeyCode)
+            if imgui.Selectable(option.name, isSelected) then
+                local app = _G.FFXIFriendListApp
                 if app and app.features and app.features.preferences then
-                    app.features.preferences:setPref("customCloseKeyCode", KEY_OPTIONS[i].code)
+                    app.features.preferences:setPref("customCloseKeyCode", option.code)
                     app.features.preferences:save()
                 end
             end
@@ -129,6 +263,9 @@ function M.RenderCloseKeySection(prefs)
         end
         imgui.EndCombo()
     end
+    
+    imgui.SameLine()
+    imgui.ShowHelp("Key to close the top-most unlocked window.")
 end
 
 return M

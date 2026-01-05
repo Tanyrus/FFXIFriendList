@@ -3,6 +3,8 @@
 * State management: reads theme data from app.features.themes
 ]]
 
+local Models = require('core.models')
+
 local M = {}
 
 -- Module state
@@ -20,8 +22,8 @@ local state = {
 function M.Initialize(settings)
     state.initialized = true
     state.settings = settings or {}
-    -- Always set built-in theme names on initialization
-    state.builtInThemeNames = {"Classic", "Modern Dark", "Green Nature", "Purple Mystic"}
+    -- Always set built-in theme names on initialization (from Models constant)
+    state.builtInThemeNames = Models.BUILTIN_THEME_NAMES
 end
 
 -- Update data from app state (called every frame before render)
@@ -70,8 +72,7 @@ function M.Update()
     end
     
     -- Built-in theme names (always set, even if themes feature isn't available)
-    -- Only the 4 themes: Classic, Modern Dark, Green Nature, Purple Mystic
-    state.builtInThemeNames = {"Classic", "Modern Dark", "Green Nature", "Purple Mystic"}
+    state.builtInThemeNames = Models.BUILTIN_THEME_NAMES
 end
 
 -- Get current theme index
@@ -96,15 +97,12 @@ function M.GetCurrentThemeName()
     elseif state.currentPresetName and state.currentPresetName ~= "" then
         return state.currentPresetName
     elseif state.builtInThemeNames and #state.builtInThemeNames > 0 then
-        -- Map theme index to name (only 4 themes: Classic, Modern Dark, Green Nature, Purple Mystic)
+        -- Map theme index to name (uses Models.BUILTIN_THEME_NAMES)
         -- -2 = Default (No Theme) -> return "Default (No Theme)" (not in list)
-        -- 0 = Classic (was Warm Brown/FFXIClassic) -> builtInThemeNames[1]
-        -- 1 = Modern Dark -> builtInThemeNames[2]
-        -- 2 = Green Nature -> builtInThemeNames[3]
-        -- 3 = Purple Mystic -> builtInThemeNames[4]
+        -- 0+ = built-in themes from BUILTIN_THEME_NAMES array
         if state.currentThemeIndex == -2 then
-            return "Default (No Theme)"  -- Not in the 4-theme list
-        elseif state.currentThemeIndex >= 0 and state.currentThemeIndex <= 3 then
+            return "Default (No Theme)"
+        elseif state.currentThemeIndex >= 0 and state.currentThemeIndex <= Models.MAX_BUILTIN_THEME_INDEX then
             return state.builtInThemeNames[state.currentThemeIndex + 1]  -- +1 because index 0 maps to builtInThemeNames[1]
         end
     end

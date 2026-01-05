@@ -54,6 +54,7 @@ local icons = require('libs.icons')
 
 -- Load handlers
 local inputHandler = require('handlers.input')
+local controllerInputHandler = require('handlers.controller_input')
 
 -- Load UI close handling (centralized ESC/controller close - C++ parity)
 local closeInputHandler = require('ui.input.close_input')
@@ -202,6 +203,7 @@ ashita.events.register('load', 'ffxifriendlist_load', function()
     
     -- Initialize handlers
     local _ = inputHandler.initialize()
+    local _ = controllerInputHandler.Initialize()
     
     -- Load and register UI modules
     local friendListModule = require('modules.friendlist')
@@ -355,6 +357,26 @@ ashita.events.register('d3d_present', 'ffxifriendlist_present', function()
     
     -- Explicitly return nil
     return nil
+end)
+
+-- Controller Input Callbacks
+ashita.events.register('dinput_button', 'ffxifriendlist_dinput_button', function(e)
+    if initialized then
+        controllerInputHandler.HandleDirectInput(e)
+    end
+end)
+
+ashita.events.register('xinput_button', 'ffxifriendlist_xinput_button', function(e)
+    if initialized then
+        controllerInputHandler.HandleXInput(e)
+    end
+end)
+
+-- XInput state polling (more reliable than xinput_button on some systems)
+ashita.events.register('xinput_state', 'ffxifriendlist_xinput_state', function(e)
+    if initialized then
+        controllerInputHandler.HandleXInputState(e)
+    end
 end)
 
 -- Packet routing (entry file routes packets directly)

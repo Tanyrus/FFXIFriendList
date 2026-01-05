@@ -317,11 +317,8 @@ local function renderThemeSelection(dataModule)
         local allThemeNames = {}
         local themeIndices = {}
         
-        -- Add built-in themes (only 4 themes: Classic, Modern Dark, Green Nature, Purple Mystic)
-        -- Mapping: builtInThemeNames[1] = "Classic" (was Warm Brown) -> themeIndex 0
-        --          builtInThemeNames[2] = "Modern Dark" -> themeIndex 1
-        --          builtInThemeNames[3] = "Green Nature" -> themeIndex 2
-        --          builtInThemeNames[4] = "Purple Mystic" -> themeIndex 3
+        -- Add built-in themes (from Models.BUILTIN_THEME_NAMES)
+        -- Mapping: builtInThemeNames[i] -> themeIndex (i - 1)
         -- Note: "Default (No Theme)" (themeIndex -2) is excluded from the list
         for i, name in ipairs(builtInNames) do
             table.insert(allThemeNames, name)

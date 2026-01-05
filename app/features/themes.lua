@@ -1,3 +1,5 @@
+local Models = require('core.models')
+
 local M = {}
 
 M.Vec2 = {}
@@ -86,7 +88,7 @@ function M.Themes:loadThemes()
     
     if state then
         -- Validate and set theme index
-        if state.themeIndex and state.themeIndex >= -2 and state.themeIndex <= 3 then
+        if state.themeIndex and state.themeIndex >= -2 and state.themeIndex <= Models.MAX_BUILTIN_THEME_INDEX then
             self.themeIndex = state.themeIndex
         end
         
@@ -281,7 +283,7 @@ local function applyThemeFromPalette(bgDark, bgMedium, bgLight, bgLighter, accen
 end
 
 -- Initialize built-in theme by index (matches C++ initializeBuiltInTheme)
--- themeIndex: 0 = Classic, 1 = ModernDark, 2 = GreenNature, 3 = PurpleMystic
+-- themeIndex: 0 = Classic, 1 = ModernDark, 2 = GreenNature, 3 = PurpleMystic, 4 = Ashita
 local function initializeBuiltInTheme(themeIndex)
     local theme = {
         name = "",
@@ -378,6 +380,36 @@ local function initializeBuiltInTheme(themeIndex)
         local childBg = {r = 0.0, g = 0.0, b = 0.0, a = 0.0}        -- Transparent
         
         applyThemeFromPalette(bgDark, bgMedium, bgLight, bgLighter, accent, accentDark, accentDarker, borderDark, textLight, textMuted, childBg, theme)
+        
+    elseif themeIndex == 4 then
+        -- Ashita - Dark gray with coral/salmon accent (Ashita launcher style)
+        theme.windowBgColor = {r = 0.180392, g = 0.200000, b = 0.231373, a = 0.960784}
+        theme.childBgColor = {r = 0.219608, g = 0.239216, b = 0.270588, a = 0.960784}
+        theme.frameBgColor = {r = 0.160784, g = 0.168627, b = 0.200000, a = 1.000000}
+        theme.frameBgHovered = {r = 0.141176, g = 0.141176, b = 0.141176, a = 0.780392}
+        theme.frameBgActive = {r = 0.121569, g = 0.121569, b = 0.121569, a = 1.000000}
+        theme.titleBg = {r = 0.831373, g = 0.329412, b = 0.278431, a = 0.690196}
+        theme.titleBgActive = {r = 0.831373, g = 0.329412, b = 0.278431, a = 1.000000}
+        theme.titleBgCollapsed = {r = 0.831373, g = 0.329412, b = 0.278431, a = 0.501961}
+        theme.buttonColor = {r = 0.831373, g = 0.329412, b = 0.278431, a = 0.780392}
+        theme.buttonHoverColor = {r = 0.831373, g = 0.329412, b = 0.278431, a = 1.000000}
+        theme.buttonActiveColor = {r = 0.831373, g = 0.329412, b = 0.278431, a = 1.000000}
+        theme.separatorColor = {r = 0.431373, g = 0.431373, b = 0.501961, a = 0.501961}
+        theme.separatorHovered = {r = 0.101961, g = 0.400000, b = 0.749020, a = 0.780392}
+        theme.separatorActive = {r = 0.101961, g = 0.400000, b = 0.749020, a = 1.000000}
+        theme.scrollbarBg = {r = 0.121569, g = 0.129412, b = 0.168627, a = 1.000000}
+        theme.scrollbarGrab = {r = 0.831373, g = 0.329412, b = 0.278431, a = 0.690196}
+        theme.scrollbarGrabHovered = {r = 0.831373, g = 0.329412, b = 0.278431, a = 1.000000}
+        theme.scrollbarGrabActive = {r = 0.831373, g = 0.329412, b = 0.278431, a = 1.000000}
+        theme.checkMark = {r = 0.831373, g = 0.329412, b = 0.278431, a = 1.000000}
+        theme.sliderGrab = {r = 0.831373, g = 0.329412, b = 0.278431, a = 0.690196}
+        theme.sliderGrabActive = {r = 0.831373, g = 0.329412, b = 0.278431, a = 1.000000}
+        theme.header = {r = 0.831373, g = 0.329412, b = 0.278431, a = 0.780392}
+        theme.headerHovered = {r = 0.831373, g = 0.329412, b = 0.278431, a = 1.000000}
+        theme.headerActive = {r = 0.831373, g = 0.329412, b = 0.278431, a = 1.000000}
+        theme.textColor = {r = 0.941176, g = 0.941176, b = 0.941176, a = 1.000000}
+        theme.textDisabled = {r = 0.941176, g = 0.941176, b = 0.941176, a = 0.290196}
+        theme.borderColor = {r = 0.050980, g = 0.050980, b = 0.101961, a = 0.800000}
     end
     
     return theme
@@ -447,8 +479,8 @@ function M.Themes:getCurrentThemeColors()
         return initializeBuiltInTheme(0)
     end
     
-    -- If built-in theme (themeIndex 0-3)
-    if self.themeIndex >= 0 and self.themeIndex <= 3 then
+    -- If built-in theme (themeIndex 0 to MAX_BUILTIN_THEME_INDEX)
+    if self.themeIndex >= 0 and self.themeIndex <= Models.MAX_BUILTIN_THEME_INDEX then
         -- If editing built-in theme, return temporary copy
         if self.isEditingBuiltInTheme and self.currentCustomTheme then
             return self.currentCustomTheme
@@ -464,8 +496,8 @@ end
 -- Apply theme by index
 function M.Themes:applyTheme(themeIndex)
     -- Validate themeIndex range
-    if not themeIndex or themeIndex < -2 or themeIndex > 3 then
-        return false, "Invalid theme index: " .. tostring(themeIndex) .. " (must be -2 to 3)"
+    if not themeIndex or themeIndex < -2 or themeIndex > Models.MAX_BUILTIN_THEME_INDEX then
+        return false, "Invalid theme index: " .. tostring(themeIndex) .. " (must be -2 to " .. Models.MAX_BUILTIN_THEME_INDEX .. ")"
     end
     
     -- Reset editing flag if switching to different theme
@@ -480,7 +512,7 @@ function M.Themes:applyTheme(themeIndex)
         return false, "No custom theme selected"
     end
     -- Clear preset name for built-in themes
-    if themeIndex >= 0 and themeIndex <= 3 then
+    if themeIndex >= 0 and themeIndex <= Models.MAX_BUILTIN_THEME_INDEX then
         self.presetName = ""
     end
     -- Save to persistence
@@ -560,7 +592,7 @@ function M.Themes:updateCurrentThemeColors(colors)
     end
     
     -- Validate themeIndex
-    if self.themeIndex < -2 or self.themeIndex > 3 then
+    if self.themeIndex < -2 or self.themeIndex > Models.MAX_BUILTIN_THEME_INDEX then
         return false, "Invalid theme index: " .. tostring(self.themeIndex)
     end
     
@@ -610,7 +642,7 @@ function M.Themes:updateCurrentThemeColors(colors)
                 return true
             end
         end
-    elseif self.themeIndex >= 0 and self.themeIndex <= 3 then
+    elseif self.themeIndex >= 0 and self.themeIndex <= Models.MAX_BUILTIN_THEME_INDEX then
         -- For built-in themes, mark as editing (temporary copy)
         self.isEditingBuiltInTheme = true
         -- Don't save to persistence yet (only save when saved as custom theme)

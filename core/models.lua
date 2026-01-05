@@ -111,6 +111,10 @@ function M.Preferences.new()
     self.soundOnFriendOnline = true
     self.soundOnFriendRequest = true
     self.notificationSoundVolume = 0.6
+    self.controllerLayout = 'xinput'
+    self.flistBindButton = ''
+    self.closeBindButton = ''
+    self.flBindButton = ''
     return self
 end
 
@@ -136,7 +140,11 @@ function M.Preferences:__eq(other)
            self.notificationSoundsEnabled == other.notificationSoundsEnabled and
            self.soundOnFriendOnline == other.soundOnFriendOnline and
            self.soundOnFriendRequest == other.soundOnFriendRequest and
-           self.notificationSoundVolume == other.notificationSoundVolume
+           self.notificationSoundVolume == other.notificationSoundVolume and
+           self.controllerLayout == other.controllerLayout and
+           self.flistBindButton == other.flistBindButton and
+           self.closeBindButton == other.closeBindButton and
+           self.flBindButton == other.flBindButton
 end
 
 M.BuiltInTheme = {
@@ -144,8 +152,15 @@ M.BuiltInTheme = {
     FFXIClassic = 0,
     ModernDark = 1,
     GreenNature = 2,
-    PurpleMystic = 3
+    PurpleMystic = 3,
+    Ashita = 4
 }
+
+-- Maximum index for built-in themes (update this when adding new themes)
+M.MAX_BUILTIN_THEME_INDEX = 4
+
+-- Built-in theme names in order (index 0 to MAX_BUILTIN_THEME_INDEX)
+M.BUILTIN_THEME_NAMES = {"Classic", "Modern Dark", "Green Nature", "Purple Mystic", "Ashita"}
 
 M.CustomTheme = {}
 M.CustomTheme.__index = M.CustomTheme
@@ -194,6 +209,8 @@ function M.getBuiltInThemeName(theme)
         return "Green Nature"
     elseif theme == M.BuiltInTheme.PurpleMystic then
         return "Purple Mystic"
+    elseif theme == M.BuiltInTheme.Ashita then
+        return "Ashita"
     else
         return "Unknown"
     end

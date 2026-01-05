@@ -2,16 +2,17 @@
 
 local M = {}
 
+-- Get the proper config path using Ashita's install path
+-- This ensures all config files are saved to: <Ashita_Install>/config/addons/FFXIFriendList/
 function M.getConfigPath(filename)
-    local addonPath = string.match(debug.getinfo(1, "S").source:sub(2), "(.*[/\\])")
-    if addonPath then
-        local gameDir = string.match(addonPath, "(.*[/\\])")
-        if gameDir then
-            return gameDir .. "config\\addons\\FFXIFriendList\\" .. filename
-        end
+    -- Use AshitaCore:GetInstallPath() for correct path resolution (matches libs/settings.lua)
+    if AshitaCore and AshitaCore.GetInstallPath then
+        local installPath = AshitaCore:GetInstallPath():gsub('\\$', '')
+        return installPath .. '\\config\\addons\\FFXIFriendList\\' .. filename
     end
     
-    return "C:\\HorizonXI\\HorizonXI\\Game\\config\\addons\\FFXIFriendList\\" .. filename
+    -- Fallback for non-Ashita environments (testing, etc.)
+    return "config\\addons\\FFXIFriendList\\" .. filename
 end
 
 function M.getAssetPath(category, filename)

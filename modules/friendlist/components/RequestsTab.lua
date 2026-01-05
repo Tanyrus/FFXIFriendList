@@ -35,6 +35,20 @@ local function renderIncomingSection(dataModule, callbacks)
                 end
             end
             
+            imgui.SameLine()
+            imgui.PushStyleColor(ImGuiCol_Button, {0.6, 0.2, 0.2, 1.0})
+            imgui.PushStyleColor(ImGuiCol_ButtonHovered, {0.7, 0.3, 0.3, 1.0})
+            imgui.PushStyleColor(ImGuiCol_ButtonActive, {0.5, 0.1, 0.1, 1.0})
+            if imgui.Button("Block") then
+                if callbacks.onBlockPlayer then
+                    callbacks.onBlockPlayer(request.accountId, request.name)
+                end
+            end
+            imgui.PopStyleColor(3)
+            if imgui.IsItemHovered() then
+                imgui.SetTooltip("Block this player from sending you friend requests")
+            end
+            
             imgui.PopID()
         end
     end

@@ -93,7 +93,8 @@ local defaultSettings = T{
         },
         groupByOnlineStatus = false,
         collapsedOnlineSection = false,
-        collapsedOfflineSection = false
+        collapsedOfflineSection = false,
+        autoOpenOnStart = false
     },
     
     -- Quick online settings
@@ -114,7 +115,12 @@ local defaultSettings = T{
         groupByOnlineStatus = false,
         collapsedOnlineSection = false,
         collapsedOfflineSection = false,
-        hideTopBar = false
+        hideTopBar = false,
+        compact_overlay_enabled = false,
+        compact_overlay_tag_header_bg = false,
+        compact_overlay_disable_interaction = false,
+        compact_overlay_tooltip_bg = false,
+        autoOpenOnStart = false
     },
     
     -- Tag settings
@@ -128,7 +134,8 @@ local defaultSettings = T{
         serverSelection = T{
             savedServerId = "",
             savedServerBaseUrl = "https://api.horizonfriendlist.com",
-            detectedServerShownOnce = false
+            detectedServerShownOnce = false,
+            helpSeenPerServer = T{}
         },
         preferences = T{
             useServerNotes = false,
@@ -149,6 +156,7 @@ local defaultSettings = T{
             soundOnFriendOnline = true,
             soundOnFriendRequest = true,
             notificationSoundVolume = 0.6,
+            notificationShowTestPreview = false,
             mainShowJob = true,
             mainShowZone = false,
             mainShowNationRank = false,

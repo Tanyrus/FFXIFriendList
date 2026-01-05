@@ -31,6 +31,11 @@ M.NOTES = {
     LIST = "/api/notes"
 }
 
+M.BLOCK = {
+    LIST = "/api/blocked",
+    ADD = "/api/block"
+}
+
 M.SERVERS = "/api/servers"
 
 function M.friendDelete(friendName)
@@ -60,6 +65,10 @@ function M.friendVisibilityDelete(friendName)
         return string.format("%%%02X", string.byte(c))
     end)
     return "/api/friends/" .. encodedName .. "/visibility"
+end
+
+function M.blockRemove(blockedAccountId)
+    return "/api/block/" .. tostring(blockedAccountId)
 end
 
 return M

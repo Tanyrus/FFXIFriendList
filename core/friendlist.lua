@@ -52,6 +52,7 @@ function M.FriendStatus.new()
     self.characterName = ""
     self.displayName = ""
     self.isOnline = false
+    self.isAway = false
     self.job = ""
     self.rank = ""
     self.nation = -1

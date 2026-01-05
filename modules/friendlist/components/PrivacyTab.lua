@@ -11,6 +11,8 @@ function M.Render(state, dataModule, callbacks)
     imgui.Spacing()
     M.RenderPrivacyControlsSection(state, callbacks)
     imgui.Spacing()
+    M.RenderBlockedPlayersSection(state, dataModule, callbacks)
+    imgui.Spacing()
     M.RenderAltVisibilitySection(state, dataModule, callbacks)
 end
 
@@ -254,20 +256,6 @@ function M.RenderPrivacyControlsSection(state, callbacks)
     
     imgui.Spacing()
     
-    local showOnlineStatus = {prefs.showOnlineStatus ~= false}
-    if imgui.Checkbox("Show Online Status", showOnlineStatus) then
-        if app and app.features and app.features.preferences then
-            app.features.preferences:setPref("showOnlineStatus", showOnlineStatus[1])
-            app.features.preferences:save()
-            app.features.preferences:syncToServer()
-        end
-    end
-    if imgui.IsItemHovered() then
-        imgui.SetTooltip("Controls whether your online status is visible to friends.\nWhen disabled, friends will see you as 'Hidden'.\n\n[Account-wide: Synced to server for all characters]")
-    end
-    
-    imgui.Spacing()
-    
     local shareLocation = {prefs.shareLocation ~= false}
     if imgui.Checkbox("Share Location", shareLocation) then
         if app and app.features and app.features.preferences then
@@ -278,6 +266,108 @@ function M.RenderPrivacyControlsSection(state, callbacks)
     end
     if imgui.IsItemHovered() then
         imgui.SetTooltip("When enabled, your current zone is shared with friends.\nWhen disabled, friends will only see that you're online.\n\n[Account-wide: Synced to server for all characters]")
+    end
+    
+    imgui.Spacing()
+    
+    imgui.Text("Presence Status:")
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("Controls how your online status appears to friends.\n\n[Account-wide: Synced to server for all characters]")
+    end
+    
+    local currentStatus = prefs.presenceStatus or "online"
+    
+    local isOnline = currentStatus == "online"
+    if imgui.RadioButton("Online", isOnline) then
+        if not isOnline and app and app.features and app.features.preferences then
+            app.features.preferences:setPref("presenceStatus", "online")
+            app.features.preferences:setPref("showOnlineStatus", true)
+            app.features.preferences:save()
+            app.features.preferences:syncToServer()
+        end
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("You appear online to friends with full status.")
+    end
+    
+    imgui.SameLine()
+    local isAway = currentStatus == "away"
+    if imgui.RadioButton("Away", isAway) then
+        if not isAway and app and app.features and app.features.preferences then
+            app.features.preferences:setPref("presenceStatus", "away")
+            app.features.preferences:setPref("showOnlineStatus", true)
+            app.features.preferences:save()
+            app.features.preferences:syncToServer()
+        end
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("You appear online but marked as 'Away' to friends.")
+    end
+    
+    imgui.SameLine()
+    local isInvisible = currentStatus == "invisible"
+    if imgui.RadioButton("Invisible", isInvisible) then
+        if not isInvisible and app and app.features and app.features.preferences then
+            app.features.preferences:setPref("presenceStatus", "invisible")
+            app.features.preferences:setPref("showOnlineStatus", false)
+            app.features.preferences:save()
+            app.features.preferences:syncToServer()
+        end
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("You appear offline to friends.\nFriends will not see your online status or activity.")
+    end
+end
+
+function M.RenderBlockedPlayersSection(state, dataModule, callbacks)
+    local headerLabel = "Blocked Players"
+    local blockedCount = dataModule.GetBlockedPlayersCount()
+    if blockedCount > 0 then
+        headerLabel = headerLabel .. " (" .. blockedCount .. ")"
+    end
+    
+    local isOpen = imgui.CollapsingHeader(headerLabel, state.blockedPlayersExpanded and ImGuiTreeNodeFlags_DefaultOpen or 0)
+    
+    if isOpen ~= state.blockedPlayersExpanded then
+        state.blockedPlayersExpanded = isOpen
+        if callbacks.onSaveState then callbacks.onSaveState() end
+    end
+    
+    if not isOpen then return end
+    
+    local blocked = dataModule.GetBlockedPlayers()
+    
+    if #blocked == 0 then
+        imgui.TextDisabled("No blocked players.")
+        imgui.TextWrapped("You can block players from the Requests tab when they send you a friend request.")
+    else
+        imgui.TextWrapped("Blocked players cannot send you friend requests.")
+        imgui.Spacing()
+        
+        imgui.BeginChild("##blocked_players_list", {0, 150}, true)
+        
+        for i, entry in ipairs(blocked) do
+            imgui.PushID("blocked_" .. i)
+            
+            local displayName = entry.displayName or "Unknown"
+            if #displayName > 0 then
+                displayName = string.upper(string.sub(displayName, 1, 1)) .. string.sub(displayName, 2)
+            end
+            
+            imgui.AlignTextToFramePadding()
+            imgui.Text(displayName)
+            
+            imgui.SameLine()
+            if imgui.Button("Unblock") then
+                if callbacks.onUnblockPlayer then
+                    callbacks.onUnblockPlayer(entry.accountId)
+                end
+            end
+            
+            imgui.PopID()
+        end
+        
+        imgui.EndChild()
     end
 end
 

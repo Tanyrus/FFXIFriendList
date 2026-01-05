@@ -169,27 +169,74 @@ function M.DrawWindow(settings, dataModule)
     end
     
     -- Server is configured - render main window normally
+    local overlayEnabled = gConfig and gConfig.quickOnlineSettings and gConfig.quickOnlineSettings.compact_overlay_enabled or false
+    local disableInteraction = false
+    local tooltipBgEnabled = false
+    if overlayEnabled and gConfig and gConfig.quickOnlineSettings then
+        disableInteraction = gConfig.quickOnlineSettings.compact_overlay_disable_interaction or false
+        tooltipBgEnabled = gConfig.quickOnlineSettings.compact_overlay_tooltip_bg or false
+    end
+    
     local windowFlags = 0
-    if state.locked then
+    local app = _G.FFXIFriendListApp
+    local globalLocked = false
+    local globalPositionLocked = false
+    if app and app.features and app.features.preferences then
+        local prefs = app.features.preferences:getPrefs()
+        globalLocked = prefs and prefs.windowsLocked or false
+        globalPositionLocked = prefs and prefs.windowsPositionLocked or false
+    end
+    
+    if overlayEnabled then
+        windowFlags = bit.bor(windowFlags, ImGuiWindowFlags_NoTitleBar)
+        windowFlags = bit.bor(windowFlags, ImGuiWindowFlags_NoResize)
+        windowFlags = bit.bor(windowFlags, ImGuiWindowFlags_NoMove)
+        windowFlags = bit.bor(windowFlags, ImGuiWindowFlags_NoBackground)
+        if disableInteraction then
+            windowFlags = bit.bor(windowFlags, ImGuiWindowFlags_NoInputs)
+            windowFlags = bit.bor(windowFlags, ImGuiWindowFlags_NoFocusOnAppearing)
+            windowFlags = bit.bor(windowFlags, ImGuiWindowFlags_NoBringToFrontOnFocus)
+        end
+        if not state.locked then
+            state.locked = true
+            if gConfig then
+                if not gConfig.windows then
+                    gConfig.windows = {}
+                end
+                if not gConfig.windows.quickOnline then
+                    gConfig.windows.quickOnline = {}
+                end
+                gConfig.windows.quickOnline.locked = true
+            end
+        end
+    elseif globalPositionLocked or state.locked then
         windowFlags = bit.bor(windowFlags, ImGuiWindowFlags_NoMove)
         windowFlags = bit.bor(windowFlags, ImGuiWindowFlags_NoResize)
     end
     
     if gConfig and gConfig.windows and gConfig.windows.quickOnline then
         local windowState = gConfig.windows.quickOnline
-        if windowState.forcePosition and windowState.posX and windowState.posY then
+        if overlayEnabled then
+            if windowState.posX and windowState.posY then
+                imgui.SetNextWindowPos({windowState.posX, windowState.posY}, ImGuiCond_Always)
+            end
+        elseif windowState.forcePosition and windowState.posX and windowState.posY then
             imgui.SetNextWindowPos({windowState.posX, windowState.posY}, ImGuiCond_Always)
             windowState.forcePosition = false
         elseif windowState.posX and windowState.posY then
             imgui.SetNextWindowPos({windowState.posX, windowState.posY}, ImGuiCond_FirstUseEver)
         end
-        if windowState.sizeX and windowState.sizeY then
-            imgui.SetNextWindowSize({windowState.sizeX, windowState.sizeY}, ImGuiCond_FirstUseEver)
-        else
-            imgui.SetNextWindowSize({420, 320}, ImGuiCond_FirstUseEver)
+        if not overlayEnabled then
+            if windowState.sizeX and windowState.sizeY then
+                imgui.SetNextWindowSize({windowState.sizeX, windowState.sizeY}, ImGuiCond_FirstUseEver)
+            else
+                imgui.SetNextWindowSize({420, 320}, ImGuiCond_FirstUseEver)
+            end
         end
     else
-        imgui.SetNextWindowSize({420, 320}, ImGuiCond_FirstUseEver)
+        if not overlayEnabled then
+            imgui.SetNextWindowSize({420, 320}, ImGuiCond_FirstUseEver)
+        end
     end
     
     -- Window title
@@ -204,7 +251,16 @@ function M.DrawWindow(settings, dataModule)
     
     -- Apply theme styles (only if not default theme)
     local themePushed = false
-    if app and app.features and app.features.themes then
+    local overlayStylePushed = false
+    if overlayEnabled then
+        imgui.PushStyleColor(ImGuiCol_WindowBg, {0.0, 0.0, 0.0, 0.0})
+        imgui.PushStyleColor(ImGuiCol_ChildBg, {0.0, 0.0, 0.0, 0.0})
+        if not disableInteraction and not tooltipBgEnabled then
+            imgui.PushStyleColor(ImGuiCol_PopupBg, {0.0, 0.0, 0.0, 0.0})
+        end
+        imgui.PushStyleColor(ImGuiCol_Border, {0.0, 0.0, 0.0, 0.0})
+        overlayStylePushed = true
+    elseif app and app.features and app.features.themes then
         local themesFeature = app.features.themes
         local themeIndex = themesFeature:getThemeIndex()
         
@@ -241,9 +297,8 @@ function M.DrawWindow(settings, dataModule)
     -- Handle X button close attempt
     if xButtonClicked then
         -- Locked windows ignore X button close
-        if state.locked then
+        if state.locked or globalLocked then
             -- Keep window open - locked windows can't be closed via X
-            -- (do nothing, gConfig.showQuickOnline stays true)
         else
             local closeGating = require('ui.close_gating')
             if not closeGating.shouldDeferClose() then
@@ -253,7 +308,6 @@ function M.DrawWindow(settings, dataModule)
                 end
                 M.SaveWindowState()
             end
-            -- If popup gating defers close, do nothing (window stays open)
         end
     end
     
@@ -268,18 +322,37 @@ function M.DrawWindow(settings, dataModule)
             M.SaveWindowState()
             
             local hideTopBar = gConfig and gConfig.quickOnlineSettings and gConfig.quickOnlineSettings.hideTopBar or false
-            if not hideTopBar then
+            if not hideTopBar and not overlayEnabled then
                 M.RenderTopBar(dataModule)
                 imgui.Spacing()
             end
             
-            imgui.BeginChild("##quick_online_body", {0, 0}, false)
-            M.RenderFriendsTable(dataModule)
+            local childFlags = 0
+            if disableInteraction then
+                childFlags = bit.bor(childFlags, ImGuiWindowFlags_NoInputs)
+            end
+            imgui.BeginChild("##quick_online_body", {0, 0}, false, childFlags)
+            if overlayEnabled then
+                imgui.PushStyleColor(ImGuiCol_ChildBg, {0.0, 0.0, 0.0, 0.0})
+            end
+            M.RenderFriendsTable(dataModule, overlayEnabled, disableInteraction, tooltipBgEnabled)
+            if overlayEnabled then
+                imgui.PopStyleColor()
+            end
             imgui.EndChild()
         end)
     end
     
     imgui.End()
+    
+    -- Pop overlay styles if we pushed them
+    if overlayStylePushed then
+        if disableInteraction or tooltipBgEnabled then
+            imgui.PopStyleColor(3)
+        else
+            imgui.PopStyleColor(4)
+        end
+    end
     
     -- Pop theme styles if we pushed them
     if themePushed then
@@ -386,7 +459,10 @@ function M.RenderTopBar(dataModule)
     imgui.PopStyleVar(2)
 end
 
-function M.RenderFriendsTable(dataModule)
+function M.RenderFriendsTable(dataModule, overlayEnabled, disableInteraction, tooltipBgEnabled)
+    overlayEnabled = overlayEnabled or false
+    disableInteraction = disableInteraction or false
+    tooltipBgEnabled = tooltipBgEnabled or false
     local app = _G.FFXIFriendListApp
     local tagsFeature = app and app.features and app.features.tags
     
@@ -442,7 +518,7 @@ function M.RenderFriendsTable(dataModule)
     }
     
     local renderFriendsTable = function(groupFriends, renderState, renderCallbacks, sectionTag)
-        M.RenderCompactFriendsList(groupFriends, sectionTag, dataModule)
+        M.RenderCompactFriendsList(groupFriends, sectionTag, dataModule, disableInteraction)
     end
     
     -- Read groupByOnlineStatus directly from gConfig (set in General tab)
@@ -471,16 +547,28 @@ function M.RenderFriendsTable(dataModule)
         local onlineCount = #onlineFriends
         -- Auto-collapse if empty
         local onlineShouldBeOpen = onlineCount > 0 and not state.collapsedOnlineSection
-        imgui.SetNextItemOpen(onlineShouldBeOpen)
+        if disableInteraction then
+            imgui.SetNextItemOpen(onlineShouldBeOpen, ImGuiCond_Always)
+        elseif not overlayEnabled then
+            imgui.SetNextItemOpen(onlineShouldBeOpen)
+        end
+        if overlayEnabled or disableInteraction then
+            imgui.PushStyleColor(ImGuiCol_Header, {0.0, 0.0, 0.0, 0.0})
+            imgui.PushStyleColor(ImGuiCol_HeaderHovered, {0.0, 0.0, 0.0, 0.0})
+            imgui.PushStyleColor(ImGuiCol_HeaderActive, {0.0, 0.0, 0.0, 0.0})
+        end
         local onlineExpanded = imgui.CollapsingHeader("Online (" .. onlineCount .. ")##qo_online_section")
-        if imgui.IsItemClicked() then
+        if overlayEnabled or disableInteraction then
+            imgui.PopStyleColor(3)
+        end
+        if not overlayEnabled and not disableInteraction and imgui.IsItemClicked() then
             state.collapsedOnlineSection = not state.collapsedOnlineSection
             M.SaveWindowState()
         end
         
         if onlineExpanded then
             imgui.Indent(10)
-            CollapsibleTagSection.RenderAllSections(onlineGroups, state, sectionCallbacks, renderFriendsTable, "_qo_online")
+            CollapsibleTagSection.RenderAllSections(onlineGroups, state, sectionCallbacks, renderFriendsTable, "_qo_online", overlayEnabled, disableInteraction)
             imgui.Unindent(10)
         end
         
@@ -488,23 +576,35 @@ function M.RenderFriendsTable(dataModule)
         local offlineCount = #offlineFriends
         -- Auto-collapse if empty
         local offlineShouldBeOpen = offlineCount > 0 and not state.collapsedOfflineSection
-        imgui.SetNextItemOpen(offlineShouldBeOpen)
+        if disableInteraction then
+            imgui.SetNextItemOpen(offlineShouldBeOpen, ImGuiCond_Always)
+        elseif not overlayEnabled then
+            imgui.SetNextItemOpen(offlineShouldBeOpen)
+        end
+        if overlayEnabled or disableInteraction then
+            imgui.PushStyleColor(ImGuiCol_Header, {0.0, 0.0, 0.0, 0.0})
+            imgui.PushStyleColor(ImGuiCol_HeaderHovered, {0.0, 0.0, 0.0, 0.0})
+            imgui.PushStyleColor(ImGuiCol_HeaderActive, {0.0, 0.0, 0.0, 0.0})
+        end
         local offlineExpanded = imgui.CollapsingHeader("Offline (" .. offlineCount .. ")##qo_offline_section")
-        if imgui.IsItemClicked() then
+        if overlayEnabled or disableInteraction then
+            imgui.PopStyleColor(3)
+        end
+        if not overlayEnabled and not disableInteraction and imgui.IsItemClicked() then
             state.collapsedOfflineSection = not state.collapsedOfflineSection
             M.SaveWindowState()
         end
         
         if offlineExpanded then
             imgui.Indent(10)
-            CollapsibleTagSection.RenderAllSections(offlineGroups, state, sectionCallbacks, renderFriendsTable, "_qo_offline")
+            CollapsibleTagSection.RenderAllSections(offlineGroups, state, sectionCallbacks, renderFriendsTable, "_qo_offline", overlayEnabled, disableInteraction)
             imgui.Unindent(10)
         end
     else
         -- Default behavior: just tag sections without online/offline grouping
         local groups = taggrouper.groupFriendsByTag(filteredFriends, tagOrder, getFriendTag)
         taggrouper.sortAllGroups(groups, sortMode, sortDirection)
-        CollapsibleTagSection.RenderAllSections(groups, state, sectionCallbacks, renderFriendsTable)
+        CollapsibleTagSection.RenderAllSections(groups, state, sectionCallbacks, renderFriendsTable, nil, overlayEnabled, disableInteraction)
     end
     
     if tagsFeature then
@@ -512,7 +612,8 @@ function M.RenderFriendsTable(dataModule)
     end
 end
 
-function M.RenderCompactFriendsList(friends, sectionTag, dataModule)
+function M.RenderCompactFriendsList(friends, sectionTag, dataModule, disableInteraction)
+    disableInteraction = disableInteraction or false
     local app = _G.FFXIFriendListApp
     local hoverSettings = nil
     if app and app.features and app.features.preferences then
@@ -530,10 +631,13 @@ function M.RenderCompactFriendsList(friends, sectionTag, dataModule)
             
             local friendName = utils.capitalizeName(utils.getDisplayName(friend))
             local isOnline = friend.isOnline == true
+            local isAway = friend.isAway == true
             local uniqueId = (sectionTag or "qo") .. "_" .. i
             
-            if not icons.RenderStatusIcon(isOnline, false, 12) then
-                if isOnline then
+            if not icons.RenderStatusIcon(isOnline, false, 12, isAway) then
+                if isAway then
+                    imgui.TextColored({1.0, 0.7, 0.2, 1.0}, "A")
+                elseif isOnline then
                     imgui.TextColored({0.0, 1.0, 0.0, 1.0}, "O")
                 else
                     imgui.TextColored({0.5, 0.5, 0.5, 1.0}, "O")
@@ -545,45 +649,82 @@ function M.RenderCompactFriendsList(friends, sectionTag, dataModule)
                 imgui.PushStyleColor(ImGuiCol_Text, {0.6, 0.6, 0.6, 1.0})
             end
             
-            if imgui.Selectable(friendName .. "##friend_" .. uniqueId, false, ImGuiSelectableFlags_SpanAllColumns) then
-                if state.selectedFriendForDetails and state.selectedFriendForDetails.name == friend.name then
-                    state.selectedFriendForDetails = nil
-                else
-                    state.selectedFriendForDetails = friend
-                end
-            end
-            
-            if imgui.BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID) then
-                local friendKey = tagcore.getFriendKey(friend)
-                if friendKey then
-                    local dragState = FriendsTable.getDragState()
-                    dragState.isDragging = true
-                    dragState.friendKey = friendKey
-                    dragState.friendName = friendName
-                    imgui.Text("Move: " .. friendName)
-                end
-                imgui.EndDragDropSource()
+            if disableInteraction then
+                imgui.Text(friendName)
             else
-                local dragState = FriendsTable.getDragState()
-                if dragState.isDragging and dragState.friendKey == tagcore.getFriendKey(friend) then
-                    FriendsTable.endDrag()
+                if imgui.Selectable(friendName .. "##friend_" .. uniqueId, false, ImGuiSelectableFlags_SpanAllColumns) then
+                    if state.selectedFriendForDetails and state.selectedFriendForDetails.name == friend.name then
+                        state.selectedFriendForDetails = nil
+                    else
+                        state.selectedFriendForDetails = friend
+                    end
+                end
+                
+                if imgui.BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID) then
+                    local friendKey = tagcore.getFriendKey(friend)
+                    if friendKey then
+                        local dragState = FriendsTable.getDragState()
+                        dragState.isDragging = true
+                        dragState.friendKey = friendKey
+                        dragState.friendName = friendName
+                        imgui.Text("Move: " .. friendName)
+                    end
+                    imgui.EndDragDropSource()
+                else
+                    local dragState = FriendsTable.getDragState()
+                    if dragState.isDragging and dragState.friendKey == tagcore.getFriendKey(friend) then
+                        FriendsTable.endDrag()
+                    end
+                end
+                
+                local itemHovered = imgui.IsItemHovered()
+                
+                if itemHovered then
+                    local forceAll = InputHelper.isShiftDown()
+                    if overlayEnabled and tooltipBgEnabled then
+                        local app = _G.FFXIFriendListApp
+                        local popupBgColor = {0.2, 0.2, 0.2, 0.9}
+                        if app and app.features and app.features.themes then
+                            local themesFeature = app.features.themes
+                            local themeIndex = themesFeature:getThemeIndex()
+                            if themeIndex ~= -2 then
+                                local themeColors = themesFeature:getCurrentThemeColors()
+                                local bgAlpha = themesFeature:getBackgroundAlpha() or 0.95
+                                if themeColors then
+                                    if themeColors.windowBgColor then
+                                        popupBgColor = {
+                                            themeColors.windowBgColor.r,
+                                            themeColors.windowBgColor.g,
+                                            themeColors.windowBgColor.b,
+                                            themeColors.windowBgColor.a * bgAlpha
+                                        }
+                                    elseif themeColors.frameBgColor then
+                                        popupBgColor = {
+                                            themeColors.frameBgColor.r,
+                                            themeColors.frameBgColor.g,
+                                            themeColors.frameBgColor.b,
+                                            themeColors.frameBgColor.a * bgAlpha
+                                        }
+                                    end
+                                end
+                            end
+                        end
+                        imgui.PushStyleColor(ImGuiCol_PopupBg, popupBgColor)
+                        HoverTooltip.Render(friend, hoverSettings, forceAll)
+                        imgui.PopStyleColor()
+                    else
+                        HoverTooltip.Render(friend, hoverSettings, forceAll)
+                    end
+                end
+                
+                if imgui.BeginPopupContextItem("##friend_context_" .. uniqueId) then
+                    FriendContextMenu.Render(friend, state, M.GetCallbacks(dataModule))
+                    imgui.EndPopup()
                 end
             end
-            
-            local itemHovered = imgui.IsItemHovered()
             
             if not isOnline then
                 imgui.PopStyleColor()
-            end
-            
-            if itemHovered then
-                local forceAll = InputHelper.isShiftDown()
-                HoverTooltip.Render(friend, hoverSettings, forceAll)
-            end
-            
-            if imgui.BeginPopupContextItem("##friend_context_" .. uniqueId) then
-                FriendContextMenu.Render(friend, state, M.GetCallbacks(dataModule))
-                imgui.EndPopup()
             end
         end
         

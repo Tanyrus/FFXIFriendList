@@ -180,6 +180,19 @@ function M.SaveServerSelection(serverId)
                         end
                         _G.gConfig.data.serverSelection.savedServerId = serverId
                         _G.gConfig.data.serverSelection.savedServerBaseUrl = baseUrl
+                        
+                        -- Check if help has been seen for this server
+                        if not _G.gConfig.data.serverSelection.helpSeenPerServer then
+                            _G.gConfig.data.serverSelection.helpSeenPerServer = {}
+                        end
+                        
+                        local helpSeen = _G.gConfig.data.serverSelection.helpSeenPerServer[serverId]
+                        if not helpSeen then
+                            -- Mark as seen
+                            _G.gConfig.data.serverSelection.helpSeenPerServer[serverId] = true
+                            -- Trigger help tab auto-open
+                            M.triggerHelpTabAutoOpen = true
+                        end
                     end
                     
                     return true
@@ -189,6 +202,13 @@ function M.SaveServerSelection(serverId)
     end
     
     return false
+end
+
+-- Check if help tab should auto-open
+function M.ShouldAutoOpenHelpTab()
+    local result = M.triggerHelpTabAutoOpen or false
+    M.triggerHelpTabAutoOpen = false
+    return result
 end
 
 -- Cleanup

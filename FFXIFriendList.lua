@@ -269,6 +269,12 @@ ashita.events.register('load', 'ffxifriendlist_load', function()
         deps.logger.info("Initialized")
     end
     
+    -- Ensure windows start closed (modules may have set them during initialization)
+    if gConfig then
+        gConfig.showFriendList = false
+        gConfig.showQuickOnline = false
+    end
+    
     -- Auto-show friend list window if server not configured (triggers server selection popup)
     if app and app.features and app.features.serverlist then
         local serverSelected = app.features.serverlist:isServerSelected()
@@ -276,6 +282,16 @@ ashita.events.register('load', 'ffxifriendlist_load', function()
             if gConfig then
                 gConfig.showFriendList = true
             end
+        end
+    end
+    
+    -- Auto-open windows on game start if enabled
+    if gConfig then
+        if gConfig.friendListSettings and gConfig.friendListSettings.autoOpenOnStart then
+            gConfig.showFriendList = true
+        end
+        if gConfig.quickOnlineSettings and gConfig.quickOnlineSettings.autoOpenOnStart then
+            gConfig.showQuickOnline = true
         end
     end
     
@@ -574,7 +590,81 @@ ashita.events.register('command', 'ffxifriendlist_command', function(e)
                 print("  /fl menudebug <on|off|status|dump|hexdump> - Menu detection debug")
                 print("  /fl notify - Show test notification")
                 print("  /fl soundtest <type> - Test sounds (online, request, all)")
+                print("  /fl block <name> - Block a player from sending friend requests")
+                print("  /fl unblock <name> - Unblock a player")
+                print("  /fl blocked - List all blocked players")
                 print("  /befriend <name> [tag] - Send friend request with optional tag")
+                return
+            end
+            
+            if subcmd == "block" then
+                local targetName = command_args[3]
+                if not targetName or targetName == "" then
+                    print("[FFXIFriendList] Usage: /fl block <name>")
+                    return
+                end
+                
+                if app and app.features and app.features.blocklist then
+                    app.features.blocklist:block(targetName, function(success, result)
+                        if success then
+                            if result and result.alreadyBlocked then
+                                print("[FFXIFriendList] " .. targetName .. " was already blocked")
+                            else
+                                print("[FFXIFriendList] Blocked " .. targetName)
+                            end
+                        else
+                            print("[FFXIFriendList] Failed to block " .. targetName .. ": " .. tostring(result))
+                        end
+                    end)
+                else
+                    print("[FFXIFriendList] Blocklist feature not available")
+                end
+                return
+            end
+            
+            if subcmd == "unblock" then
+                local targetName = command_args[3]
+                if not targetName or targetName == "" then
+                    print("[FFXIFriendList] Usage: /fl unblock <name>")
+                    return
+                end
+                
+                if app and app.features and app.features.blocklist then
+                    app.features.blocklist:unblockByName(targetName, function(success, result)
+                        if success then
+                            if result and not result.wasBlocked then
+                                print("[FFXIFriendList] " .. targetName .. " was not blocked")
+                            else
+                                print("[FFXIFriendList] Unblocked " .. targetName)
+                            end
+                        else
+                            print("[FFXIFriendList] Failed to unblock " .. targetName .. ": " .. tostring(result))
+                        end
+                    end)
+                else
+                    print("[FFXIFriendList] Blocklist feature not available")
+                end
+                return
+            end
+            
+            if subcmd == "blocked" then
+                if app and app.features and app.features.blocklist then
+                    local blocked = app.features.blocklist:getBlockedList()
+                    if #blocked == 0 then
+                        print("[FFXIFriendList] No blocked players")
+                    else
+                        print("[FFXIFriendList] Blocked players (" .. #blocked .. "):")
+                        for _, entry in ipairs(blocked) do
+                            local name = entry.displayName or "Unknown"
+                            if #name > 0 then
+                                name = string.upper(string.sub(name, 1, 1)) .. string.sub(name, 2)
+                            end
+                            print("  - " .. name)
+                        end
+                    end
+                else
+                    print("[FFXIFriendList] Blocklist feature not available")
+                end
                 return
             end
         end

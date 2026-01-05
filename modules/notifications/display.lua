@@ -3,6 +3,8 @@ local NotificationSoundPolicy = require('core.notificationsoundpolicy')
 local ThemeHelper = require('libs.themehelper')
 local SoundPlayer = require('platform.services.SoundPlayer')
 local FontManager = require('app.ui.FontManager')
+local InputHelper = require('ui.helpers.InputHelper')
+local scaling = require('scaling')
 
 local M = {}
 
@@ -52,7 +54,14 @@ local state = {
     positionY = DEFAULT_POSITION_Y,
     soundPolicy = nil,
     lastToastIds = {},
-    activeToasts = {}
+    activeToasts = {},
+    isDragging = false,
+    dragStartMouseX = 0,
+    dragStartMouseY = 0,
+    dragStartAnchorX = 0,
+    dragStartAnchorY = 0,
+    justFinishedDragging = false,
+    dragEndFrame = 0
 }
 
 function M.Initialize(settings)
@@ -73,6 +82,11 @@ end
 
 function M.UpdateVisuals(settings)
     state.settings = settings or {}
+    
+    -- Don't reload position if we're currently dragging or just finished
+    if state.isDragging or state.justFinishedDragging then
+        return
+    end
     
     local app = _G.FFXIFriendListApp
     if app and app.features and app.features.preferences then
@@ -246,7 +260,7 @@ local function updateToast(toast, currentTime, prefsDurationMs)
     end
 end
 
-local function renderToast(toast, targetY)
+local function renderToast(toast, targetY, isFirstToast)
     if toast.state == ToastState.COMPLETE then
         return 0
     end
@@ -265,10 +279,66 @@ local function renderToast(toast, targetY)
         toast.currentY = targetY
     end
     
-    local posX = state.positionX
-    local posY = toast.currentY
-    
     local windowId = "##Toast_" .. tostring(toast.id or 0)
+    
+    local app = _G.FFXIFriendListApp
+    local shiftHeld = InputHelper and InputHelper.isShiftDown() or false
+    local mouseX, mouseY = imgui.GetMousePos()
+    local mouseDown = imgui.IsMouseDown(0)
+    local mouseReleased = imgui.IsMouseReleased(0)
+    
+    -- Update position if already dragging (from previous frame)
+    if state.isDragging then
+        if not shiftHeld or mouseReleased then
+            state.isDragging = false
+            state.justFinishedDragging = true
+            state.dragEndFrame = (state.dragEndFrame or 0) + 1
+            if app and app.features and app.features.preferences then
+                app.features.preferences:setPref("notificationPositionX", state.positionX)
+                app.features.preferences:setPref("notificationPositionY", state.positionY)
+                app.features.preferences:save()
+            end
+        else
+            local currentMouseX = mouseX or 0
+            local currentMouseY = mouseY or 0
+            local deltaX = currentMouseX - state.dragStartMouseX
+            local deltaY = currentMouseY - state.dragStartMouseY
+            
+            local newX = state.dragStartAnchorX + deltaX
+            local newY = state.dragStartAnchorY + deltaY
+            
+            local screenWidth = scaling.window.w or 1920
+            local screenHeight = scaling.window.h or 1080
+            
+            -- Clamp X: leave some margin for the toast width (approximately 200-300px)
+            newX = math.max(0, math.min(newX, screenWidth - 200))
+            -- Clamp Y: allow toasts to go all the way to the bottom edge
+            -- Only clamp the top to prevent going above screen
+            newY = math.max(0, newY)
+            -- Don't clamp bottom - allow toasts to go to the edge or slightly off-screen
+            
+            state.positionX = newX
+            state.positionY = newY
+        end
+    end
+    
+    local posX = state.positionX
+    -- When dragging, use state.positionY directly for the first toast
+    -- Otherwise use the animated toast.currentY
+    local posY
+    if state.isDragging and isFirstToast then
+        posY = state.positionY
+        -- Also update toast.currentY to match so animation doesn't fight
+        toast.currentY = state.positionY
+    else
+        posY = toast.currentY
+    end
+    
+    local dynamicFlags = TOAST_WINDOW_FLAGS
+    if shiftHeld then
+        dynamicFlags = bit.band(dynamicFlags, bit.bnot(ImGuiWindowFlags_NoInputs or 0x00020000))
+        dynamicFlags = bit.band(dynamicFlags, bit.bnot(ImGuiWindowFlags_NoMove or 0x00000004))
+    end
     
     imgui.SetNextWindowPos({posX, posY}, ImGuiCond_Always)
     
@@ -280,9 +350,56 @@ local function renderToast(toast, targetY)
     imgui.PushStyleVar(ImGuiStyleVar_WindowRounding, 4.0)
     imgui.PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0)
     imgui.PushStyleVar(ImGuiStyleVar_WindowPadding, {10, 8})
-    imgui.PushStyleColor(ImGuiCol_WindowBg, {0.1, 0.1, 0.1, 0.9 * alpha})
     
-    local beginResult = imgui.Begin(windowId, true, TOAST_WINDOW_FLAGS)
+    local fontSizePx = 14
+    local windowBgColor = {0.1, 0.1, 0.1, 0.9 * alpha}
+    
+    -- Check for custom notification background color
+    local useCustomColor = false
+    if app and app.features and app.features.preferences then
+        local prefs = app.features.preferences:getPrefs()
+        if prefs and prefs.notificationBgColor and type(prefs.notificationBgColor) == "table" then
+            local customColor = prefs.notificationBgColor
+            -- Ensure we have valid color values
+            if customColor.r ~= nil and customColor.g ~= nil and customColor.b ~= nil then
+                windowBgColor = {
+                    customColor.r or 0.1,
+                    customColor.g or 0.1,
+                    customColor.b or 0.1,
+                    (customColor.a or 0.9) * alpha
+                }
+                useCustomColor = true
+            end
+        end
+    end
+    
+    -- If no custom color, use theme color
+    if not useCustomColor and app and app.features and app.features.themes then
+        fontSizePx = app.features.themes:getFontSizePx() or 14
+        local themeIndex = app.features.themes:getThemeIndex()
+        if themeIndex ~= -2 then
+            local success, themeColors, backgroundAlpha = pcall(function()
+                local colors = app.features.themes:getCurrentThemeColors()
+                local bgAlpha = app.features.themes:getBackgroundAlpha()
+                return colors, bgAlpha
+            end)
+            if success and themeColors and themeColors.windowBgColor then
+                local bgAlpha = backgroundAlpha or 0.95
+                windowBgColor = {
+                    themeColors.windowBgColor.r,
+                    themeColors.windowBgColor.g,
+                    themeColors.windowBgColor.b,
+                    (themeColors.windowBgColor.a or 1.0) * bgAlpha * 0.9 * alpha
+                }
+            end
+        end
+    elseif app and app.features and app.features.themes then
+        fontSizePx = app.features.themes:getFontSizePx() or 14
+    end
+    
+    imgui.PushStyleColor(ImGuiCol_WindowBg, windowBgColor)
+    
+    local beginResult = imgui.Begin(windowId, true, dynamicFlags)
     if not beginResult then
         imgui.PopStyleColor(1)
         imgui.PopStyleVar(3)
@@ -290,10 +407,14 @@ local function renderToast(toast, targetY)
         return 60
     end
     
-    local app = _G.FFXIFriendListApp
-    local fontSizePx = 14
-    if app and app.features and app.features.themes then
-        fontSizePx = app.features.themes:getFontSizePx() or 14
+    -- Check for new drag start (only if not already dragging)
+    local isHovered = imgui.IsWindowHovered()
+    if shiftHeld and isHovered and mouseDown and not state.isDragging then
+        state.isDragging = true
+        state.dragStartMouseX = mouseX or 0
+        state.dragStartMouseY = mouseY or 0
+        state.dragStartAnchorX = state.positionX
+        state.dragStartAnchorY = state.positionY
     end
     
     local windowHeight = 60
@@ -337,10 +458,21 @@ function M.DrawWindow(settings, dataModule)
         rawToasts = {}
     end
     
+    -- Clear the "just finished dragging" flag after a few frames
+    if state.justFinishedDragging then
+        state.dragEndFrame = (state.dragEndFrame or 0) + 1
+        if state.dragEndFrame >= 3 then
+            state.justFinishedDragging = false
+            state.dragEndFrame = 0
+        end
+    end
+    
     local app = _G.FFXIFriendListApp
+    local prefs = nil
     if app and app.features and app.features.preferences then
-        local prefs = app.features.preferences:getPrefs()
-        if prefs then
+        prefs = app.features.preferences:getPrefs()
+        -- Only reload position from preferences if not currently dragging and not just finished
+        if prefs and not state.isDragging and not state.justFinishedDragging then
             state.positionX = prefs.notificationPositionX or DEFAULT_POSITION_X
             state.positionY = prefs.notificationPositionY or DEFAULT_POSITION_Y
         end
@@ -370,6 +502,36 @@ function M.DrawWindow(settings, dataModule)
         updateToast(toast, currentTime, prefsDurationMs)
     end
     
+    local showTestPreview = false
+    if prefs then
+        showTestPreview = prefs.notificationShowTestPreview or false
+    end
+    
+    if showTestPreview then
+        local testToastId = "test_preview"
+        seenIds[testToastId] = true
+        if not state.testToast then
+            state.testToast = {
+                id = testToastId,
+                type = ToastType.Info,
+                title = "Test notification",
+                message = "Drag with Shift to reposition. Notifications appear below previous notifications.",
+                state = ToastState.VISIBLE,
+                alpha = 1.0,
+                createdAt = currentTime,
+                duration = 0,
+                currentY = nil,
+                lastHeight = 60
+            }
+        end
+        state.testToast.state = ToastState.VISIBLE
+        state.testToast.alpha = 1.0
+    else
+        if state.testToast then
+            state.testToast = nil
+        end
+    end
+    
     for id, _ in pairs(state.lastToastIds) do
         if not seenIds[id] then
             state.lastToastIds[id] = nil
@@ -377,6 +539,9 @@ function M.DrawWindow(settings, dataModule)
     end
     
     local activeToasts = {}
+    if showTestPreview and state.testToast then
+        table.insert(activeToasts, state.testToast)
+    end
     for _, toast in ipairs(rawToasts) do
         if toast.state ~= ToastState.COMPLETE then
             table.insert(activeToasts, toast)
@@ -409,7 +574,8 @@ function M.DrawWindow(settings, dataModule)
     for i = 1, #activeToasts do
         local toast = activeToasts[i]
         local toastHeight = toast.lastHeight or 60
-        renderToast(toast, targetY)
+        local isFirstToast = (i == 1)
+        renderToast(toast, targetY, isFirstToast)
         if toast.state ~= ToastState.EXITING then
             targetY = targetY + toastHeight + TOAST_SPACING
         end
@@ -424,6 +590,8 @@ function M.Cleanup()
     state.initialized = false
     state.lastToastIds = {}
     state.activeToasts = {}
+    state.testToast = nil
+    state.isDragging = false
 end
 
 return M

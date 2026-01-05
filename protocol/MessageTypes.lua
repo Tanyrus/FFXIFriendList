@@ -67,6 +67,9 @@ local ResponseType = {
     FeedbackResponse = "FeedbackResponse",
     IssueResponse = "IssueResponse",
     ServerList = "ServerList",
+    BlockAccountResponse = "BlockAccountResponse",
+    UnblockAccountResponse = "UnblockAccountResponse",
+    BlockedAccountsResponse = "BlockedAccountsResponse",
     Error = "Error"
 }
 

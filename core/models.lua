@@ -100,6 +100,7 @@ function M.Preferences.new()
     self.shareJobWhenAnonymous = false
     self.showOnlineStatus = true
     self.shareLocation = true
+    self.presenceStatus = "online"
     self.notificationDuration = 8.0
     -- Default notification position
     self.notificationPositionX = 10.0
@@ -107,10 +108,14 @@ function M.Preferences.new()
     self.customCloseKeyCode = 0
     self.controllerCloseButton = 0x2000
     self.windowsLocked = false
+    self.windowsPositionLocked = false
     self.notificationSoundsEnabled = true
     self.soundOnFriendOnline = true
     self.soundOnFriendRequest = true
     self.notificationSoundVolume = 0.6
+    -- Notification background color (nil = use theme, otherwise {r, g, b, a})
+    self.notificationBgColor = nil
+    self.notificationShowTestPreview = false
     self.controllerLayout = 'xinput'
     self.flistBindButton = ''
     self.closeBindButton = ''

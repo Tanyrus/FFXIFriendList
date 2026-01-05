@@ -15,6 +15,7 @@ local PrivacyTab = require('modules.friendlist.components.PrivacyTab')
 local NotificationsTab = require('modules.friendlist.components.NotificationsTab')
 local ControlsTab = require('modules.friendlist.components.ControlsTab')
 local ThemesTab = require('modules.friendlist.components.ThemesTab')
+local HelpTab = require('modules.friendlist.components.HelpTab')
 local CollapsibleTagSection = require('modules.friendlist.components.CollapsibleTagSection')
 local TagManager = require('modules.friendlist.components.TagManager')
 local utils = require('modules.friendlist.components.helpers.utils')
@@ -111,7 +112,8 @@ local state = {
     collapsedOnlineSection = false,
     collapsedOfflineSection = false,
     groupByStatusExpanded = true,
-    compactFriendListExpanded = false
+    compactFriendListExpanded = false,
+    windowBehaviorExpanded = false
 }
 
 local WINDOW_ID = "##friendlist_main"
@@ -122,15 +124,13 @@ function M.Initialize(settings)
     
     if gConfig and gConfig.windows and gConfig.windows.friendList then
         local windowState = gConfig.windows.friendList
-        if windowState.visible ~= nil and gConfig then
-            gConfig.showFriendList = windowState.visible
-        end
         if windowState.locked ~= nil then
             state.locked = windowState.locked
         end
     end
     
-    if gConfig and gConfig.showFriendList == nil then
+    -- Always start closed - only auto-open setting will open it
+    if gConfig then
         gConfig.showFriendList = false
     end
     
@@ -160,6 +160,9 @@ function M.Initialize(settings)
             end
             if settings.sections.themeSettings and settings.sections.themeSettings.expanded ~= nil then
                 state.themeSettingsExpanded = settings.sections.themeSettings.expanded
+            end
+            if settings.sections.windowBehavior and settings.sections.windowBehavior.expanded ~= nil then
+                state.windowBehaviorExpanded = settings.sections.windowBehavior.expanded
             end
         end
         if settings.sort then
@@ -250,7 +253,8 @@ function M.SaveWindowState()
         altVisibility = {expanded = state.altVisibilityExpanded},
         notificationsSettings = {expanded = state.notificationsSettingsExpanded},
         controlsSettings = {expanded = state.controlsSettingsExpanded},
-        themeSettings = {expanded = state.themeSettingsExpanded}
+        themeSettings = {expanded = state.themeSettingsExpanded},
+        windowBehavior = {expanded = state.windowBehaviorExpanded}
     }
     gConfig.friendListSettings.sort = {
         column = state.sortColumn,
@@ -326,7 +330,15 @@ function M.DrawWindow(settings, dataModule)
     
     -- Server is configured - render main window normally
     local windowFlags = 0
-    if gConfig and gConfig.windows and gConfig.windows.friendList and gConfig.windows.friendList.locked then
+    local app = _G.FFXIFriendListApp
+    local globalLocked = false
+    local globalPositionLocked = false
+    if app and app.features and app.features.preferences then
+        local prefs = app.features.preferences:getPrefs()
+        globalLocked = prefs and prefs.windowsLocked or false
+        globalPositionLocked = prefs and prefs.windowsPositionLocked or false
+    end
+    if globalPositionLocked or (gConfig and gConfig.windows and gConfig.windows.friendList and gConfig.windows.friendList.locked) then
         windowFlags = bit.bor(windowFlags, ImGuiWindowFlags_NoMove)
         windowFlags = bit.bor(windowFlags, ImGuiWindowFlags_NoResize)
     end
@@ -359,7 +371,8 @@ function M.DrawWindow(settings, dataModule)
     local xButtonClicked = isOpen and not windowOpenTable[1]
     
     if xButtonClicked then
-        if state.locked then
+        if state.locked or globalLocked then
+            -- Window is locked, prevent closing
         else
             local closeGating = require('ui.close_gating')
             if not closeGating.shouldDeferClose() then
@@ -495,6 +508,8 @@ function M.RenderContentArea(dataModule, callbacks)
         ControlsTab.Render(state, dataModule, callbacks)
     elseif state.selectedTab == 7 then
         ThemesTab.Render(state, dataModule, callbacks)
+    elseif state.selectedTab == 8 then
+        HelpTab.Render(state, dataModule, callbacks)
     end
 end
 
@@ -509,6 +524,103 @@ function M.RenderGeneralTab(dataModule, callbacks)
     M.RenderGroupByStatusSection(callbacks)
     imgui.Spacing()
     M.RenderCompactFriendListSettings(callbacks)
+    imgui.Spacing()
+    M.RenderWindowBehaviorSection(callbacks)
+    imgui.Spacing()
+    M.RenderWindowLockSection(callbacks)
+end
+
+function M.RenderWindowBehaviorSection(callbacks)
+    local headerLabel = "Window Behavior"
+    local isOpen = imgui.CollapsingHeader(headerLabel, state.windowBehaviorExpanded and ImGuiTreeNodeFlags_DefaultOpen or 0)
+    
+    if isOpen ~= state.windowBehaviorExpanded then
+        state.windowBehaviorExpanded = isOpen
+        if callbacks.onSaveState then callbacks.onSaveState() end
+    end
+    
+    if not isOpen then return end
+    
+    local autoOpenMain = {gConfig and gConfig.friendListSettings and gConfig.friendListSettings.autoOpenOnStart or false}
+    if imgui.Checkbox("Auto-open Main Window on Game Start##fl_auto_open", autoOpenMain) then
+        if gConfig then
+            if not gConfig.friendListSettings then
+                gConfig.friendListSettings = {}
+            end
+            gConfig.friendListSettings.autoOpenOnStart = autoOpenMain[1]
+            local settings = require('libs.settings')
+            if settings and settings.save then
+                settings.save()
+            end
+        end
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("Automatically open the Main Friend List window when the game starts")
+    end
+    
+    imgui.Spacing()
+    
+    local autoOpenCompact = {gConfig and gConfig.quickOnlineSettings and gConfig.quickOnlineSettings.autoOpenOnStart or false}
+    if imgui.Checkbox("Auto-open Compact Friend List on Game Start##qo_auto_open", autoOpenCompact) then
+        if gConfig then
+            if not gConfig.quickOnlineSettings then
+                gConfig.quickOnlineSettings = {}
+            end
+            gConfig.quickOnlineSettings.autoOpenOnStart = autoOpenCompact[1]
+            local settings = require('libs.settings')
+            if settings and settings.save then
+                settings.save()
+            end
+        end
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("Automatically open the Compact Friend List window when the game starts")
+    end
+end
+
+function M.RenderWindowLockSection(callbacks)
+    local headerLabel = "Window Lock"
+    local isOpen = imgui.CollapsingHeader(headerLabel, state.windowLockExpanded and ImGuiTreeNodeFlags_DefaultOpen or 0)
+    
+    if isOpen ~= state.windowLockExpanded then
+        state.windowLockExpanded = isOpen
+        if callbacks.onSaveState then callbacks.onSaveState() end
+    end
+    
+    if not isOpen then return end
+    
+    local app = _G.FFXIFriendListApp
+    local prefs = nil
+    if app and app.features and app.features.preferences then
+        prefs = app.features.preferences:getPrefs()
+    end
+    
+    if not prefs then
+        imgui.Text("Preferences not available")
+        return
+    end
+    
+    local windowsPositionLocked = {prefs.windowsPositionLocked or false}
+    if imgui.Checkbox("Lock Position", windowsPositionLocked) then
+        if app and app.features and app.features.preferences then
+            app.features.preferences:setPref("windowsPositionLocked", windowsPositionLocked[1])
+            app.features.preferences:save()
+        end
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("When enabled, all addon windows cannot be moved or resized.")
+    end
+    
+    local windowsLocked = {prefs.windowsLocked or false}
+    if imgui.Checkbox("Lock Close", windowsLocked) then
+        if app and app.features and app.features.preferences then
+            app.features.preferences:setPref("windowsLocked", windowsLocked[1])
+            app.features.preferences:save()
+        end
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("When enabled, all addon windows cannot be closed via the X button.")
+    end
 end
 
 function M.RenderGroupByStatusSection(callbacks)
@@ -581,6 +693,103 @@ function M.RenderCompactFriendListSettings(callbacks)
     end
     if imgui.IsItemHovered() then
         imgui.SetTooltip("Hide the top bar (lock, refresh, switch view buttons) in the Compact Friend List window")
+    end
+    
+    imgui.Spacing()
+    
+    -- Compact Overlay Mode toggle
+    local overlayEnabled = {gConfig and gConfig.quickOnlineSettings and gConfig.quickOnlineSettings.compact_overlay_enabled or false}
+    if imgui.Checkbox("Compact Overlay Mode##qo_overlay", overlayEnabled) then
+        if gConfig then
+            if not gConfig.quickOnlineSettings then
+                gConfig.quickOnlineSettings = {}
+            end
+            local wasEnabled = gConfig.quickOnlineSettings.compact_overlay_enabled or false
+            gConfig.quickOnlineSettings.compact_overlay_enabled = overlayEnabled[1]
+            
+            if overlayEnabled[1] and not wasEnabled then
+                if not gConfig.windows then
+                    gConfig.windows = {}
+                end
+                if not gConfig.windows.quickOnline then
+                    gConfig.windows.quickOnline = {}
+                end
+                gConfig.windows.quickOnline.locked = true
+            elseif not overlayEnabled[1] and wasEnabled then
+                if gConfig.windows and gConfig.windows.quickOnline then
+                    gConfig.windows.quickOnline.locked = false
+                end
+            end
+            
+            local settings = require('libs.settings')
+            if settings and settings.save then
+                settings.save()
+            end
+        end
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("Enable overlay mode: transparent background, no titlebar, locked position, non-interactive")
+    end
+    
+    -- Tag Header Background toggle (only shown when overlay is enabled)
+    if overlayEnabled[1] then
+        imgui.Indent(20)
+        local tagHeaderBg = {gConfig and gConfig.quickOnlineSettings and gConfig.quickOnlineSettings.compact_overlay_tag_header_bg or false}
+        if imgui.Checkbox("Show Tag Header Backgrounds##qo_overlay_tag_bg", tagHeaderBg) then
+            if gConfig then
+                if not gConfig.quickOnlineSettings then
+                    gConfig.quickOnlineSettings = {}
+                end
+                gConfig.quickOnlineSettings.compact_overlay_tag_header_bg = tagHeaderBg[1]
+                local settings = require('libs.settings')
+                if settings and settings.save then
+                    settings.save()
+                end
+            end
+        end
+        if imgui.IsItemHovered() then
+            imgui.SetTooltip("Show backgrounds for tag section headers in overlay mode")
+        end
+        
+        imgui.Spacing()
+        
+        local disableInteraction = {gConfig and gConfig.quickOnlineSettings and gConfig.quickOnlineSettings.compact_overlay_disable_interaction or false}
+        if imgui.Checkbox("Disable Interaction##qo_overlay_disable_interaction", disableInteraction) then
+            if gConfig then
+                if not gConfig.quickOnlineSettings then
+                    gConfig.quickOnlineSettings = {}
+                end
+                gConfig.quickOnlineSettings.compact_overlay_disable_interaction = disableInteraction[1]
+                local settings = require('libs.settings')
+                if settings and settings.save then
+                    settings.save()
+                end
+            end
+        end
+        if imgui.IsItemHovered() then
+            imgui.SetTooltip("Disable clicking and hovering on friend names and headers in overlay mode")
+        end
+        
+        imgui.Spacing()
+        
+        local tooltipBg = {gConfig and gConfig.quickOnlineSettings and gConfig.quickOnlineSettings.compact_overlay_tooltip_bg or false}
+        if imgui.Checkbox("Keep Tooltip Background##qo_overlay_tooltip_bg", tooltipBg) then
+            if gConfig then
+                if not gConfig.quickOnlineSettings then
+                    gConfig.quickOnlineSettings = {}
+                end
+                gConfig.quickOnlineSettings.compact_overlay_tooltip_bg = tooltipBg[1]
+                local settings = require('libs.settings')
+                if settings and settings.save then
+                    settings.save()
+                end
+            end
+        end
+        if imgui.IsItemHovered() then
+            imgui.SetTooltip("Keep the background visible on hover tooltips in overlay mode for better readability")
+        end
+        
+        imgui.Unindent(20)
     end
 end
 
@@ -1051,6 +1260,15 @@ function M.RenderServerSelectionWindow()
         if imgui.Button("Save", {120, 0}) then
             serverSelectionData.SaveServerSelection(draftServerId)
             state.serverSelectionPopupOpened = false
+            
+            -- Check if help tab should auto-open
+            if serverSelectionData.ShouldAutoOpenHelpTab() then
+                state.selectedTab = 8
+                local settings = require('libs.settings')
+                if settings and settings.save then
+                    settings.save()
+                end
+            end
         end
     else
         imgui.PushStyleColor(ImGuiCol_Button, {0.3, 0.3, 0.3, 1.0})
@@ -1115,6 +1333,24 @@ function M.GetCallbacks(dataModule)
         onCancelRequest = function(requestId)
             if app and app.features and app.features.friends then
                 app.features.friends:cancelRequest(requestId)
+            end
+        end,
+        
+        onBlockPlayer = function(accountId, characterName)
+            if app and app.features and app.features.blocklist then
+                app.features.blocklist:block(characterName, function(success, result)
+                    if success then
+                        if app.features.friends and app.features.friends.refreshFriendRequests then
+                            app.features.friends:refreshFriendRequests()
+                        end
+                    end
+                end)
+            end
+        end,
+        
+        onUnblockPlayer = function(accountId)
+            if app and app.features and app.features.blocklist then
+                app.features.blocklist:unblock(accountId)
             end
         end,
         

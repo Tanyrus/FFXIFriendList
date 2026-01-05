@@ -11,6 +11,7 @@ local Preferences = require("app.features.preferences")
 local Notes = require("app.features.notes")
 local AltVisibility = require("app.features.altvisibility")
 local Tags = require("app.features.Tags")
+local Blocklist = require("app.features.blocklist")
 
 local App = {}
 
@@ -42,6 +43,7 @@ function App.create(deps)
     app.features.notes = Notes.Notes.new(deps)
     app.features.altVisibility = AltVisibility.AltVisibility.new(deps)
     app.features.tags = Tags.Tags.new(deps)
+    app.features.blocklist = Blocklist.Blocklist.new(deps)
     
     return app
 end
@@ -201,6 +203,14 @@ function App._triggerStartupRefresh(app)
             app.deps.logger.debug(string.format("[App] [%d] Startup: Firing friend requests refresh", timeMs))
         end
         app.features.friends:refreshFriendRequests()
+    end
+    
+    -- 5. Refresh blocklist - parallel with other requests
+    if app.features.blocklist and app.features.blocklist.refresh then
+        if app.deps.logger and app.deps.logger.debug then
+            app.deps.logger.debug(string.format("[App] [%d] Startup: Firing blocklist refresh", timeMs))
+        end
+        app.features.blocklist:refresh()
     end
 end
 

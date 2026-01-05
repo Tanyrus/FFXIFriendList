@@ -36,6 +36,8 @@ local function getDecoder(responseType)
         decoder = require("protocol.Decoders.MeResponse")
     elseif responseType == MessageTypes.ResponseType.ServerList then
         decoder = require("protocol.Decoders.ServerList")
+    elseif responseType == MessageTypes.ResponseType.BlockedAccountsResponse then
+        decoder = require("protocol.Decoders.BlockedAccounts")
     end
     
     if decoder then

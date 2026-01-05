@@ -14,7 +14,7 @@ function M.Render(state, dataModule, onSaveState)
         requestsLabel = "Requests (" .. incomingCount .. ")"
     end
     
-    local tabs = {"Friends", requestsLabel, "General", "Privacy", "Tags", "Notifications", "Controls", "Themes"}
+    local tabs = {"Friends", requestsLabel, "General", "Privacy", "Tags", "Notifications", "Controls", "Themes", "Help"}
     
     local s = FontManager.scaled
     local framePadding = {s(10), s(8)}

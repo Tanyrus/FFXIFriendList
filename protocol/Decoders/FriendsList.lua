@@ -29,6 +29,7 @@ function M.decode(payload)
                     name = friend.name or friend.friendedAsName,
                     characterName = friend.name or friend.friendedAsName,
                     isOnline = friend.isOnline,
+                    isAway = friend.isAway,
                     job = friend.job,
                     zone = friend.zone,
                     nation = friend.nation,

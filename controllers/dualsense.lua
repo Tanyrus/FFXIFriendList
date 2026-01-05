@@ -1,5 +1,3 @@
-local HandleBinding = _G.FFXIFriendList_HandleBinding
-
 --[[
 
 MIT License

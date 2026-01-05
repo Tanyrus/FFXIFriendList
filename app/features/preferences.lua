@@ -90,6 +90,7 @@ function M.Preferences:load()
     self.prefs.notificationSoundVolume = getVal(prefs.notificationSoundVolume, 0.6)
     self.prefs.controllerLayout = getVal(prefs.controllerLayout, 'xinput')
     self.prefs.flistBindButton = getVal(prefs.flistBindButton, '')
+    self.prefs.closeBindButton = getVal(prefs.closeBindButton, '')
     return true
 end
 
@@ -126,7 +127,8 @@ function M.Preferences:save()
         soundOnFriendRequest = self.prefs.soundOnFriendRequest,
         notificationSoundVolume = self.prefs.notificationSoundVolume,
         controllerLayout = self.prefs.controllerLayout,
-        flistBindButton = self.prefs.flistBindButton
+        flistBindButton = self.prefs.flistBindButton,
+        closeBindButton = self.prefs.closeBindButton
     }
     
     -- Update preferences in the data section (preserves apiKeys, serverSelection, etc.)

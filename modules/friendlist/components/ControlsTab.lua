@@ -160,6 +160,36 @@ function M.RenderControllerSection(prefs)
         end
         imgui.SameLine()
         imgui.ShowHelp("Select a button to toggle /flist command.")
+        
+        -- Button Selection for Close Window
+        imgui.Spacing()
+        local currentCloseButton = prefs.closeBindButton or ''
+        
+        if imgui.BeginCombo("Close Window Button", currentCloseButton == '' and "None" or currentCloseButton) then
+            -- Option to clear bind
+            if imgui.Selectable("None", (currentCloseButton == '')) then
+                if app and app.features and app.features.preferences then
+                    app.features.preferences:setPref("closeBindButton", '')
+                    app.features.preferences:save()
+                end
+            end
+
+            for _, btn in ipairs(buttons) do
+                local isSelected = (btn == currentCloseButton)
+                if imgui.Selectable(btn, isSelected) then
+                    if app and app.features and app.features.preferences then
+                        app.features.preferences:setPref("closeBindButton", btn)
+                        app.features.preferences:save()
+                    end
+                end
+                if isSelected then
+                    imgui.SetItemDefaultFocus()
+                end
+            end
+            imgui.EndCombo()
+        end
+        imgui.SameLine()
+        imgui.ShowHelp("Select a button to close the top-most unlocked window.")
     else
         imgui.TextDisabled("No buttons available (Controller not loaded?)")
     end

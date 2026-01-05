@@ -6,22 +6,25 @@ local activeController = nil
 local activeControllerName = nil
 
 -- Define XINPUT structures for FFI access (matching XIUI's approach)
-ffi.cdef[[
-    typedef struct {
-        uint16_t wButtons;
-        uint8_t  bLeftTrigger;
-        uint8_t  bRightTrigger;
-        int16_t  sThumbLX;
-        int16_t  sThumbLY;
-        int16_t  sThumbRX;
-        int16_t  sThumbRY;
-    } XINPUT_GAMEPAD;
+-- Wrap in pcall to handle case where another addon already defined these
+pcall(function()
+    ffi.cdef[[
+        typedef struct {
+            uint16_t wButtons;
+            uint8_t  bLeftTrigger;
+            uint8_t  bRightTrigger;
+            int16_t  sThumbLX;
+            int16_t  sThumbLY;
+            int16_t  sThumbRX;
+            int16_t  sThumbRY;
+        } XINPUT_GAMEPAD;
 
-    typedef struct {
-        uint32_t       dwPacketNumber;
-        XINPUT_GAMEPAD Gamepad;
-    } XINPUT_STATE;
-]]
+        typedef struct {
+            uint32_t       dwPacketNumber;
+            XINPUT_GAMEPAD Gamepad;
+        } XINPUT_STATE;
+    ]]
+end)
 
 -- Button bitmasks for xinput_state (from XIUI devices.lua)
 -- Names match xinput.lua's Buttons list
@@ -50,6 +53,24 @@ local previousButtons = 0
 local previousL2 = false
 local previousR2 = false
 
+-- Handle close button press
+-- Only uses windowClosePolicy - closeGating uses ImGui which can't be called in xinput_state
+local function handleCloseButton()
+    local windowClosePolicy = require('ui.window_close_policy')
+    
+    if not windowClosePolicy.anyWindowOpen() then
+        return false
+    end
+    
+    local closedWindow = windowClosePolicy.closeTopMostWindow()
+    
+    if closedWindow ~= "" then
+        return true
+    else
+        return false
+    end
+end
+
 -- Global handle binding function to be called by controller files
 -- Using a TRUE global (no _G. prefix) so Lua resolves it at call time, matching cBind's pattern
 HandleBinding = function(buttonName, newState)
@@ -75,6 +96,29 @@ function M.HandleBinding(buttonName, newState)
     end
 end
 
+-- Handle close button binding
+local function handleCloseBinding(buttonName)
+    local app = _G.FFXIFriendListApp
+    if not app or not app.features or not app.features.preferences then
+        return false
+    end
+
+    local prefs = app.features.preferences:getPrefs()
+    local closeButton = prefs.closeBindButton
+    
+    if closeButton and closeButton ~= '' and buttonName == closeButton then
+        -- Use pcall to prevent errors from breaking controller handling
+        local success, result = pcall(handleCloseButton)
+        if success then
+            return result
+        end
+        -- On error, return false so other bindings can still work
+        return false
+    end
+    
+    return false
+end
+
 -- Handle XInput state event (polled every frame)
 -- This is more reliable than xinput_button which doesn't fire on all systems
 function M.HandleXInputState(e)
@@ -98,22 +142,28 @@ function M.HandleXInputState(e)
     -- Check each button for new presses
     for buttonName, mask in pairs(ButtonMasks) do
         if bit.band(newPresses, mask) ~= 0 then
-            -- Button was just pressed
-            M.HandleBinding(buttonName, true)
+            -- Button was just pressed - check close binding first, then flist binding
+            if not handleCloseBinding(buttonName) then
+                M.HandleBinding(buttonName, true)
+            end
         end
     end
 
     -- Handle L2 trigger (analog, use threshold)
     local currentL2 = leftTrigger >= TRIGGER_THRESHOLD
     if currentL2 and not previousL2 then
-        M.HandleBinding('L2', true)
+        if not handleCloseBinding('L2') then
+            M.HandleBinding('L2', true)
+        end
     end
     previousL2 = currentL2
 
     -- Handle R2 trigger (analog, use threshold)
     local currentR2 = rightTrigger >= TRIGGER_THRESHOLD
     if currentR2 and not previousR2 then
-        M.HandleBinding('R2', true)
+        if not handleCloseBinding('R2') then
+            M.HandleBinding('R2', true)
+        end
     end
     previousR2 = currentR2
 

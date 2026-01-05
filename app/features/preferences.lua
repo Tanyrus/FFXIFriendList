@@ -85,6 +85,7 @@ function M.Preferences:load()
     self.prefs.customCloseKeyCode = getVal(prefs.customCloseKeyCode, 0)
     self.prefs.controllerCloseButton = getVal(prefs.controllerCloseButton, UIConstants.CONTROLLER_CLOSE_BUTTON)
     self.prefs.windowsLocked = getVal(prefs.windowsLocked, false)
+    self.prefs.windowsPositionLocked = getVal(prefs.windowsPositionLocked, false)
     self.prefs.notificationSoundsEnabled = getVal(prefs.notificationSoundsEnabled, true)
     self.prefs.soundOnFriendOnline = getVal(prefs.soundOnFriendOnline, true)
     self.prefs.soundOnFriendRequest = getVal(prefs.soundOnFriendRequest, true)
@@ -125,6 +126,7 @@ function M.Preferences:save()
         customCloseKeyCode = self.prefs.customCloseKeyCode,
         controllerCloseButton = self.prefs.controllerCloseButton,
         windowsLocked = self.prefs.windowsLocked,
+        windowsPositionLocked = self.prefs.windowsPositionLocked,
         notificationSoundsEnabled = self.prefs.notificationSoundsEnabled,
         soundOnFriendOnline = self.prefs.soundOnFriendOnline,
         soundOnFriendRequest = self.prefs.soundOnFriendRequest,

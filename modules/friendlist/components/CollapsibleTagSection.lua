@@ -5,12 +5,14 @@ local FriendsTable = require('modules.friendlist.components.FriendsTable')
 
 local M = {}
 
-function M.Render(tagGroup, state, callbacks, renderFriendsTable, idSuffix)
+function M.Render(tagGroup, state, callbacks, renderFriendsTable, idSuffix, overlayEnabled, disableInteraction)
     if not tagGroup then
         return
     end
     
     idSuffix = idSuffix or ""
+    overlayEnabled = overlayEnabled or false
+    disableInteraction = disableInteraction or false
     
     local tag = tagGroup.tag
     local displayTag = tagGroup.displayTag or tag
@@ -30,12 +32,35 @@ function M.Render(tagGroup, state, callbacks, renderFriendsTable, idSuffix)
         flags = ImGuiTreeNodeFlags_DefaultOpen
     end
     
+    if disableInteraction then
+        imgui.SetNextItemOpen(not isCollapsed, ImGuiCond_Always)
+    end
+    
+    local tagHeaderBgEnabled = false
+    if overlayEnabled and gConfig and gConfig.quickOnlineSettings then
+        tagHeaderBgEnabled = gConfig.quickOnlineSettings.compact_overlay_tag_header_bg or false
+    end
+    
+    if (overlayEnabled and not tagHeaderBgEnabled) or disableInteraction then
+        imgui.PushStyleColor(ImGuiCol_Header, {0.0, 0.0, 0.0, 0.0})
+        imgui.PushStyleColor(ImGuiCol_HeaderHovered, {0.0, 0.0, 0.0, 0.0})
+        imgui.PushStyleColor(ImGuiCol_HeaderActive, {0.0, 0.0, 0.0, 0.0})
+    end
+    
     local dragState = FriendsTable.getDragState()
     
     local headerOpen = imgui.CollapsingHeader(headerLabel .. "##tag_" .. tag .. idSuffix, flags)
     
+    if (overlayEnabled and not tagHeaderBgEnabled) or disableInteraction then
+        imgui.PopStyleColor(3)
+    end
+    
+    if overlayEnabled or disableInteraction then
+        headerOpen = not isCollapsed
+    end
+    
     local hoverFlags = ImGuiHoveredFlags_AllowWhenBlockedByActiveItem
-    if dragState.isDragging and imgui.IsItemHovered(hoverFlags) then
+    if not overlayEnabled and not disableInteraction and dragState.isDragging and imgui.IsItemHovered(hoverFlags) then
         if isUntagged then
             FriendsTable.setHoveredTag("__clear__")
         else
@@ -45,7 +70,7 @@ function M.Render(tagGroup, state, callbacks, renderFriendsTable, idSuffix)
     
     local wasOpen = not isCollapsed
     local nowOpen = headerOpen
-    if wasOpen ~= nowOpen and tagsFeature then
+    if not overlayEnabled and not disableInteraction and wasOpen ~= nowOpen and tagsFeature then
         tagsFeature:setCollapsed(tag .. idSuffix, not nowOpen)
     end
     
@@ -72,19 +97,23 @@ function M.Render(tagGroup, state, callbacks, renderFriendsTable, idSuffix)
     end
 end
 
-function M.RenderAllSections(groups, state, callbacks, renderFriendsTable, idSuffix)
+function M.RenderAllSections(groups, state, callbacks, renderFriendsTable, idSuffix, overlayEnabled, disableInteraction)
+    overlayEnabled = overlayEnabled or false
+    disableInteraction = disableInteraction or false
     for _, tagGroup in ipairs(groups or {}) do
-        M.Render(tagGroup, state, callbacks, renderFriendsTable, idSuffix)
+        M.Render(tagGroup, state, callbacks, renderFriendsTable, idSuffix, overlayEnabled, disableInteraction)
         imgui.Spacing()
     end
     
-    local friendKey, targetTag = FriendsTable.consumePendingDrop()
-    if friendKey then
-        if targetTag == "__clear__" then
-            targetTag = nil
-        end
-        if callbacks and callbacks.onQueueRetag then
-            callbacks.onQueueRetag(friendKey, targetTag)
+    if not overlayEnabled and not disableInteraction then
+        local friendKey, targetTag = FriendsTable.consumePendingDrop()
+        if friendKey then
+            if targetTag == "__clear__" then
+                targetTag = nil
+            end
+            if callbacks and callbacks.onQueueRetag then
+                callbacks.onQueueRetag(friendKey, targetTag)
+            end
         end
     end
 end

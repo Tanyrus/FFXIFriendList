@@ -114,6 +114,24 @@ function M.IsConnected()
     return state.connectionState == "connected"
 end
 
+-- Get blocked players list
+function M.GetBlockedPlayers()
+    local app = _G.FFXIFriendListApp
+    if app and app.features and app.features.blocklist then
+        return app.features.blocklist:getBlockedList()
+    end
+    return {}
+end
+
+-- Get blocked players count
+function M.GetBlockedPlayersCount()
+    local app = _G.FFXIFriendListApp
+    if app and app.features and app.features.blocklist then
+        return app.features.blocklist:getBlockedCount()
+    end
+    return 0
+end
+
 -- Cleanup
 function M.Cleanup()
     state.initialized = false

@@ -11,6 +11,8 @@ function M.Render(state, dataModule, callbacks)
     imgui.Spacing()
     M.RenderPrivacyControlsSection(state, callbacks)
     imgui.Spacing()
+    M.RenderBlockedPlayersSection(state, dataModule, callbacks)
+    imgui.Spacing()
     M.RenderAltVisibilitySection(state, dataModule, callbacks)
 end
 
@@ -314,6 +316,58 @@ function M.RenderPrivacyControlsSection(state, callbacks)
     end
     if imgui.IsItemHovered() then
         imgui.SetTooltip("You appear offline to friends.\nFriends will not see your online status or activity.")
+    end
+end
+
+function M.RenderBlockedPlayersSection(state, dataModule, callbacks)
+    local headerLabel = "Blocked Players"
+    local blockedCount = dataModule.GetBlockedPlayersCount()
+    if blockedCount > 0 then
+        headerLabel = headerLabel .. " (" .. blockedCount .. ")"
+    end
+    
+    local isOpen = imgui.CollapsingHeader(headerLabel, state.blockedPlayersExpanded and ImGuiTreeNodeFlags_DefaultOpen or 0)
+    
+    if isOpen ~= state.blockedPlayersExpanded then
+        state.blockedPlayersExpanded = isOpen
+        if callbacks.onSaveState then callbacks.onSaveState() end
+    end
+    
+    if not isOpen then return end
+    
+    local blocked = dataModule.GetBlockedPlayers()
+    
+    if #blocked == 0 then
+        imgui.TextDisabled("No blocked players.")
+        imgui.TextWrapped("You can block players from the Requests tab when they send you a friend request.")
+    else
+        imgui.TextWrapped("Blocked players cannot send you friend requests.")
+        imgui.Spacing()
+        
+        imgui.BeginChild("##blocked_players_list", {0, 150}, true)
+        
+        for i, entry in ipairs(blocked) do
+            imgui.PushID("blocked_" .. i)
+            
+            local displayName = entry.displayName or "Unknown"
+            if #displayName > 0 then
+                displayName = string.upper(string.sub(displayName, 1, 1)) .. string.sub(displayName, 2)
+            end
+            
+            imgui.AlignTextToFramePadding()
+            imgui.Text(displayName)
+            
+            imgui.SameLine()
+            if imgui.Button("Unblock") then
+                if callbacks.onUnblockPlayer then
+                    callbacks.onUnblockPlayer(entry.accountId)
+                end
+            end
+            
+            imgui.PopID()
+        end
+        
+        imgui.EndChild()
     end
 end
 

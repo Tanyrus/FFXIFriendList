@@ -54,10 +54,19 @@ local function getWindowStates()
                 visible = state and state.windowOpen or false
             end
             
-            -- Check if window is locked
+            -- Check if window is locked (per-window or global)
             local locked = false
             if gConfig and gConfig.windows and gConfig.windows[config.configKey] then
                 locked = gConfig.windows[config.configKey].locked or false
+            end
+            
+            -- Also check global windowsLocked preference
+            local app = _G.FFXIFriendListApp
+            if app and app.features and app.features.preferences then
+                local prefs = app.features.preferences:getPrefs()
+                if prefs and prefs.windowsLocked then
+                    locked = true
+                end
             end
             
             table.insert(states, {

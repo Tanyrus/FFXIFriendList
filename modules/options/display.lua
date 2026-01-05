@@ -49,12 +49,12 @@ function M.DrawWindow(settings, dataModule)
     
     local windowFlags = 0
     local app = _G.FFXIFriendListApp
-    local globalLocked = false
+    local globalPositionLocked = false
     if app and app.features and app.features.preferences then
         local prefs = app.features.preferences:getPrefs()
-        globalLocked = prefs and prefs.windowsLocked or false
+        globalPositionLocked = prefs and prefs.windowsPositionLocked or false
     end
-    if globalLocked or (gConfig and gConfig.windows and gConfig.windows.options and gConfig.windows.options.locked) then
+    if globalPositionLocked or (gConfig and gConfig.windows and gConfig.windows.options and gConfig.windows.options.locked) then
         windowFlags = bit.bor(windowFlags, ImGuiWindowFlags_NoMove)
         windowFlags = bit.bor(windowFlags, ImGuiWindowFlags_NoResize)
     end

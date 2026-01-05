@@ -139,11 +139,13 @@ function M.DrawWindow(settings, dataModule)
     local windowFlags = 0
     local app = _G.FFXIFriendListApp
     local globalLocked = false
+    local globalPositionLocked = false
     if app and app.features and app.features.preferences then
         local prefs = app.features.preferences:getPrefs()
         globalLocked = prefs and prefs.windowsLocked or false
+        globalPositionLocked = prefs and prefs.windowsPositionLocked or false
     end
-    if globalLocked or state.locked then
+    if globalPositionLocked or state.locked then
         windowFlags = bit.bor(windowFlags, ImGuiWindowFlags_NoMove)
         windowFlags = bit.bor(windowFlags, ImGuiWindowFlags_NoResize)
     end
@@ -201,7 +203,7 @@ function M.DrawWindow(settings, dataModule)
         end
         
         if not windowOpenTable[1] then
-            if state.locked then
+            if state.locked or globalLocked then
                 state.windowOpen = true
             else
                 local closeGating = require('ui.close_gating')

@@ -108,6 +108,7 @@ function M.Preferences.new()
     self.customCloseKeyCode = 0
     self.controllerCloseButton = 0x2000
     self.windowsLocked = false
+    self.windowsPositionLocked = false
     self.notificationSoundsEnabled = true
     self.soundOnFriendOnline = true
     self.soundOnFriendRequest = true

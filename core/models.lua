@@ -100,6 +100,7 @@ function M.Preferences.new()
     self.shareJobWhenAnonymous = false
     self.showOnlineStatus = true
     self.shareLocation = true
+    self.presenceStatus = "online"
     self.notificationDuration = 8.0
     -- Default notification position
     self.notificationPositionX = 10.0

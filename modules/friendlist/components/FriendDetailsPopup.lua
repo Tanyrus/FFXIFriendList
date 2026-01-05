@@ -127,10 +127,13 @@ function M.Render(friend, state, callbacks)
         imgui.Separator()
         
         local presence = friend.presence or {}
+        local isAway = friend.isAway or false
         
-        -- Status - green if online, gray if offline
-        local statusText = isOnline and "Online" or "Offline"
-        if isOnline then
+        -- Status - green if online, orange if away, gray if offline
+        local statusText = isAway and "Away" or isOnline and "Online" or "Offline"
+        if isAway then
+            imgui.TextColored({1.0, 0.7, 0.2, 1.0}, "Status: " .. statusText)
+        elseif isOnline then
             imgui.TextColored({0.0, 1.0, 0.0, 1.0}, "Status: " .. statusText)
         else
             imgui.TextColored({0.5, 0.5, 0.5, 1.0}, "Status: " .. statusText)

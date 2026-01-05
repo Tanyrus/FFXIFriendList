@@ -137,7 +137,13 @@ function M.DrawWindow(settings, dataModule)
     end
     
     local windowFlags = 0
-    if state.locked then
+    local app = _G.FFXIFriendListApp
+    local globalLocked = false
+    if app and app.features and app.features.preferences then
+        local prefs = app.features.preferences:getPrefs()
+        globalLocked = prefs and prefs.windowsLocked or false
+    end
+    if globalLocked or state.locked then
         windowFlags = bit.bor(windowFlags, ImGuiWindowFlags_NoMove)
         windowFlags = bit.bor(windowFlags, ImGuiWindowFlags_NoResize)
     end

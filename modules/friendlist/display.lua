@@ -15,6 +15,7 @@ local PrivacyTab = require('modules.friendlist.components.PrivacyTab')
 local NotificationsTab = require('modules.friendlist.components.NotificationsTab')
 local ControlsTab = require('modules.friendlist.components.ControlsTab')
 local ThemesTab = require('modules.friendlist.components.ThemesTab')
+local HelpTab = require('modules.friendlist.components.HelpTab')
 local CollapsibleTagSection = require('modules.friendlist.components.CollapsibleTagSection')
 local TagManager = require('modules.friendlist.components.TagManager')
 local utils = require('modules.friendlist.components.helpers.utils')
@@ -326,7 +327,13 @@ function M.DrawWindow(settings, dataModule)
     
     -- Server is configured - render main window normally
     local windowFlags = 0
-    if gConfig and gConfig.windows and gConfig.windows.friendList and gConfig.windows.friendList.locked then
+    local app = _G.FFXIFriendListApp
+    local globalLocked = false
+    if app and app.features and app.features.preferences then
+        local prefs = app.features.preferences:getPrefs()
+        globalLocked = prefs and prefs.windowsLocked or false
+    end
+    if globalLocked or (gConfig and gConfig.windows and gConfig.windows.friendList and gConfig.windows.friendList.locked) then
         windowFlags = bit.bor(windowFlags, ImGuiWindowFlags_NoMove)
         windowFlags = bit.bor(windowFlags, ImGuiWindowFlags_NoResize)
     end
@@ -495,6 +502,8 @@ function M.RenderContentArea(dataModule, callbacks)
         ControlsTab.Render(state, dataModule, callbacks)
     elseif state.selectedTab == 7 then
         ThemesTab.Render(state, dataModule, callbacks)
+    elseif state.selectedTab == 8 then
+        HelpTab.Render(state, dataModule, callbacks)
     end
 end
 
@@ -509,6 +518,42 @@ function M.RenderGeneralTab(dataModule, callbacks)
     M.RenderGroupByStatusSection(callbacks)
     imgui.Spacing()
     M.RenderCompactFriendListSettings(callbacks)
+    imgui.Spacing()
+    M.RenderWindowLockSection(callbacks)
+end
+
+function M.RenderWindowLockSection(callbacks)
+    local headerLabel = "Window Lock"
+    local isOpen = imgui.CollapsingHeader(headerLabel, state.windowLockExpanded and ImGuiTreeNodeFlags_DefaultOpen or 0)
+    
+    if isOpen ~= state.windowLockExpanded then
+        state.windowLockExpanded = isOpen
+        if callbacks.onSaveState then callbacks.onSaveState() end
+    end
+    
+    if not isOpen then return end
+    
+    local app = _G.FFXIFriendListApp
+    local prefs = nil
+    if app and app.features and app.features.preferences then
+        prefs = app.features.preferences:getPrefs()
+    end
+    
+    if not prefs then
+        imgui.Text("Preferences not available")
+        return
+    end
+    
+    local windowsLocked = {prefs.windowsLocked or false}
+    if imgui.Checkbox("Lock All Windows", windowsLocked) then
+        if app and app.features and app.features.preferences then
+            app.features.preferences:setPref("windowsLocked", windowsLocked[1])
+            app.features.preferences:save()
+        end
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("When enabled, all addon windows cannot be moved or resized.\nUseful for locking your UI layout.")
+    end
 end
 
 function M.RenderGroupByStatusSection(callbacks)
@@ -1051,6 +1096,15 @@ function M.RenderServerSelectionWindow()
         if imgui.Button("Save", {120, 0}) then
             serverSelectionData.SaveServerSelection(draftServerId)
             state.serverSelectionPopupOpened = false
+            
+            -- Check if help tab should auto-open
+            if serverSelectionData.ShouldAutoOpenHelpTab() then
+                state.selectedTab = 8
+                local settings = require('libs.settings')
+                if settings and settings.save then
+                    settings.save()
+                end
+            end
         end
     else
         imgui.PushStyleColor(ImGuiCol_Button, {0.3, 0.3, 0.3, 1.0})

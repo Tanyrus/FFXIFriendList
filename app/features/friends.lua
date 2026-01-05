@@ -69,6 +69,7 @@ function M.Friends:getState()
             friendedAs = friend.friendedAs,
             linkedCharacters = friend.linkedCharacters,
             isOnline = status and status.isOnline or false,
+            isAway = status and status.isAway or false,
             isPending = friend.isPending or false,
             friendAccountId = friend.friendAccountId,
             sharesOnlineStatus = status and status.showOnlineStatus ~= false or true,
@@ -315,6 +316,7 @@ function M.Friends:handleRefreshResponse(success, response)
                 status.characterName = string.lower(characterName)
                 status.displayName = statusData.name or statusData.characterName or ""
                 status.isOnline = statusData.isOnline == true
+                status.isAway = statusData.isAway == true
                 status.job = statusData.job or ""
                 status.rank = statusData.rank or ""
                 status.zone = statusData.zone or ""
@@ -814,6 +816,7 @@ function M.Friends:updateFriendStatuses(statuses)
             status.characterName = string.lower(characterName)
             status.displayName = statusData.name or statusData.characterName or ""
             status.isOnline = statusData.isOnline == true
+            status.isAway = statusData.isAway == true
             status.job = statusData.job or ""
             status.rank = statusData.rank or ""
             status.zone = statusData.zone or ""

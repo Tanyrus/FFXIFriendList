@@ -254,20 +254,6 @@ function M.RenderPrivacyControlsSection(state, callbacks)
     
     imgui.Spacing()
     
-    local showOnlineStatus = {prefs.showOnlineStatus ~= false}
-    if imgui.Checkbox("Show Online Status", showOnlineStatus) then
-        if app and app.features and app.features.preferences then
-            app.features.preferences:setPref("showOnlineStatus", showOnlineStatus[1])
-            app.features.preferences:save()
-            app.features.preferences:syncToServer()
-        end
-    end
-    if imgui.IsItemHovered() then
-        imgui.SetTooltip("Controls whether your online status is visible to friends.\nWhen disabled, friends will see you as 'Hidden'.\n\n[Account-wide: Synced to server for all characters]")
-    end
-    
-    imgui.Spacing()
-    
     local shareLocation = {prefs.shareLocation ~= false}
     if imgui.Checkbox("Share Location", shareLocation) then
         if app and app.features and app.features.preferences then
@@ -278,6 +264,56 @@ function M.RenderPrivacyControlsSection(state, callbacks)
     end
     if imgui.IsItemHovered() then
         imgui.SetTooltip("When enabled, your current zone is shared with friends.\nWhen disabled, friends will only see that you're online.\n\n[Account-wide: Synced to server for all characters]")
+    end
+    
+    imgui.Spacing()
+    
+    imgui.Text("Presence Status:")
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("Controls how your online status appears to friends.\n\n[Account-wide: Synced to server for all characters]")
+    end
+    
+    local currentStatus = prefs.presenceStatus or "online"
+    
+    local isOnline = currentStatus == "online"
+    if imgui.RadioButton("Online", isOnline) then
+        if not isOnline and app and app.features and app.features.preferences then
+            app.features.preferences:setPref("presenceStatus", "online")
+            app.features.preferences:setPref("showOnlineStatus", true)
+            app.features.preferences:save()
+            app.features.preferences:syncToServer()
+        end
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("You appear online to friends with full status.")
+    end
+    
+    imgui.SameLine()
+    local isAway = currentStatus == "away"
+    if imgui.RadioButton("Away", isAway) then
+        if not isAway and app and app.features and app.features.preferences then
+            app.features.preferences:setPref("presenceStatus", "away")
+            app.features.preferences:setPref("showOnlineStatus", true)
+            app.features.preferences:save()
+            app.features.preferences:syncToServer()
+        end
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("You appear online but marked as 'Away' to friends.")
+    end
+    
+    imgui.SameLine()
+    local isInvisible = currentStatus == "invisible"
+    if imgui.RadioButton("Invisible", isInvisible) then
+        if not isInvisible and app and app.features and app.features.preferences then
+            app.features.preferences:setPref("presenceStatus", "invisible")
+            app.features.preferences:setPref("showOnlineStatus", false)
+            app.features.preferences:save()
+            app.features.preferences:syncToServer()
+        end
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("You appear offline to friends.\nFriends will not see your online status or activity.")
     end
 end
 

@@ -74,6 +74,7 @@ function M.Preferences:load()
     self.prefs.shareJobWhenAnonymous = getVal(prefs.shareJobWhenAnonymous, false)
     self.prefs.showOnlineStatus = getVal(prefs.showOnlineStatus, true)
     self.prefs.shareLocation = getVal(prefs.shareLocation, true)
+    self.prefs.presenceStatus = getVal(prefs.presenceStatus, "online")
     self.prefs.notificationDuration = getVal(prefs.notificationDuration, 8.0)
     local DEFAULT_POS_X = UIConstants.NOTIFICATION_POSITION[1]
     local DEFAULT_POS_Y = UIConstants.NOTIFICATION_POSITION[2]
@@ -117,6 +118,7 @@ function M.Preferences:save()
         shareJobWhenAnonymous = self.prefs.shareJobWhenAnonymous,
         showOnlineStatus = self.prefs.showOnlineStatus,
         shareLocation = self.prefs.shareLocation,
+        presenceStatus = self.prefs.presenceStatus,
         notificationDuration = self.prefs.notificationDuration,
         notificationPositionX = self.prefs.notificationPositionX,
         notificationPositionY = self.prefs.notificationPositionY,
@@ -185,7 +187,7 @@ function M.Preferences:syncToServer(onComplete)
             shareFriendsAcrossAlts = self.prefs.shareFriendsAcrossAlts
         },
         privacy = {
-            shareOnlineStatus = self.prefs.showOnlineStatus,
+            presenceStatus = self.prefs.presenceStatus,
             shareLocation = self.prefs.shareLocation,
             shareCharacterData = self.prefs.shareJobWhenAnonymous
         }
@@ -284,8 +286,12 @@ function M.Preferences:refresh()
                         end
                         
                         local serverPrivacy = result.privacy or {}
-                        if serverPrivacy.shareOnlineStatus ~= nil then
+                        if serverPrivacy.presenceStatus ~= nil then
+                            self.prefs.presenceStatus = serverPrivacy.presenceStatus
+                            self.prefs.showOnlineStatus = serverPrivacy.presenceStatus ~= "invisible"
+                        elseif serverPrivacy.shareOnlineStatus ~= nil then
                             self.prefs.showOnlineStatus = serverPrivacy.shareOnlineStatus
+                            self.prefs.presenceStatus = serverPrivacy.shareOnlineStatus and "online" or "invisible"
                         end
                         if serverPrivacy.shareLocation ~= nil then
                             self.prefs.shareLocation = serverPrivacy.shareLocation

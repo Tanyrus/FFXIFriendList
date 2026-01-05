@@ -41,6 +41,7 @@ local iconFiles = {
     online = "online",
     offline = "offline",
     pending = "friend_request",
+    away = "away",
     
     -- Lock icons
     lock = "lock_icon",
@@ -230,9 +231,11 @@ end
 -- ========================================
 
 -- Get the appropriate status icon for a friend
-function M.GetStatusIconName(isOnline, isPending)
+function M.GetStatusIconName(isOnline, isPending, isAway)
     if isPending then
         return "pending";
+    elseif isAway then
+        return "away";
     elseif isOnline then
         return "online";
     else
@@ -241,9 +244,11 @@ function M.GetStatusIconName(isOnline, isPending)
 end
 
 -- Get tint color for status
-function M.GetStatusTint(isOnline, isPending)
+function M.GetStatusTint(isOnline, isPending, isAway)
     if isPending then
         return { 1.0, 0.8, 0.0, 1.0 };
+    elseif isAway then
+        return { 1.0, 0.7, 0.2, 1.0 };
     elseif isOnline then
         return { 1.0, 1.0, 1.0, 1.0 };
     else
@@ -252,9 +257,9 @@ function M.GetStatusTint(isOnline, isPending)
 end
 
 -- Render status indicator icon
-function M.RenderStatusIcon(isOnline, isPending, size)
-    local iconName = M.GetStatusIconName(isOnline, isPending);
-    local tint = M.GetStatusTint(isOnline, isPending);
+function M.RenderStatusIcon(isOnline, isPending, size, isAway)
+    local iconName = M.GetStatusIconName(isOnline, isPending, isAway);
+    local tint = M.GetStatusTint(isOnline, isPending, isAway);
     local iconSize = size or 12;
     
     return M.RenderIcon(iconName, iconSize, iconSize, tint);

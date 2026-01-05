@@ -128,7 +128,8 @@ local defaultSettings = T{
         serverSelection = T{
             savedServerId = "",
             savedServerBaseUrl = "https://api.horizonfriendlist.com",
-            detectedServerShownOnce = false
+            detectedServerShownOnce = false,
+            helpSeenPerServer = T{}
         },
         preferences = T{
             useServerNotes = false,

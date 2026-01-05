@@ -170,7 +170,13 @@ function M.DrawWindow(settings, dataModule)
     
     -- Server is configured - render main window normally
     local windowFlags = 0
-    if state.locked then
+    local app = _G.FFXIFriendListApp
+    local globalLocked = false
+    if app and app.features and app.features.preferences then
+        local prefs = app.features.preferences:getPrefs()
+        globalLocked = prefs and prefs.windowsLocked or false
+    end
+    if globalLocked or state.locked then
         windowFlags = bit.bor(windowFlags, ImGuiWindowFlags_NoMove)
         windowFlags = bit.bor(windowFlags, ImGuiWindowFlags_NoResize)
     end
@@ -530,10 +536,13 @@ function M.RenderCompactFriendsList(friends, sectionTag, dataModule)
             
             local friendName = utils.capitalizeName(utils.getDisplayName(friend))
             local isOnline = friend.isOnline == true
+            local isAway = friend.isAway == true
             local uniqueId = (sectionTag or "qo") .. "_" .. i
             
-            if not icons.RenderStatusIcon(isOnline, false, 12) then
-                if isOnline then
+            if not icons.RenderStatusIcon(isOnline, false, 12, isAway) then
+                if isAway then
+                    imgui.TextColored({1.0, 0.7, 0.2, 1.0}, "A")
+                elseif isOnline then
                     imgui.TextColored({0.0, 1.0, 0.0, 1.0}, "O")
                 else
                     imgui.TextColored({0.5, 0.5, 0.5, 1.0}, "O")

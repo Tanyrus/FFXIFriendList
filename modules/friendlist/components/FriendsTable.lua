@@ -244,14 +244,16 @@ end
 function M.RenderNameCell(friend, index, state, callbacks, sectionTag)
     local friendName = utils.capitalizeName(utils.getDisplayName(friend))
     local isOnline = friend.isOnline or false
+    local isAway = friend.isAway or false
     local isPending = friend.isPending or false
     local uniqueId = (sectionTag or "main") .. "_" .. index
     
-    if not icons.RenderStatusIcon(isOnline, isPending, 12) then
+    if not icons.RenderStatusIcon(isOnline, isPending, 12, isAway) then
         local color = isPending and {1.0, 0.8, 0.0, 1.0} or 
+                     isAway and {1.0, 0.7, 0.2, 1.0} or
                      isOnline and {0.0, 1.0, 0.0, 1.0} or 
                      {0.5, 0.5, 0.5, 1.0}
-        imgui.TextColored(color, isPending and "?" or isOnline and "O" or "-")
+        imgui.TextColored(color, isPending and "?" or isAway and "A" or isOnline and "O" or "-")
     end
     imgui.SameLine()
     

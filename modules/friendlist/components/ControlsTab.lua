@@ -130,13 +130,12 @@ function M.RenderControllerSection(prefs)
 
     imgui.Spacing()
     
-    -- Button Selection for /flist
     local buttons = controllerInputHandler.GetActiveControllerButtons()
-    local currentButton = prefs.flistBindButton or ''
     
     if #buttons > 0 then
-        if imgui.BeginCombo("Open Friendlist Button", currentButton) then
-            -- Option to clear bind
+        -- 1. Open Main Window (/flist)
+        local currentButton = prefs.flistBindButton or ''
+        if imgui.BeginCombo("Open Main Window", currentButton == '' and "None" or currentButton) then
             if imgui.Selectable("None", (currentButton == '')) then
                  if app and app.features and app.features.preferences then
                     app.features.preferences:setPref("flistBindButton", '')
@@ -159,14 +158,42 @@ function M.RenderControllerSection(prefs)
             imgui.EndCombo()
         end
         imgui.SameLine()
-        imgui.ShowHelp("Select a button to toggle /flist command.")
+        imgui.ShowHelp("Select a button to toggle the main friend list window.")
         
-        -- Button Selection for Close Window
+        -- 2. Open Compact Friend List (/fl)
+        imgui.Spacing()
+        local currentFlButton = prefs.flBindButton or ''
+        
+        if imgui.BeginCombo("Open Compact Friend List", currentFlButton == '' and "None" or currentFlButton) then
+            if imgui.Selectable("None", (currentFlButton == '')) then
+                if app and app.features and app.features.preferences then
+                    app.features.preferences:setPref("flBindButton", '')
+                    app.features.preferences:save()
+                end
+            end
+
+            for _, btn in ipairs(buttons) do
+                local isSelected = (btn == currentFlButton)
+                if imgui.Selectable(btn, isSelected) then
+                    if app and app.features and app.features.preferences then
+                        app.features.preferences:setPref("flBindButton", btn)
+                        app.features.preferences:save()
+                    end
+                end
+                if isSelected then
+                    imgui.SetItemDefaultFocus()
+                end
+            end
+            imgui.EndCombo()
+        end
+        imgui.SameLine()
+        imgui.ShowHelp("Select a button to toggle the compact friend list.")
+        
+        -- 3. Close Window Button
         imgui.Spacing()
         local currentCloseButton = prefs.closeBindButton or ''
         
         if imgui.BeginCombo("Close Window Button", currentCloseButton == '' and "None" or currentCloseButton) then
-            -- Option to clear bind
             if imgui.Selectable("None", (currentCloseButton == '')) then
                 if app and app.features and app.features.preferences then
                     app.features.preferences:setPref("closeBindButton", '')

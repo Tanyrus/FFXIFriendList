@@ -84,10 +84,25 @@ function M.HandleBinding(buttonName, newState)
     end
 
     local prefs = app.features.preferences:getPrefs()
-    local boundButton = prefs.flistBindButton
     
-    -- Trigger on button press (newState == true)
-    if boundButton and boundButton ~= '' and buttonName == boundButton and newState == true then
+    -- Only trigger on button press (newState == true)
+    if newState ~= true then
+        return
+    end
+    
+    -- Check main window binding (flistBindButton -> /fl opens main window)
+    local flistButton = prefs.flistBindButton
+    if flistButton and flistButton ~= '' and buttonName == flistButton then
+        local chatManager = AshitaCore:GetChatManager()
+        if chatManager then
+            chatManager:QueueCommand(-1, '/fl')
+        end
+        return true
+    end
+    
+    -- Check compact friend list binding (flBindButton -> /flist opens compact list)
+    local flButton = prefs.flBindButton
+    if flButton and flButton ~= '' and buttonName == flButton then
         local chatManager = AshitaCore:GetChatManager()
         if chatManager then
             chatManager:QueueCommand(-1, '/flist')
@@ -139,12 +154,27 @@ function M.HandleXInputState(e)
     -- Detect newly pressed buttons (was 0, now 1)
     local newPresses = bit.band(currentButtons, bit.bnot(previousButtons))
 
+    -- Check if any modifier key is held (for XIUI crossbar compatibility)
+    local L1_MASK = 0x0100
+    local R1_MASK = 0x0200
+    local isL1Held = bit.band(currentButtons, L1_MASK) ~= 0
+    local isR1Held = bit.band(currentButtons, R1_MASK) ~= 0
+    local isL2Held = leftTrigger >= TRIGGER_THRESHOLD
+    local isR2Held = rightTrigger >= TRIGGER_THRESHOLD
+    local modifierHeld = isL1Held or isR1Held or isL2Held or isR2Held
+
     -- Check each button for new presses
     for buttonName, mask in pairs(ButtonMasks) do
         if bit.band(newPresses, mask) ~= 0 then
-            -- Button was just pressed - check close binding first, then flist binding
-            if not handleCloseBinding(buttonName) then
-                M.HandleBinding(buttonName, true)
+            -- Skip if modifier held and this is NOT a modifier button (XIUI compatibility)
+            local isModifierButton = (buttonName == 'L1' or buttonName == 'R1')
+            if modifierHeld and not isModifierButton then
+                -- Skip - modifier held, let XIUI handle this combo
+            else
+                -- Button was just pressed - check close binding first, then flist binding
+                if not handleCloseBinding(buttonName) then
+                    M.HandleBinding(buttonName, true)
+                end
             end
         end
     end
@@ -152,6 +182,7 @@ function M.HandleXInputState(e)
     -- Handle L2 trigger (analog, use threshold)
     local currentL2 = leftTrigger >= TRIGGER_THRESHOLD
     if currentL2 and not previousL2 then
+        -- L2 is a modifier itself, so process it (no modifier check needed)
         if not handleCloseBinding('L2') then
             M.HandleBinding('L2', true)
         end
@@ -161,6 +192,7 @@ function M.HandleXInputState(e)
     -- Handle R2 trigger (analog, use threshold)
     local currentR2 = rightTrigger >= TRIGGER_THRESHOLD
     if currentR2 and not previousR2 then
+        -- R2 is a modifier itself, so process it (no modifier check needed)
         if not handleCloseBinding('R2') then
             M.HandleBinding('R2', true)
         end

@@ -14,7 +14,11 @@ local PrivacyTab = require('modules.friendlist.components.PrivacyTab')
 local NotificationsTab = require('modules.friendlist.components.NotificationsTab')
 local ControlsTab = require('modules.friendlist.components.ControlsTab')
 local ThemesTab = require('modules.friendlist.components.ThemesTab')
+local CollapsibleTagSection = require('modules.friendlist.components.CollapsibleTagSection')
+local TagManager = require('modules.friendlist.components.TagManager')
 local utils = require('modules.friendlist.components.helpers.utils')
+local tagcore = require('core.tagcore')
+local taggrouper = require('core.taggrouper')
 
 local M = {}
 
@@ -88,7 +92,24 @@ local state = {
         nationRank = false,
         lastSeen = false,
         addedAs = false
-    }
+    },
+    columnOrder = {"Name", "Job", "Zone", "Nation/Rank", "Last Seen", "Added As"},
+    columnWidths = {
+        Name = 120.0,
+        Job = 100.0,
+        Zone = 120.0,
+        ["Nation/Rank"] = 80.0,
+        ["Last Seen"] = 120.0,
+        ["Added As"] = 100.0
+    },
+    draggingColumn = nil,
+    hoveredColumn = nil,
+    tagManagerExpanded = false,
+    groupByOnlineStatus = false,
+    collapsedOnlineSection = false,
+    collapsedOfflineSection = false,
+    groupByStatusExpanded = true,
+    compactFriendListExpanded = false
 }
 
 local WINDOW_ID = "##friendlist_main"
@@ -157,6 +178,26 @@ function M.Initialize(settings)
                 end
             end
         end
+        if settings.columnOrder and type(settings.columnOrder) == "table" and #settings.columnOrder > 0 then
+            state.columnOrder = {}
+            for i, col in ipairs(settings.columnOrder) do
+                state.columnOrder[i] = col
+            end
+        end
+        if settings.columnWidths and type(settings.columnWidths) == "table" then
+            for colName, width in pairs(settings.columnWidths) do
+                state.columnWidths[colName] = width
+            end
+        end
+        if settings.groupByOnlineStatus ~= nil then
+            state.groupByOnlineStatus = settings.groupByOnlineStatus
+        end
+        if settings.collapsedOnlineSection ~= nil then
+            state.collapsedOnlineSection = settings.collapsedOnlineSection
+        end
+        if settings.collapsedOfflineSection ~= nil then
+            state.collapsedOfflineSection = settings.collapsedOfflineSection
+        end
     end
 end
 
@@ -218,6 +259,17 @@ function M.SaveWindowState()
     for colName, visible in pairs(state.columnVisible) do
         gConfig.friendListSettings.columns[colName] = {visible = visible}
     end
+    gConfig.friendListSettings.columnOrder = {}
+    for i, col in ipairs(state.columnOrder) do
+        gConfig.friendListSettings.columnOrder[i] = col
+    end
+    gConfig.friendListSettings.columnWidths = {}
+    for colName, width in pairs(state.columnWidths) do
+        gConfig.friendListSettings.columnWidths[colName] = width
+    end
+    gConfig.friendListSettings.groupByOnlineStatus = state.groupByOnlineStatus
+    gConfig.friendListSettings.collapsedOnlineSection = state.collapsedOnlineSection
+    gConfig.friendListSettings.collapsedOfflineSection = state.collapsedOfflineSection
 end
 
 function M.GetWindowTitle(dataModule)
@@ -419,30 +471,406 @@ function M.RenderContentArea(dataModule, callbacks)
     if state.selectedTab == 0 then
         M.RenderFriendsTab(dataModule, callbacks)
     elseif state.selectedTab == 1 then
-        PrivacyTab.Render(state, dataModule, callbacks)
+        M.RenderGeneralTab(dataModule, callbacks)
     elseif state.selectedTab == 2 then
-        NotificationsTab.Render(state, dataModule, callbacks)
+        M.RenderPrivacyTab(dataModule, callbacks)
     elseif state.selectedTab == 3 then
-        ControlsTab.Render(state, dataModule, callbacks)
+        M.RenderTagsTab()
     elseif state.selectedTab == 4 then
+        NotificationsTab.Render(state, dataModule, callbacks)
+    elseif state.selectedTab == 5 then
+        ControlsTab.Render(state, dataModule, callbacks)
+    elseif state.selectedTab == 6 then
         ThemesTab.Render(state, dataModule, callbacks)
     end
+end
+
+function M.RenderGeneralTab(dataModule, callbacks)
+    -- General settings (Menu Detection, Friend View, Hover Tooltip, Group by Status, Compact Friend List)
+    PrivacyTab.RenderMenuDetectionSection(state, callbacks)
+    imgui.Spacing()
+    PrivacyTab.RenderFriendViewSettingsSection(state, callbacks)
+    imgui.Spacing()
+    PrivacyTab.RenderHoverTooltipSettings(state, callbacks)
+    imgui.Spacing()
+    M.RenderGroupByStatusSection(callbacks)
+    imgui.Spacing()
+    M.RenderCompactFriendListSettings(callbacks)
+end
+
+function M.RenderGroupByStatusSection(callbacks)
+    local headerLabel = "Group by Status"
+    local isOpen = imgui.CollapsingHeader(headerLabel, state.groupByStatusExpanded and ImGuiTreeNodeFlags_DefaultOpen or 0)
+    
+    if isOpen ~= state.groupByStatusExpanded then
+        state.groupByStatusExpanded = isOpen
+        if callbacks.onSaveState then callbacks.onSaveState() end
+    end
+    
+    if not isOpen then return end
+    
+    imgui.TextWrapped("Group friends by Online/Offline status first, then by tags within each group.")
+    imgui.Spacing()
+    
+    -- Main Window toggle
+    local mainGroupByStatus = {state.groupByOnlineStatus}
+    if imgui.Checkbox("Main Window##main_group_status", mainGroupByStatus) then
+        state.groupByOnlineStatus = mainGroupByStatus[1]
+        if callbacks.onSaveState then callbacks.onSaveState() end
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("Enable Online/Offline sections in the Main Friend List window")
+    end
+    
+    -- Compact Friend List toggle
+    local qoGroupByStatus = {gConfig and gConfig.quickOnlineSettings and gConfig.quickOnlineSettings.groupByOnlineStatus or false}
+    if imgui.Checkbox("Compact Friend List##qo_group_status", qoGroupByStatus) then
+        if gConfig then
+            if not gConfig.quickOnlineSettings then
+                gConfig.quickOnlineSettings = {}
+            end
+            gConfig.quickOnlineSettings.groupByOnlineStatus = qoGroupByStatus[1]
+            local settings = require('libs.settings')
+            if settings and settings.save then
+                settings.save()
+            end
+        end
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("Enable Online/Offline sections in the Compact Friend List window")
+    end
+end
+
+function M.RenderCompactFriendListSettings(callbacks)
+    local headerLabel = "Compact Friend List"
+    local isOpen = imgui.CollapsingHeader(headerLabel, state.compactFriendListExpanded and ImGuiTreeNodeFlags_DefaultOpen or 0)
+    
+    if isOpen ~= state.compactFriendListExpanded then
+        state.compactFriendListExpanded = isOpen
+        if callbacks.onSaveState then callbacks.onSaveState() end
+    end
+    
+    if not isOpen then return end
+    
+    -- Hide Top Bar toggle
+    local hideTopBar = {gConfig and gConfig.quickOnlineSettings and gConfig.quickOnlineSettings.hideTopBar or false}
+    if imgui.Checkbox("Hide Top Bar##qo_hide_topbar", hideTopBar) then
+        if gConfig then
+            if not gConfig.quickOnlineSettings then
+                gConfig.quickOnlineSettings = {}
+            end
+            gConfig.quickOnlineSettings.hideTopBar = hideTopBar[1]
+            local settings = require('libs.settings')
+            if settings and settings.save then
+                settings.save()
+            end
+        end
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("Hide the top bar (lock, refresh, switch view buttons) in the Compact Friend List window")
+    end
+end
+
+function M.RenderPrivacyTab(dataModule, callbacks)
+    -- Privacy settings (Privacy Controls, Alt Visibility)
+    PrivacyTab.RenderPrivacyControlsSection(state, callbacks)
+    imgui.Spacing()
+    PrivacyTab.RenderAltVisibilitySection(state, dataModule, callbacks)
+end
+
+function M.RenderTagsTab()
+    imgui.Text("Tag Management")
+    imgui.Separator()
+    imgui.Spacing()
+    TagManager.Render(true)
 end
 
 function M.RenderFriendsTab(dataModule, callbacks)
     AddFriendSection.Render(state, dataModule, callbacks.onAddFriend)
     
-    -- Padding above Pending Requests
     imgui.Dummy({0, 6})
     
     PendingRequests.Render(state, dataModule, callbacks)
     
-    -- Padding below Pending Requests
     imgui.Dummy({0, 6})
     
     imgui.BeginChild("##friends_table_child", {0, 0}, false)
-    FriendsTable.Render(state, dataModule, callbacks)
+    M.RenderTaggedFriendSections(dataModule, callbacks)
     imgui.EndChild()
+    
+    local app = _G.FFXIFriendListApp
+    if app and app.features and app.features.tags then
+        app.features.tags:flushRetagQueue()
+    end
+end
+
+function M.RenderTaggedFriendSections(dataModule, callbacks)
+    local app = _G.FFXIFriendListApp
+    local tagsFeature = app and app.features and app.features.tags
+    
+    local friends = dataModule.GetFriends()
+    local filterText = state.filterText[1] or ""
+    
+    if filterText ~= "" then
+        local lowerFilter = string.lower(filterText)
+        local filtered = {}
+        for _, friend in ipairs(friends) do
+            local friendName = type(friend.name) == "string" and string.lower(friend.name) or ""
+            local presence = friend.presence or {}
+            local job = type(presence.job) == "string" and string.lower(presence.job) or ""
+            local zone = type(presence.zone) == "string" and string.lower(presence.zone) or ""
+            if string.find(friendName, lowerFilter, 1, true) or
+               string.find(job, lowerFilter, 1, true) or
+               string.find(zone, lowerFilter, 1, true) then
+                table.insert(filtered, friend)
+            end
+        end
+        friends = filtered
+    end
+    
+    imgui.AlignTextToFramePadding()
+    imgui.Text("Filter:")
+    imgui.SameLine()
+    imgui.PushItemWidth(200)
+    if imgui.InputText("##filter_input", state.filterText, 64) then
+        if callbacks.onSaveState then callbacks.onSaveState() end
+    end
+    imgui.PopItemWidth()
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("Filter friends by name, job, or zone")
+    end
+    
+    imgui.Spacing()
+    
+    if #friends == 0 then
+        imgui.Text("No friends" .. (filterText ~= "" and " matching filter" or ""))
+        return
+    end
+    
+    local tagOrder = {}
+    if tagsFeature then
+        tagOrder = tagsFeature:getAllTags() or {}
+    end
+    
+    local getFriendTag = function(friend)
+        if not tagsFeature then
+            return nil
+        end
+        local friendKey = tagcore.getFriendKey(friend)
+        return tagsFeature:getTagForFriend(friendKey)
+    end
+    
+    local groups = taggrouper.groupFriendsByTag(friends, tagOrder, getFriendTag)
+    
+    local sortMode = gConfig and gConfig.friendListSettings and gConfig.friendListSettings.sortMode or "status"
+    local sortDirection = gConfig and gConfig.friendListSettings and gConfig.friendListSettings.sortDirection or "asc"
+    taggrouper.sortAllGroups(groups, sortMode, sortDirection)
+    
+    local sectionCallbacks = {
+        onSaveState = callbacks.onSaveState,
+        onRenderContextMenu = callbacks.onRenderContextMenu,
+        onQueueRetag = function(friendKey, newTag)
+            if tagsFeature then
+                tagsFeature:queueRetag(friendKey, newTag)
+            end
+        end
+    }
+    
+    local renderFriendsTable = function(groupFriends, renderState, renderCallbacks, sectionTag)
+        FriendsTable.RenderGroupTable(groupFriends, state, callbacks, sectionTag)
+    end
+    
+    local columnVisibilityMap = {
+        Name = true,
+        Job = state.columnVisible and state.columnVisible.job,
+        Zone = state.columnVisible and state.columnVisible.zone,
+        ["Nation/Rank"] = state.columnVisible and state.columnVisible.nationRank,
+        ["Last Seen"] = state.columnVisible and state.columnVisible.lastSeen,
+        ["Added As"] = state.columnVisible and state.columnVisible.addedAs
+    }
+    
+    local visibleColumns = {}
+    for _, colName in ipairs(state.columnOrder) do
+        if columnVisibilityMap[colName] then
+            table.insert(visibleColumns, colName)
+        end
+    end
+    
+    local headerTableFlags = bit.bor(
+        ImGuiTableFlags_Borders,
+        ImGuiTableFlags_NoBordersInBody
+    )
+    if imgui.BeginTable("##friends_header_table", #visibleColumns, headerTableFlags) then
+        for _, colName in ipairs(visibleColumns) do
+            local width = state.columnWidths[colName] or 100.0
+            imgui.TableSetupColumn(colName, ImGuiTableColumnFlags_WidthFixed, width)
+        end
+        
+        imgui.TableNextRow(ImGuiTableRowFlags_Headers)
+        for colIdx, colName in ipairs(visibleColumns) do
+            imgui.TableSetColumnIndex(colIdx - 1)
+            
+            local isSelected = (state.draggingColumn == colName)
+            if imgui.Selectable(colName .. "##col_header_" .. colIdx, isSelected, ImGuiSelectableFlags_None) then
+            end
+            
+            if imgui.BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID) then
+                state.draggingColumn = colName
+                imgui.Text("Move: " .. colName)
+                imgui.EndDragDropSource()
+            elseif state.draggingColumn == colName and not imgui.IsMouseDragging(0) then
+                if state.hoveredColumn and state.hoveredColumn ~= colName then
+                    local fromIdx, toIdx
+                    for i, col in ipairs(state.columnOrder) do
+                        if col == state.draggingColumn then fromIdx = i end
+                        if col == state.hoveredColumn then toIdx = i end
+                    end
+                    if fromIdx and toIdx and fromIdx ~= toIdx then
+                        table.remove(state.columnOrder, fromIdx)
+                        table.insert(state.columnOrder, toIdx, state.draggingColumn)
+                        if callbacks.onSaveState then callbacks.onSaveState() end
+                    end
+                end
+                state.draggingColumn = nil
+                state.hoveredColumn = nil
+            end
+            
+            if state.draggingColumn and imgui.IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) then
+                state.hoveredColumn = colName
+            end
+        end
+        
+        
+        if imgui.BeginPopupContextWindow("##header_column_context", 1) then
+            imgui.Text("Show Columns:")
+            imgui.Separator()
+            
+            local jobVisible = {state.columnVisible.job}
+            if imgui.Checkbox("Job##ctx_col_job", jobVisible) then
+                state.columnVisible.job = jobVisible[1]
+                if callbacks.onSaveState then callbacks.onSaveState() end
+            end
+            
+            local zoneVisible = {state.columnVisible.zone}
+            if imgui.Checkbox("Zone##ctx_col_zone", zoneVisible) then
+                state.columnVisible.zone = zoneVisible[1]
+                if callbacks.onSaveState then callbacks.onSaveState() end
+            end
+            
+            local nationRankVisible = {state.columnVisible.nationRank}
+            if imgui.Checkbox("Nation/Rank##ctx_col_nation", nationRankVisible) then
+                state.columnVisible.nationRank = nationRankVisible[1]
+                if callbacks.onSaveState then callbacks.onSaveState() end
+            end
+            
+            local lastSeenVisible = {state.columnVisible.lastSeen}
+            if imgui.Checkbox("Last Seen##ctx_col_lastseen", lastSeenVisible) then
+                state.columnVisible.lastSeen = lastSeenVisible[1]
+                if callbacks.onSaveState then callbacks.onSaveState() end
+            end
+            
+            local addedAsVisible = {state.columnVisible.addedAs}
+            if imgui.Checkbox("Added As##ctx_col_addedas", addedAsVisible) then
+                state.columnVisible.addedAs = addedAsVisible[1]
+                if callbacks.onSaveState then callbacks.onSaveState() end
+            end
+            
+            imgui.Spacing()
+            imgui.Separator()
+            imgui.Text("Column Widths:")
+            imgui.Separator()
+            
+            for _, colName in ipairs(state.columnOrder) do
+                imgui.PushID("col_width_" .. colName)
+                local currentWidth = {state.columnWidths[colName] or 100.0}
+                imgui.PushItemWidth(100)
+                if imgui.SliderFloat(colName, currentWidth, 50.0, 250.0, "%.0f") then
+                    state.columnWidths[colName] = currentWidth[1]
+                    if callbacks.onSaveState then callbacks.onSaveState() end
+                end
+                imgui.PopItemWidth()
+                imgui.PopID()
+            end
+            
+            imgui.EndPopup()
+        end
+        
+        imgui.EndTable()
+    end
+    
+    if state.groupByOnlineStatus then
+        -- Split friends by online/offline status first
+        local onlineFriends = {}
+        local offlineFriends = {}
+        for _, friend in ipairs(friends) do
+            if friend.isOnline then
+                table.insert(onlineFriends, friend)
+            else
+                table.insert(offlineFriends, friend)
+            end
+        end
+        
+        -- Group online friends by tag
+        local onlineGroups = taggrouper.groupFriendsByTag(onlineFriends, tagOrder, getFriendTag)
+        taggrouper.sortAllGroups(onlineGroups, sortMode, sortDirection)
+        
+        -- Group offline friends by tag
+        local offlineGroups = taggrouper.groupFriendsByTag(offlineFriends, tagOrder, getFriendTag)
+        taggrouper.sortAllGroups(offlineGroups, sortMode, sortDirection)
+        
+        -- Render Online section
+        local onlineCount = #onlineFriends
+        local onlineCollapsed = {state.collapsedOnlineSection}
+        -- Auto-collapse if empty
+        local onlineShouldBeOpen = onlineCount > 0 and not onlineCollapsed[1]
+        imgui.SetNextItemOpen(onlineShouldBeOpen)
+        local onlineExpanded = imgui.CollapsingHeader("Online (" .. onlineCount .. ")##online_section")
+        if imgui.IsItemClicked() then
+            state.collapsedOnlineSection = not state.collapsedOnlineSection
+            if callbacks.onSaveState then callbacks.onSaveState() end
+        end
+        
+        -- Online section drop target for drag-and-drop (retag to first tag or untagged)
+        if FriendsTable.isDraggingFriend() then
+            if imgui.BeginDragDropTarget() then
+                imgui.EndDragDropTarget()
+            end
+        end
+        
+        if onlineExpanded then
+            imgui.Indent(10)
+            CollapsibleTagSection.RenderAllSections(onlineGroups, state, sectionCallbacks, renderFriendsTable, "_online")
+            imgui.Unindent(10)
+        end
+        
+        -- Render Offline section
+        local offlineCount = #offlineFriends
+        local offlineCollapsed = {state.collapsedOfflineSection}
+        -- Auto-collapse if empty
+        local offlineShouldBeOpen = offlineCount > 0 and not offlineCollapsed[1]
+        imgui.SetNextItemOpen(offlineShouldBeOpen)
+        local offlineExpanded = imgui.CollapsingHeader("Offline (" .. offlineCount .. ")##offline_section")
+        if imgui.IsItemClicked() then
+            state.collapsedOfflineSection = not state.collapsedOfflineSection
+            if callbacks.onSaveState then callbacks.onSaveState() end
+        end
+        
+        -- Offline section drop target for drag-and-drop
+        if FriendsTable.isDraggingFriend() then
+            if imgui.BeginDragDropTarget() then
+                imgui.EndDragDropTarget()
+            end
+        end
+        
+        if offlineExpanded then
+            imgui.Indent(10)
+            CollapsibleTagSection.RenderAllSections(offlineGroups, state, sectionCallbacks, renderFriendsTable, "_offline")
+            imgui.Unindent(10)
+        end
+    else
+        -- Default behavior: just tag sections without online/offline grouping
+        CollapsibleTagSection.RenderAllSections(groups, state, sectionCallbacks, renderFriendsTable)
+    end
 end
 
 function M.RenderAboutPopup()

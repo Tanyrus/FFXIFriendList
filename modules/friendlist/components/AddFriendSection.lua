@@ -1,12 +1,20 @@
 local imgui = require('imgui')
+local tagcore = require('core.tagcore')
 
 local M = {}
 
+local addState = {
+    tagInput = {""}
+}
+
 function M.Render(state, dataModule, onAddFriend)
+    local app = _G.FFXIFriendListApp
+    local tagsFeature = app and app.features and app.features.tags
+    
     imgui.AlignTextToFramePadding()
     imgui.Text("Name:")
     imgui.SameLine()
-    imgui.PushItemWidth(150)
+    imgui.PushItemWidth(120)
     imgui.InputText("##new_friend_name", state.newFriendName, 64)
     imgui.PopItemWidth()
     
@@ -14,9 +22,22 @@ function M.Render(state, dataModule, onAddFriend)
     imgui.AlignTextToFramePadding()
     imgui.Text("Note:")
     imgui.SameLine()
-    imgui.PushItemWidth(250)
+    imgui.PushItemWidth(150)
     imgui.InputText("##new_friend_note", state.newFriendNote, 256)
     imgui.PopItemWidth()
+    
+    if tagsFeature then
+        imgui.SameLine()
+        imgui.AlignTextToFramePadding()
+        imgui.Text("Tag:")
+        imgui.SameLine()
+        imgui.PushItemWidth(100)
+        imgui.InputText("##new_friend_tag", addState.tagInput, 32)
+        imgui.PopItemWidth()
+        if imgui.IsItemHovered() then
+            imgui.SetTooltip("Enter a tag name (leave empty for no tag)")
+        end
+    end
     
     imgui.SameLine()
     
@@ -27,8 +48,20 @@ function M.Render(state, dataModule, onAddFriend)
                 if onAddFriend then
                     local note = state.newFriendNote[1] or ""
                     onAddFriend(state.newFriendName[1], note)
+                    
+                    if tagsFeature then
+                        local inputTag = tagcore.normalizeTag(addState.tagInput[1])
+                        if inputTag then
+                            local tagOrder = tagsFeature:getAllTags() or {}
+                            local existingTag = tagcore.findExistingTag(tagOrder, inputTag)
+                            local tagToUse = existingTag or tagcore.capitalizeTag(inputTag)
+                            tagsFeature:setPendingTag(state.newFriendName[1], tagToUse)
+                        end
+                    end
+                    
                     state.newFriendName[1] = ""
                     state.newFriendNote[1] = ""
+                    addState.tagInput[1] = ""
                 end
             end
         end

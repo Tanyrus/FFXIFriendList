@@ -277,11 +277,12 @@ function M.AltVisibility:refresh()
     local serverUrl = connection:getBaseUrl()
     local url = serverUrl .. Endpoints.FRIENDS.VISIBILITY
     
+    local addonVersion = addon and addon.version or "0.9.9"
     local headers = {
         ["Content-Type"] = "application/json",
         ["X-API-Key"] = apiKey,
         ["characterName"] = characterName,
-        ["User-Agent"] = "FFXIFriendList/1.0.0",
+        ["User-Agent"] = "FFXIFriendList/" .. addonVersion,
         ["X-Protocol-Version"] = ProtocolVersion.PROTOCOL_VERSION
     }
     
@@ -361,11 +362,12 @@ function M.AltVisibility:toggleVisibility(friendAccountId, friendName, character
     
     local serverUrl = connection:getBaseUrl()
     
+    local addonVersion = addon and addon.version or "0.9.9"
     local headers = {
         ["Content-Type"] = "application/json",
         ["X-API-Key"] = apiKey,
         ["characterName"] = characterName,
-        ["User-Agent"] = "FFXIFriendList/1.0.0",
+        ["User-Agent"] = "FFXIFriendList/" .. addonVersion,
         ["X-Protocol-Version"] = ProtocolVersion.PROTOCOL_VERSION
     }
     

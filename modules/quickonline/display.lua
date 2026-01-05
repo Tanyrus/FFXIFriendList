@@ -10,10 +10,13 @@ local scaling = require('scaling')
 local InputHelper = require('ui.helpers.InputHelper')
 local HoverTooltip = require('ui.widgets.HoverTooltip')
 
--- Use same components as main friend list window
 local FriendContextMenu = require('modules.friendlist.components.FriendContextMenu')
 local FriendDetailsPopup = require('modules.friendlist.components.FriendDetailsPopup')
+local CollapsibleTagSection = require('modules.friendlist.components.CollapsibleTagSection')
+local FriendsTable = require('modules.friendlist.components.FriendsTable')
 local utils = require('modules.friendlist.components.helpers.utils')
+local tagcore = require('core.tagcore')
+local taggrouper = require('core.taggrouper')
 
 local M = {}
 
@@ -45,7 +48,10 @@ local state = {
     -- Server selection state
     serverSelectionOpened = false,
     serverWindowNeedsCenter = false,
-    serverListRefreshTriggered = false
+    serverListRefreshTriggered = false,
+    -- Online/Offline grouping (groupByOnlineStatus and hideTopBar are read directly from gConfig)
+    collapsedOnlineSection = false,
+    collapsedOfflineSection = false
 }
 
 -- Window ID (stable internal ID with ## pattern)
@@ -95,6 +101,14 @@ function M.Initialize(settings)
                 state.columnVisible.status = settings.columns.status
             end
         end
+        -- Note: groupByOnlineStatus is read directly from gConfig, not cached in state
+        if settings.collapsedOnlineSection ~= nil then
+            state.collapsedOnlineSection = settings.collapsedOnlineSection
+        end
+        if settings.collapsedOfflineSection ~= nil then
+            state.collapsedOfflineSection = settings.collapsedOfflineSection
+        end
+        -- Note: hideTopBar is read directly from gConfig, not cached in state
     end
 end
 
@@ -248,10 +262,12 @@ function M.DrawWindow(settings, dataModule)
         -- Save window state periodically (position, size)
         M.SaveWindowState()
         
-        -- Render top bar
-        M.RenderTopBar(dataModule)
-        
-        imgui.Spacing()
+        -- Render top bar (unless hidden - read directly from gConfig)
+        local hideTopBar = gConfig and gConfig.quickOnlineSettings and gConfig.quickOnlineSettings.hideTopBar or false
+        if not hideTopBar then
+            M.RenderTopBar(dataModule)
+            imgui.Spacing()
+        end
         
         -- Friend table (online friends only)
         imgui.BeginChild("##quick_online_body", {0, 0}, false)
@@ -369,11 +385,12 @@ function M.RenderTopBar(dataModule)
     imgui.PopStyleVar(2)
 end
 
--- Render friends table (Name-only, hover for details)
 function M.RenderFriendsTable(dataModule)
+    local app = _G.FFXIFriendListApp
+    local tagsFeature = app and app.features and app.features.tags
+    
     local friends = dataModule.GetOnlineFriends()
     
-    -- Apply filter
     local filteredFriends = {}
     local filterText = string.lower(state.filterText[1] or "")
     if filterText == "" then
@@ -392,31 +409,109 @@ function M.RenderFriendsTable(dataModule)
         end
     end
     
-    -- Apply sorting (online first, then by name)
-    table.sort(filteredFriends, function(a, b)
-        local aOnline = a.isOnline == true
-        local bOnline = b.isOnline == true
-        
-        if aOnline ~= bOnline then
-            return aOnline
-        end
-        
-        local aVal = type(a.name) == "string" and string.lower(a.name) or ""
-        local bVal = type(b.name) == "string" and string.lower(b.name) or ""
-        
-        if state.sortDirection == "asc" then
-            return aVal < bVal
-        else
-            return aVal > bVal
-        end
-    end)
-    
     if #filteredFriends == 0 then
         imgui.Text("No friends" .. (filterText ~= "" and " (filtered)" or ""))
         return
     end
     
-    -- Get hover tooltip settings
+    local tagOrder = {}
+    if tagsFeature then
+        tagOrder = tagsFeature:getAllTags() or {}
+    end
+    
+    local getFriendTag = function(friend)
+        if not tagsFeature then
+            return nil
+        end
+        local friendKey = tagcore.getFriendKey(friend)
+        return tagsFeature:getTagForFriend(friendKey)
+    end
+    
+    local sortMode = gConfig and gConfig.quickOnlineSettings and gConfig.quickOnlineSettings.sortMode or "status"
+    local sortDirection = gConfig and gConfig.quickOnlineSettings and gConfig.quickOnlineSettings.sortDirection or "asc"
+    
+    local callbacks = M.GetCallbacks(dataModule)
+    local sectionCallbacks = {
+        onSaveState = callbacks.onSaveState,
+        onQueueRetag = function(friendKey, newTag)
+            if tagsFeature then
+                tagsFeature:queueRetag(friendKey, newTag)
+            end
+        end
+    }
+    
+    local renderFriendsTable = function(groupFriends, renderState, renderCallbacks, sectionTag)
+        M.RenderCompactFriendsList(groupFriends, sectionTag, dataModule)
+    end
+    
+    -- Read groupByOnlineStatus directly from gConfig (set in General tab)
+    local groupByOnlineStatus = gConfig and gConfig.quickOnlineSettings and gConfig.quickOnlineSettings.groupByOnlineStatus or false
+    if groupByOnlineStatus then
+        -- Split friends by online/offline status first
+        local onlineFriends = {}
+        local offlineFriends = {}
+        for _, friend in ipairs(filteredFriends) do
+            if friend.isOnline then
+                table.insert(onlineFriends, friend)
+            else
+                table.insert(offlineFriends, friend)
+            end
+        end
+        
+        -- Group online friends by tag
+        local onlineGroups = taggrouper.groupFriendsByTag(onlineFriends, tagOrder, getFriendTag)
+        taggrouper.sortAllGroups(onlineGroups, sortMode, sortDirection)
+        
+        -- Group offline friends by tag
+        local offlineGroups = taggrouper.groupFriendsByTag(offlineFriends, tagOrder, getFriendTag)
+        taggrouper.sortAllGroups(offlineGroups, sortMode, sortDirection)
+        
+        -- Render Online section
+        local onlineCount = #onlineFriends
+        -- Auto-collapse if empty
+        local onlineShouldBeOpen = onlineCount > 0 and not state.collapsedOnlineSection
+        imgui.SetNextItemOpen(onlineShouldBeOpen)
+        local onlineExpanded = imgui.CollapsingHeader("Online (" .. onlineCount .. ")##qo_online_section")
+        if imgui.IsItemClicked() then
+            state.collapsedOnlineSection = not state.collapsedOnlineSection
+            M.SaveWindowState()
+        end
+        
+        if onlineExpanded then
+            imgui.Indent(10)
+            CollapsibleTagSection.RenderAllSections(onlineGroups, state, sectionCallbacks, renderFriendsTable, "_qo_online")
+            imgui.Unindent(10)
+        end
+        
+        -- Render Offline section
+        local offlineCount = #offlineFriends
+        -- Auto-collapse if empty
+        local offlineShouldBeOpen = offlineCount > 0 and not state.collapsedOfflineSection
+        imgui.SetNextItemOpen(offlineShouldBeOpen)
+        local offlineExpanded = imgui.CollapsingHeader("Offline (" .. offlineCount .. ")##qo_offline_section")
+        if imgui.IsItemClicked() then
+            state.collapsedOfflineSection = not state.collapsedOfflineSection
+            M.SaveWindowState()
+        end
+        
+        if offlineExpanded then
+            imgui.Indent(10)
+            CollapsibleTagSection.RenderAllSections(offlineGroups, state, sectionCallbacks, renderFriendsTable, "_qo_offline")
+            imgui.Unindent(10)
+        end
+    else
+        -- Default behavior: just tag sections without online/offline grouping
+        local groups = taggrouper.groupFriendsByTag(filteredFriends, tagOrder, getFriendTag)
+        taggrouper.sortAllGroups(groups, sortMode, sortDirection)
+        CollapsibleTagSection.RenderAllSections(groups, state, sectionCallbacks, renderFriendsTable)
+    end
+    
+    if tagsFeature then
+        tagsFeature:flushRetagQueue()
+    end
+end
+
+function M.RenderCompactFriendsList(friends, sectionTag, dataModule)
     local app = _G.FFXIFriendListApp
     local hoverSettings = nil
     if app and app.features and app.features.preferences then
@@ -424,16 +519,17 @@ function M.RenderFriendsTable(dataModule)
         hoverSettings = prefs and prefs.quickOnlineHoverTooltip
     end
     
-    -- Name-only table (no column options, hover for details)
-    if imgui.BeginTable("##quick_online_table", 1, 0) then
+    local tableId = "##quick_online_table_" .. (sectionTag or "default")
+    if imgui.BeginTable(tableId, 1, 0) then
         imgui.TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch)
         
-        for i, friend in ipairs(filteredFriends) do
+        for i, friend in ipairs(friends) do
             imgui.TableNextRow()
             imgui.TableNextColumn()
             
             local friendName = utils.capitalizeName(utils.getDisplayName(friend))
             local isOnline = friend.isOnline == true
+            local uniqueId = (sectionTag or "qo") .. "_" .. i
             
             if not icons.RenderStatusIcon(isOnline, false, 12) then
                 if isOnline then
@@ -448,11 +544,28 @@ function M.RenderFriendsTable(dataModule)
                 imgui.PushStyleColor(ImGuiCol_Text, {0.6, 0.6, 0.6, 1.0})
             end
             
-            if imgui.Selectable(friendName .. "##friend_" .. i, false, ImGuiSelectableFlags_SpanAllColumns) then
+            if imgui.Selectable(friendName .. "##friend_" .. uniqueId, false, ImGuiSelectableFlags_SpanAllColumns) then
                 if state.selectedFriendForDetails and state.selectedFriendForDetails.name == friend.name then
                     state.selectedFriendForDetails = nil
                 else
                     state.selectedFriendForDetails = friend
+                end
+            end
+            
+            if imgui.BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID) then
+                local friendKey = tagcore.getFriendKey(friend)
+                if friendKey then
+                    local dragState = FriendsTable.getDragState()
+                    dragState.isDragging = true
+                    dragState.friendKey = friendKey
+                    dragState.friendName = friendName
+                    imgui.Text("Move: " .. friendName)
+                end
+                imgui.EndDragDropSource()
+            else
+                local dragState = FriendsTable.getDragState()
+                if dragState.isDragging and dragState.friendKey == tagcore.getFriendKey(friend) then
+                    FriendsTable.endDrag()
                 end
             end
             
@@ -467,7 +580,7 @@ function M.RenderFriendsTable(dataModule)
                 HoverTooltip.Render(friend, hoverSettings, forceAll)
             end
             
-            if imgui.BeginPopupContextItem("##friend_context_" .. i) then
+            if imgui.BeginPopupContextItem("##friend_context_" .. uniqueId) then
                 FriendContextMenu.Render(friend, state, M.GetCallbacks(dataModule))
                 imgui.EndPopup()
             end
@@ -576,6 +689,9 @@ function M.SaveWindowState()
         zone = state.columnVisible.zone,
         status = state.columnVisible.status
     }
+    -- Note: groupByOnlineStatus and hideTopBar are controlled by General tab, don't overwrite them here
+    settings.collapsedOnlineSection = state.collapsedOnlineSection
+    settings.collapsedOfflineSection = state.collapsedOfflineSection
     
     -- Persist to disk
     local settings = require('libs.settings')

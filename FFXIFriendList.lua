@@ -574,7 +574,7 @@ ashita.events.register('command', 'ffxifriendlist_command', function(e)
                 print("  /fl menudebug <on|off|status|dump|hexdump> - Menu detection debug")
                 print("  /fl notify - Show test notification")
                 print("  /fl soundtest <type> - Test sounds (online, request, all)")
-                print("  /befriend <name> - Send friend request to player")
+                print("  /befriend <name> [tag] - Send friend request with optional tag")
                 return
             end
         end
@@ -639,28 +639,43 @@ ashita.events.register('command', 'ffxifriendlist_command', function(e)
         return
     end
     
-    -- Handle /befriend <name> command
+    -- Handle /befriend <name> [tag] command
     if command_args[1] == "/befriend" and #command_args > 1 then
         e.blocked = true
         
-        -- Get friend name (all remaining args joined)
-        local friendName = ""
-        for i = 2, #command_args do
-            if i > 2 then
-                friendName = friendName .. " "
+        local friendName = command_args[2]
+        local tagName = nil
+        
+        if #command_args > 2 then
+            local tagParts = {}
+            for i = 3, #command_args do
+                table.insert(tagParts, command_args[i])
             end
-            friendName = friendName .. command_args[i]
+            tagName = table.concat(tagParts, " ")
         end
         
-        -- Get original case from e.command
         local originalCmd = e.command
         local nameStart = originalCmd:find(command_args[2], 1, true)
         if nameStart then
-            friendName = originalCmd:sub(nameStart)
+            local restOfCmd = originalCmd:sub(nameStart)
+            local spacePos = restOfCmd:find(" ")
+            if spacePos then
+                friendName = restOfCmd:sub(1, spacePos - 1)
+                tagName = restOfCmd:sub(spacePos + 1):match("^%s*(.-)%s*$")
+                if tagName == "" then
+                    tagName = nil
+                end
+            else
+                friendName = restOfCmd
+            end
         end
         
         if friendName and friendName ~= "" and app and app.features.friends then
             local _ = app.features.friends:addFriend(friendName)
+            
+            if tagName and app.features.tags then
+                app.features.tags:setPendingTag(friendName, tagName)
+            end
         end
         
         return

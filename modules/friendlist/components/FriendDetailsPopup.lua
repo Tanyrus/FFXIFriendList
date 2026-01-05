@@ -1,6 +1,8 @@
 local imgui = require('imgui')
 local ThemeHelper = require('libs.themehelper')
 local utils = require('modules.friendlist.components.helpers.utils')
+local tagcore = require('core.tagcore')
+local TagSelectDropdown = require('modules.friendlist.components.TagSelectDropdown')
 
 local M = {}
 
@@ -182,7 +184,6 @@ function M.Render(friend, state, callbacks)
             imgui.Text(rankDisplay)
         end
         
-        -- Last Seen - use presence.lastSeenAt like FriendsTable
         local lastSeenText = "Unknown"
         local lastSeenAt = presence.lastSeenAt or friend.lastSeenAt or friend.lastSeen
         if type(lastSeenAt) == "number" and lastSeenAt > 0 then
@@ -192,6 +193,25 @@ function M.Render(friend, state, callbacks)
             imgui.Text("Last Seen: Now")
         else
             imgui.Text("Last Seen: " .. lastSeenText)
+        end
+        
+        imgui.Separator()
+        
+        local app = _G.FFXIFriendListApp
+        local tagsFeature = app and app.features and app.features.tags
+        if tagsFeature then
+            local friendKey = tagcore.getFriendKey(friend)
+            local currentTag = tagsFeature:getTagForFriend(friendKey)
+            
+            local tagCallbacks = {
+                onTagChanged = function(key, newTag)
+                    tagsFeature:setTagForFriend(key, newTag)
+                    tagsFeature:save()
+                end
+            }
+            
+            TagSelectDropdown.Render(currentTag, friendKey, tagCallbacks)
+            imgui.Spacing()
         end
         
         imgui.Separator()

@@ -35,6 +35,8 @@ function M.Friends.new(deps)
     self.lastEventTimestamp = 0
     self.lastRequestEventTimestamp = 0
     self.heartbeatInFlight = false
+    self.refreshInFlight = false
+    self.friendRequestsInFlight = false
     self.hasReportedVersion = false
     
     self.pendingZoneChange = nil
@@ -141,6 +143,14 @@ function M.Friends:refresh()
         self.deps.logger.debug("[Friends] refresh() called")
     end
     
+    -- Prevent duplicate in-flight requests
+    if self.refreshInFlight then
+        if self.deps.logger and self.deps.logger.debug then
+            self.deps.logger.debug("[Friends] refresh() skipped: request already in flight")
+        end
+        return false
+    end
+    
     if not self.deps.net or not self.deps.connection then
         if self.deps.logger and self.deps.logger.warn then
             self.deps.logger.warn("[Friends] refresh() aborted: missing net or connection")
@@ -156,6 +166,7 @@ function M.Friends:refresh()
         return false
     end
     
+    self.refreshInFlight = true
     self.state = "syncing"
     self.lastError = nil
     
@@ -185,6 +196,8 @@ function M.Friends:refresh()
 end
 
 function M.Friends:handleRefreshResponse(success, response)
+    self.refreshInFlight = false
+    
     local decodeStartMs = 0
     if self.deps.time then
         decodeStartMs = self.deps.time()
@@ -534,6 +547,14 @@ function M.Friends:getFriends()
 end
 
 function M.Friends:refreshFriendRequests()
+    -- Prevent duplicate in-flight requests
+    if self.friendRequestsInFlight then
+        if self.deps.logger and self.deps.logger.debug then
+            self.deps.logger.debug("[Friends] refreshFriendRequests() skipped: request already in flight")
+        end
+        return false
+    end
+    
     if not self.deps.net or not self.deps.connection then
         return false
     end
@@ -541,6 +562,8 @@ function M.Friends:refreshFriendRequests()
     if not self.deps.connection:isConnected() then
         return false
     end
+    
+    self.friendRequestsInFlight = true
     
     local url = self.deps.connection:getBaseUrl() .. Endpoints.FRIENDS.REQUESTS
     
@@ -560,6 +583,8 @@ function M.Friends:refreshFriendRequests()
 end
 
 function M.Friends:handleFriendRequestsResponse(success, response)
+    self.friendRequestsInFlight = false
+    
     if not success then
         if self.deps.logger and self.deps.logger.warn then
             self.deps.logger.warn("[Friends] Failed to refresh friend requests: " .. tostring(response))
@@ -697,12 +722,6 @@ function M.Friends:sendHeartbeat()
         return false
     end
     
-    if self.deps.connection.isGameAlive then
-        if not self.deps.connection:isGameAlive() then
-            return false
-        end
-    end
-    
     self.heartbeatInFlight = true
     local now = getTime(self)
     self.lastHeartbeatAt = now
@@ -722,9 +741,10 @@ function M.Friends:sendHeartbeat()
     end
     
     local pluginVersion = nil
-    if not self.hasReportedVersion then
-        pluginVersion = "1.0.0-lua"
-        self.hasReportedVersion = true
+    local shouldReportVersion = not self.hasReportedVersion
+    if shouldReportVersion then
+        local addonVersion = addon and addon.version or "0.9.9"
+        pluginVersion = addonVersion
     end
     
     local RequestEncoder = require("protocol.Encoding.RequestEncoder")
@@ -751,6 +771,11 @@ function M.Friends:sendHeartbeat()
                     self.deps.logger.warn("Heartbeat failed: " .. tostring(response))
                 end
                 return
+            end
+            
+            -- Only mark version as reported after successful heartbeat
+            if shouldReportVersion then
+                self.hasReportedVersion = true
             end
             
             local ResponseDecoder = require("protocol.Decoding.ResponseDecoder")

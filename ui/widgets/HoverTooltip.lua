@@ -1,6 +1,7 @@
 local imgui = require('imgui')
 local utils = require('modules.friendlist.components.helpers.utils')
 local icons = require('libs.icons')
+local tagcore = require('core.tagcore')
 
 local M = {}
 
@@ -103,6 +104,20 @@ function M.Render(friend, settings, forceAll)
             imgui.Text(utils.capitalizeName(friendedAs))
         else
             imgui.Text(TOOLTIP_CONSTANTS.VALUE_UNKNOWN)
+        end
+    end
+    
+    local app = _G.FFXIFriendListApp
+    local tagsFeature = app and app.features and app.features.tags
+    if tagsFeature then
+        local friendKey = tagcore.getFriendKey(friend)
+        local tag = tagsFeature:getTagForFriend(friendKey)
+        imgui.TextDisabled("Tag:")
+        imgui.SameLine(TOOLTIP_CONSTANTS.LABEL_WIDTH)
+        if tag and tag ~= "" then
+            imgui.Text(tagcore.capitalizeTag(tag))
+        else
+            imgui.Text("Untagged")
         end
     end
     

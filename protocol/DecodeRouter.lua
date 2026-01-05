@@ -29,6 +29,9 @@ local function getDecoder(responseType)
         decoder = require("protocol.Decoders.CharactersList")
     elseif responseType == MessageTypes.ResponseType.AuthEnsureResponse then
         decoder = require("protocol.Decoders.AuthEnsure")
+    elseif responseType == MessageTypes.ResponseType.SetActiveCharacterResponse then
+        -- Reuse AuthEnsure decoder - response structure is compatible
+        decoder = require("protocol.Decoders.AuthEnsure")
     elseif responseType == MessageTypes.ResponseType.MeResponse then
         decoder = require("protocol.Decoders.MeResponse")
     elseif responseType == MessageTypes.ResponseType.ServerList then

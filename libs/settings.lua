@@ -63,6 +63,8 @@ local defaultSettings = T{
             column = "name",
             direction = "asc"
         },
+        sortMode = "status",
+        sortDirection = "asc",
         filter = "",
         columns = T{
             job = T{ visible = true },
@@ -77,8 +79,21 @@ local defaultSettings = T{
             altVisibility = T{ expanded = false },
             notificationsSettings = T{ expanded = true },
             controlsSettings = T{ expanded = true },
-            themeSettings = T{ expanded = true }
-        }
+            themeSettings = T{ expanded = true },
+            tagManager = T{ expanded = false }
+        },
+        columnOrder = T{ "Name", "Job", "Zone", "Nation/Rank", "Last Seen", "Added As" },
+        columnWidths = T{
+            Name = 120.0,
+            Job = 100.0,
+            Zone = 120.0,
+            ["Nation/Rank"] = 80.0,
+            ["Last Seen"] = 120.0,
+            ["Added As"] = 100.0
+        },
+        groupByOnlineStatus = false,
+        collapsedOnlineSection = false,
+        collapsedOfflineSection = false
     },
     
     -- Quick online settings
@@ -87,14 +102,25 @@ local defaultSettings = T{
             column = "name",
             direction = "asc"
         },
+        sortMode = "status",
+        sortDirection = "asc",
         filter = "",
         columns = T{
             name = true,
             job = true,
             zone = true,
             status = true
-        }
+        },
+        groupByOnlineStatus = false,
+        collapsedOnlineSection = false,
+        collapsedOfflineSection = false,
+        hideTopBar = false
     },
+    
+    -- Tag settings
+    friendTags = T{},
+    tagOrder = T{ "Favorite" },
+    collapsedTags = T{},
     
     -- Data section (API keys, server selection, preferences)
     data = T{

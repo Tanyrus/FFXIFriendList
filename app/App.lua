@@ -10,6 +10,7 @@ local Notifications = require("app.features.notifications")
 local Preferences = require("app.features.preferences")
 local Notes = require("app.features.notes")
 local AltVisibility = require("app.features.altvisibility")
+local Tags = require("app.features.Tags")
 
 local App = {}
 
@@ -40,6 +41,7 @@ function App.create(deps)
     app.features.preferences = Preferences.Preferences.new(deps)
     app.features.notes = Notes.Notes.new(deps)
     app.features.altVisibility = AltVisibility.AltVisibility.new(deps)
+    app.features.tags = Tags.Tags.new(deps)
     
     return app
 end
@@ -63,6 +65,11 @@ function App.initialize(app)
     -- Load persisted notes via deps.storage
     if app.features.notes and app.features.notes.load and app.deps.storage then
         local _ = app.features.notes:load()
+    end
+    
+    -- Load persisted tags via deps.storage
+    if app.features.tags and app.features.tags.load and app.deps.storage then
+        local _ = app.features.tags:load()
     end
     
     -- Load persisted themes from file
@@ -207,7 +214,8 @@ function App.getState(app)
         themes = { themeIndex = 0, presetName = "" },
         notifications = {},
         preferences = { prefs = {} },
-        notes = {}
+        notes = {},
+        tags = { tagOrder = {}, collapsedTags = {}, tagCount = 0 }
     }
     
     if not app.initialized then
@@ -279,6 +287,15 @@ function App.getState(app)
         app._missingFeatureLogged.notes = true
     end
     
+    if app.features.tags and app.features.tags.getState then
+        state.tags = app.features.tags:getState()
+    elseif not app._missingFeatureLogged.tags then
+        if app.deps.logger and app.deps.logger.error then
+            app.deps.logger.error("[App] Missing tags feature or getState() method")
+        end
+        app._missingFeatureLogged.tags = true
+    end
+    
     return state
 end
 
@@ -300,6 +317,10 @@ function App.release(app)
     
     if app.features.notes and app.features.notes.save and app.deps.storage then
         local _ = app.features.notes:save()
+    end
+    
+    if app.features.tags and app.features.tags.save and app.deps.storage then
+        local _ = app.features.tags:save()
     end
     
     app.initialized = false

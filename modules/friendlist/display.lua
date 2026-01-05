@@ -14,7 +14,11 @@ local PrivacyTab = require('modules.friendlist.components.PrivacyTab')
 local NotificationsTab = require('modules.friendlist.components.NotificationsTab')
 local ControlsTab = require('modules.friendlist.components.ControlsTab')
 local ThemesTab = require('modules.friendlist.components.ThemesTab')
+local CollapsibleTagSection = require('modules.friendlist.components.CollapsibleTagSection')
+local TagManager = require('modules.friendlist.components.TagManager')
 local utils = require('modules.friendlist.components.helpers.utils')
+local tagcore = require('core.tagcore')
+local taggrouper = require('core.taggrouper')
 
 local M = {}
 
@@ -88,7 +92,8 @@ local state = {
         nationRank = false,
         lastSeen = false,
         addedAs = false
-    }
+    },
+    tagManagerExpanded = false
 }
 
 local WINDOW_ID = "##friendlist_main"
@@ -421,28 +426,149 @@ function M.RenderContentArea(dataModule, callbacks)
     elseif state.selectedTab == 1 then
         PrivacyTab.Render(state, dataModule, callbacks)
     elseif state.selectedTab == 2 then
-        NotificationsTab.Render(state, dataModule, callbacks)
+        M.RenderTagsTab()
     elseif state.selectedTab == 3 then
-        ControlsTab.Render(state, dataModule, callbacks)
+        NotificationsTab.Render(state, dataModule, callbacks)
     elseif state.selectedTab == 4 then
+        ControlsTab.Render(state, dataModule, callbacks)
+    elseif state.selectedTab == 5 then
         ThemesTab.Render(state, dataModule, callbacks)
     end
+end
+
+function M.RenderTagsTab()
+    imgui.Text("Tag Management")
+    imgui.Separator()
+    imgui.Spacing()
+    TagManager.Render(true)
 end
 
 function M.RenderFriendsTab(dataModule, callbacks)
     AddFriendSection.Render(state, dataModule, callbacks.onAddFriend)
     
-    -- Padding above Pending Requests
     imgui.Dummy({0, 6})
     
     PendingRequests.Render(state, dataModule, callbacks)
     
-    -- Padding below Pending Requests
     imgui.Dummy({0, 6})
     
     imgui.BeginChild("##friends_table_child", {0, 0}, false)
-    FriendsTable.Render(state, dataModule, callbacks)
+    M.RenderTaggedFriendSections(dataModule, callbacks)
     imgui.EndChild()
+    
+    local app = _G.FFXIFriendListApp
+    if app and app.features and app.features.tags then
+        app.features.tags:flushRetagQueue()
+    end
+end
+
+function M.RenderTaggedFriendSections(dataModule, callbacks)
+    local app = _G.FFXIFriendListApp
+    local tagsFeature = app and app.features and app.features.tags
+    
+    local friends = dataModule.GetFriends()
+    local filterText = state.filterText[1] or ""
+    
+    if filterText ~= "" then
+        local lowerFilter = string.lower(filterText)
+        local filtered = {}
+        for _, friend in ipairs(friends) do
+            local friendName = type(friend.name) == "string" and string.lower(friend.name) or ""
+            local presence = friend.presence or {}
+            local job = type(presence.job) == "string" and string.lower(presence.job) or ""
+            local zone = type(presence.zone) == "string" and string.lower(presence.zone) or ""
+            if string.find(friendName, lowerFilter, 1, true) or
+               string.find(job, lowerFilter, 1, true) or
+               string.find(zone, lowerFilter, 1, true) then
+                table.insert(filtered, friend)
+            end
+        end
+        friends = filtered
+    end
+    
+    imgui.AlignTextToFramePadding()
+    imgui.Text("Filter:")
+    imgui.SameLine()
+    imgui.PushItemWidth(200)
+    if imgui.InputText("##filter_input", state.filterText, 64) then
+        if callbacks.onSaveState then callbacks.onSaveState() end
+    end
+    imgui.PopItemWidth()
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("Filter friends by name, job, or zone")
+    end
+    
+    imgui.Spacing()
+    
+    if #friends == 0 then
+        imgui.Text("No friends" .. (filterText ~= "" and " matching filter" or ""))
+        return
+    end
+    
+    local tagOrder = {}
+    if tagsFeature then
+        tagOrder = tagsFeature:getAllTags() or {}
+    end
+    
+    local getFriendTag = function(friend)
+        if not tagsFeature then
+            return nil
+        end
+        local friendKey = tagcore.getFriendKey(friend)
+        return tagsFeature:getTagForFriend(friendKey)
+    end
+    
+    local groups = taggrouper.groupFriendsByTag(friends, tagOrder, getFriendTag)
+    
+    local sortMode = gConfig and gConfig.friendListSettings and gConfig.friendListSettings.sortMode or "status"
+    local sortDirection = gConfig and gConfig.friendListSettings and gConfig.friendListSettings.sortDirection or "asc"
+    taggrouper.sortAllGroups(groups, sortMode, sortDirection)
+    
+    local sectionCallbacks = {
+        onSaveState = callbacks.onSaveState,
+        onRenderContextMenu = callbacks.onRenderContextMenu,
+        onQueueRetag = function(friendKey, newTag)
+            if tagsFeature then
+                tagsFeature:queueRetag(friendKey, newTag)
+            end
+        end
+    }
+    
+    local renderFriendsTable = function(groupFriends, renderState, renderCallbacks, sectionTag)
+        FriendsTable.RenderGroupTable(groupFriends, state, callbacks, sectionTag)
+    end
+    
+    local visibleColumns = {}
+    table.insert(visibleColumns, "Name")
+    if state.columnVisible and state.columnVisible.job then table.insert(visibleColumns, "Job") end
+    if state.columnVisible and state.columnVisible.zone then table.insert(visibleColumns, "Zone") end
+    if state.columnVisible and state.columnVisible.nationRank then table.insert(visibleColumns, "Nation/Rank") end
+    if state.columnVisible and state.columnVisible.lastSeen then table.insert(visibleColumns, "Last Seen") end
+    if state.columnVisible and state.columnVisible.addedAs then table.insert(visibleColumns, "Added As") end
+    
+    local headerTableFlags = bit.bor(ImGuiTableFlags_Borders, ImGuiTableFlags_NoBordersInBody)
+    if imgui.BeginTable("##friends_header_table", #visibleColumns, headerTableFlags) then
+        for _, colName in ipairs(visibleColumns) do
+            local flags = ImGuiTableColumnFlags_WidthFixed
+            if colName == "Name" then
+                imgui.TableSetupColumn("Name", flags, 120.0)
+            elseif colName == "Job" then
+                imgui.TableSetupColumn("Job", flags, 100.0)
+            elseif colName == "Zone" then
+                imgui.TableSetupColumn("Zone", flags, 120.0)
+            elseif colName == "Nation/Rank" then
+                imgui.TableSetupColumn("Nation/Rank", flags, 80.0)
+            elseif colName == "Last Seen" then
+                imgui.TableSetupColumn("Last Seen", flags, 120.0)
+            elseif colName == "Added As" then
+                imgui.TableSetupColumn("Added As", flags, 100.0)
+            end
+        end
+        imgui.TableHeadersRow()
+        imgui.EndTable()
+    end
+    
+    CollapsibleTagSection.RenderAllSections(groups, state, sectionCallbacks, renderFriendsTable)
 end
 
 function M.RenderAboutPopup()

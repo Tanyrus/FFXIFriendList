@@ -63,6 +63,8 @@ local defaultSettings = T{
             column = "name",
             direction = "asc"
         },
+        sortMode = "status",
+        sortDirection = "asc",
         filter = "",
         columns = T{
             job = T{ visible = true },
@@ -77,7 +79,8 @@ local defaultSettings = T{
             altVisibility = T{ expanded = false },
             notificationsSettings = T{ expanded = true },
             controlsSettings = T{ expanded = true },
-            themeSettings = T{ expanded = true }
+            themeSettings = T{ expanded = true },
+            tagManager = T{ expanded = false }
         }
     },
     
@@ -87,6 +90,8 @@ local defaultSettings = T{
             column = "name",
             direction = "asc"
         },
+        sortMode = "status",
+        sortDirection = "asc",
         filter = "",
         columns = T{
             name = true,
@@ -95,6 +100,11 @@ local defaultSettings = T{
             status = true
         }
     },
+    
+    -- Tag settings
+    friendTags = T{},
+    tagOrder = T{ "Favorite" },
+    collapsedTags = T{},
     
     -- Data section (API keys, server selection, preferences)
     data = T{

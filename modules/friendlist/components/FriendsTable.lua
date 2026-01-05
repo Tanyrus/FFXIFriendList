@@ -3,8 +3,56 @@ local icons = require('libs.icons')
 local utils = require('modules.friendlist.components.helpers.utils')
 local InputHelper = require('ui.helpers.InputHelper')
 local HoverTooltip = require('ui.widgets.HoverTooltip')
+local tagcore = require('core.tagcore')
 
 local M = {}
+
+local DRAG_DROP_TYPE = "FRIEND_RETAG"
+
+local dragState = {
+    isDragging = false,
+    friendKey = nil,
+    friendName = nil,
+    hoveredTag = nil,
+    dropPending = false
+}
+
+function M.getDragState()
+    return dragState
+end
+
+function M.setHoveredTag(tag)
+    if dragState.isDragging then
+        dragState.hoveredTag = tag
+    end
+end
+
+function M.clearDragState()
+    dragState.isDragging = false
+    dragState.friendKey = nil
+    dragState.friendName = nil
+    dragState.hoveredTag = nil
+    dragState.dropPending = false
+end
+
+function M.endDrag()
+    if dragState.isDragging and dragState.hoveredTag ~= nil then
+        dragState.dropPending = true
+        return true
+    end
+    M.clearDragState()
+    return false
+end
+
+function M.consumePendingDrop()
+    if dragState.dropPending then
+        local friendKey = dragState.friendKey
+        local targetTag = dragState.hoveredTag
+        M.clearDragState()
+        return friendKey, targetTag
+    end
+    return nil, nil
+end
 
 local function sortFriends(friends, sortColumn, sortDirection)
     table.sort(friends, function(a, b)
@@ -189,10 +237,11 @@ function M.Render(state, dataModule, callbacks)
     end
 end
 
-function M.RenderNameCell(friend, index, state, callbacks)
+function M.RenderNameCell(friend, index, state, callbacks, sectionTag)
     local friendName = utils.capitalizeName(utils.getDisplayName(friend))
     local isOnline = friend.isOnline or false
     local isPending = friend.isPending or false
+    local uniqueId = (sectionTag or "main") .. "_" .. index
     
     if not icons.RenderStatusIcon(isOnline, isPending, 12) then
         local color = isPending and {1.0, 0.8, 0.0, 1.0} or 
@@ -207,13 +256,25 @@ function M.RenderNameCell(friend, index, state, callbacks)
     end
     
     local flags = ImGuiSelectableFlags_SpanAllColumns
-    if imgui.Selectable(friendName .. "##friend_" .. index, false, flags) then
-        -- Toggle - clicking same friend again closes details
+    if imgui.Selectable(friendName .. "##friend_" .. uniqueId, false, flags) then
         if state.selectedFriendForDetails and state.selectedFriendForDetails.name == friend.name then
             state.selectedFriendForDetails = nil
         else
             state.selectedFriendForDetails = friend
         end
+    end
+    
+    if imgui.BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID) then
+        local friendKey = tagcore.getFriendKey(friend)
+        if friendKey then
+            dragState.isDragging = true
+            dragState.friendKey = friendKey
+            dragState.friendName = friendName
+            imgui.Text("Move: " .. friendName)
+        end
+        imgui.EndDragDropSource()
+    elseif dragState.isDragging and dragState.friendKey == tagcore.getFriendKey(friend) then
+        M.endDrag()
     end
     
     local itemHovered = imgui.IsItemHovered()
@@ -234,7 +295,7 @@ function M.RenderNameCell(friend, index, state, callbacks)
         HoverTooltip.Render(friend, settings, forceAll)
     end
     
-    if imgui.BeginPopupContextItem("##friend_context_" .. index) then
+    if imgui.BeginPopupContextItem("##friend_context_" .. uniqueId) then
         if callbacks.onRenderContextMenu then
             callbacks.onRenderContextMenu(friend)
         end
@@ -367,7 +428,6 @@ function M.RenderAddedAsCell(friend)
     local friendedAs = friend.friendedAs or ""
     local isOnline = friend.isOnline or false
     
-    -- Capitalize the name for display
     local displayName = utils.capitalizeName(friendedAs)
     
     if displayName == "" then
@@ -376,6 +436,64 @@ function M.RenderAddedAsCell(friend)
         imgui.Text(displayName)
     else
         imgui.TextDisabled(displayName)
+    end
+end
+
+function M.RenderGroupTable(friends, state, callbacks, sectionTag)
+    if not friends or #friends == 0 then
+        return
+    end
+    
+    local visibleColumns = {}
+    table.insert(visibleColumns, "Name")
+    if state.columnVisible and state.columnVisible.job then table.insert(visibleColumns, "Job") end
+    if state.columnVisible and state.columnVisible.zone then table.insert(visibleColumns, "Zone") end
+    if state.columnVisible and state.columnVisible.nationRank then table.insert(visibleColumns, "Nation/Rank") end
+    if state.columnVisible and state.columnVisible.lastSeen then table.insert(visibleColumns, "Last Seen") end
+    if state.columnVisible and state.columnVisible.addedAs then table.insert(visibleColumns, "Added As") end
+    
+    local tableId = "##friends_table_" .. (sectionTag or "default")
+    if imgui.BeginTable(tableId, #visibleColumns, 0) then
+        for _, colName in ipairs(visibleColumns) do
+            local flags = ImGuiTableColumnFlags_WidthFixed
+            if colName == "Name" then
+                imgui.TableSetupColumn("Name", flags, 120.0)
+            elseif colName == "Job" then
+                imgui.TableSetupColumn("Job", flags, 100.0)
+            elseif colName == "Zone" then
+                imgui.TableSetupColumn("Zone", flags, 120.0)
+            elseif colName == "Nation/Rank" then
+                imgui.TableSetupColumn("Nation/Rank", flags, 80.0)
+            elseif colName == "Last Seen" then
+                imgui.TableSetupColumn("Last Seen", flags, 120.0)
+            elseif colName == "Added As" then
+                imgui.TableSetupColumn("Added As", flags, 100.0)
+            end
+        end
+        
+        for i, friend in ipairs(friends) do
+            imgui.TableNextRow()
+            
+            for _, colName in ipairs(visibleColumns) do
+                imgui.TableNextColumn()
+                
+                if colName == "Name" then
+                    M.RenderNameCell(friend, i, state, callbacks, sectionTag)
+                elseif colName == "Job" then
+                    M.RenderJobCell(friend)
+                elseif colName == "Zone" then
+                    M.RenderZoneCell(friend)
+                elseif colName == "Nation/Rank" then
+                    M.RenderNationRankCell(friend)
+                elseif colName == "Last Seen" then
+                    M.RenderLastSeenCell(friend)
+                elseif colName == "Added As" then
+                    M.RenderAddedAsCell(friend)
+                end
+            end
+        end
+        
+        imgui.EndTable()
     end
 end
 

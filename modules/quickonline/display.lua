@@ -10,10 +10,13 @@ local scaling = require('scaling')
 local InputHelper = require('ui.helpers.InputHelper')
 local HoverTooltip = require('ui.widgets.HoverTooltip')
 
--- Use same components as main friend list window
 local FriendContextMenu = require('modules.friendlist.components.FriendContextMenu')
 local FriendDetailsPopup = require('modules.friendlist.components.FriendDetailsPopup')
+local CollapsibleTagSection = require('modules.friendlist.components.CollapsibleTagSection')
+local FriendsTable = require('modules.friendlist.components.FriendsTable')
 local utils = require('modules.friendlist.components.helpers.utils')
+local tagcore = require('core.tagcore')
+local taggrouper = require('core.taggrouper')
 
 local M = {}
 
@@ -369,11 +372,12 @@ function M.RenderTopBar(dataModule)
     imgui.PopStyleVar(2)
 end
 
--- Render friends table (Name-only, hover for details)
 function M.RenderFriendsTable(dataModule)
+    local app = _G.FFXIFriendListApp
+    local tagsFeature = app and app.features and app.features.tags
+    
     local friends = dataModule.GetOnlineFriends()
     
-    -- Apply filter
     local filteredFriends = {}
     local filterText = string.lower(state.filterText[1] or "")
     if filterText == "" then
@@ -392,31 +396,52 @@ function M.RenderFriendsTable(dataModule)
         end
     end
     
-    -- Apply sorting (online first, then by name)
-    table.sort(filteredFriends, function(a, b)
-        local aOnline = a.isOnline == true
-        local bOnline = b.isOnline == true
-        
-        if aOnline ~= bOnline then
-            return aOnline
-        end
-        
-        local aVal = type(a.name) == "string" and string.lower(a.name) or ""
-        local bVal = type(b.name) == "string" and string.lower(b.name) or ""
-        
-        if state.sortDirection == "asc" then
-            return aVal < bVal
-        else
-            return aVal > bVal
-        end
-    end)
-    
     if #filteredFriends == 0 then
         imgui.Text("No friends" .. (filterText ~= "" and " (filtered)" or ""))
         return
     end
     
-    -- Get hover tooltip settings
+    local tagOrder = {}
+    if tagsFeature then
+        tagOrder = tagsFeature:getAllTags() or {}
+    end
+    
+    local getFriendTag = function(friend)
+        if not tagsFeature then
+            return nil
+        end
+        local friendKey = tagcore.getFriendKey(friend)
+        return tagsFeature:getTagForFriend(friendKey)
+    end
+    
+    local groups = taggrouper.groupFriendsByTag(filteredFriends, tagOrder, getFriendTag)
+    
+    local sortMode = gConfig and gConfig.quickOnlineSettings and gConfig.quickOnlineSettings.sortMode or "status"
+    local sortDirection = gConfig and gConfig.quickOnlineSettings and gConfig.quickOnlineSettings.sortDirection or "asc"
+    taggrouper.sortAllGroups(groups, sortMode, sortDirection)
+    
+    local callbacks = M.GetCallbacks(dataModule)
+    local sectionCallbacks = {
+        onSaveState = callbacks.onSaveState,
+        onQueueRetag = function(friendKey, newTag)
+            if tagsFeature then
+                tagsFeature:queueRetag(friendKey, newTag)
+            end
+        end
+    }
+    
+    local renderFriendsTable = function(groupFriends, renderState, renderCallbacks, sectionTag)
+        M.RenderCompactFriendsList(groupFriends, sectionTag, dataModule)
+    end
+    
+    CollapsibleTagSection.RenderAllSections(groups, state, sectionCallbacks, renderFriendsTable)
+    
+    if tagsFeature then
+        tagsFeature:flushRetagQueue()
+    end
+end
+
+function M.RenderCompactFriendsList(friends, sectionTag, dataModule)
     local app = _G.FFXIFriendListApp
     local hoverSettings = nil
     if app and app.features and app.features.preferences then
@@ -424,16 +449,17 @@ function M.RenderFriendsTable(dataModule)
         hoverSettings = prefs and prefs.quickOnlineHoverTooltip
     end
     
-    -- Name-only table (no column options, hover for details)
-    if imgui.BeginTable("##quick_online_table", 1, 0) then
+    local tableId = "##quick_online_table_" .. (sectionTag or "default")
+    if imgui.BeginTable(tableId, 1, 0) then
         imgui.TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch)
         
-        for i, friend in ipairs(filteredFriends) do
+        for i, friend in ipairs(friends) do
             imgui.TableNextRow()
             imgui.TableNextColumn()
             
             local friendName = utils.capitalizeName(utils.getDisplayName(friend))
             local isOnline = friend.isOnline == true
+            local uniqueId = (sectionTag or "qo") .. "_" .. i
             
             if not icons.RenderStatusIcon(isOnline, false, 12) then
                 if isOnline then
@@ -448,11 +474,28 @@ function M.RenderFriendsTable(dataModule)
                 imgui.PushStyleColor(ImGuiCol_Text, {0.6, 0.6, 0.6, 1.0})
             end
             
-            if imgui.Selectable(friendName .. "##friend_" .. i, false, ImGuiSelectableFlags_SpanAllColumns) then
+            if imgui.Selectable(friendName .. "##friend_" .. uniqueId, false, ImGuiSelectableFlags_SpanAllColumns) then
                 if state.selectedFriendForDetails and state.selectedFriendForDetails.name == friend.name then
                     state.selectedFriendForDetails = nil
                 else
                     state.selectedFriendForDetails = friend
+                end
+            end
+            
+            if imgui.BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID) then
+                local friendKey = tagcore.getFriendKey(friend)
+                if friendKey then
+                    local dragState = FriendsTable.getDragState()
+                    dragState.isDragging = true
+                    dragState.friendKey = friendKey
+                    dragState.friendName = friendName
+                    imgui.Text("Move: " .. friendName)
+                end
+                imgui.EndDragDropSource()
+            else
+                local dragState = FriendsTable.getDragState()
+                if dragState.isDragging and dragState.friendKey == tagcore.getFriendKey(friend) then
+                    FriendsTable.endDrag()
                 end
             end
             
@@ -467,7 +510,7 @@ function M.RenderFriendsTable(dataModule)
                 HoverTooltip.Render(friend, hoverSettings, forceAll)
             end
             
-            if imgui.BeginPopupContextItem("##friend_context_" .. i) then
+            if imgui.BeginPopupContextItem("##friend_context_" .. uniqueId) then
                 FriendContextMenu.Render(friend, state, M.GetCallbacks(dataModule))
                 imgui.EndPopup()
             end

@@ -71,46 +71,6 @@ local function handleCloseButton()
     end
 end
 
--- Global handle binding function to be called by controller files
--- Using a TRUE global (no _G. prefix) so Lua resolves it at call time, matching cBind's pattern
-HandleBinding = function(buttonName, newState)
-    return M.HandleBinding(buttonName, newState)
-end
-
-function M.HandleBinding(buttonName, newState)
-    local app = _G.FFXIFriendListApp
-    if not app or not app.features or not app.features.preferences then
-        return
-    end
-
-    local prefs = app.features.preferences:getPrefs()
-    
-    -- Only trigger on button press (newState == true)
-    if newState ~= true then
-        return
-    end
-    
-    -- Check main window binding (flistBindButton -> /fl opens main window)
-    local flistButton = prefs.flistBindButton
-    if flistButton and flistButton ~= '' and buttonName == flistButton then
-        local chatManager = AshitaCore:GetChatManager()
-        if chatManager then
-            chatManager:QueueCommand(-1, '/fl')
-        end
-        return true
-    end
-    
-    -- Check compact friend list binding (flBindButton -> /flist opens compact list)
-    local flButton = prefs.flBindButton
-    if flButton and flButton ~= '' and buttonName == flButton then
-        local chatManager = AshitaCore:GetChatManager()
-        if chatManager then
-            chatManager:QueueCommand(-1, '/flist')
-        end
-        return true
-    end
-end
-
 -- Handle close button binding
 local function handleCloseBinding(buttonName)
     local app = _G.FFXIFriendListApp
@@ -132,6 +92,51 @@ local function handleCloseBinding(buttonName)
     end
     
     return false
+end
+
+-- Global handle binding function to be called by controller files
+-- Using a TRUE global (no _G. prefix) so Lua resolves it at call time, matching cBind's pattern
+HandleBinding = function(buttonName, newState)
+    return M.HandleBinding(buttonName, newState)
+end
+
+function M.HandleBinding(buttonName, newState)
+    -- Only trigger on button press (newState == true)
+    if newState ~= true then
+        return
+    end
+    
+    -- Check close window binding first
+    if handleCloseBinding(buttonName) then
+        return true
+    end
+    
+    local app = _G.FFXIFriendListApp
+    if not app or not app.features or not app.features.preferences then
+        return
+    end
+
+    local prefs = app.features.preferences:getPrefs()
+    
+    -- Check main window binding (flistBindButton -> /fl opens main window)
+    local flistButton = prefs.flistBindButton
+    if flistButton and flistButton ~= '' and buttonName == flistButton then
+        local chatManager = AshitaCore:GetChatManager()
+        if chatManager then
+            chatManager:QueueCommand(-1, '/fl')
+        end
+        return true
+    end
+    
+    -- Check compact friend list binding (flBindButton -> /flist opens compact list)
+    local flButton = prefs.flBindButton
+    if flButton and flButton ~= '' and buttonName == flButton then
+        local chatManager = AshitaCore:GetChatManager()
+        if chatManager then
+            chatManager:QueueCommand(-1, '/flist')
+        end
+        return true
+    end
 end
 
 -- Handle XInput state event (polled every frame)
@@ -171,10 +176,7 @@ function M.HandleXInputState(e)
             if modifierHeld and not isModifierButton then
                 -- Skip - modifier held, let XIUI handle this combo
             else
-                -- Button was just pressed - check close binding first, then flist binding
-                if not handleCloseBinding(buttonName) then
-                    M.HandleBinding(buttonName, true)
-                end
+                M.HandleBinding(buttonName, true)
             end
         end
     end
@@ -182,20 +184,14 @@ function M.HandleXInputState(e)
     -- Handle L2 trigger (analog, use threshold)
     local currentL2 = leftTrigger >= TRIGGER_THRESHOLD
     if currentL2 and not previousL2 then
-        -- L2 is a modifier itself, so process it (no modifier check needed)
-        if not handleCloseBinding('L2') then
-            M.HandleBinding('L2', true)
-        end
+        M.HandleBinding('L2', true)
     end
     previousL2 = currentL2
 
     -- Handle R2 trigger (analog, use threshold)
     local currentR2 = rightTrigger >= TRIGGER_THRESHOLD
     if currentR2 and not previousR2 then
-        -- R2 is a modifier itself, so process it (no modifier check needed)
-        if not handleCloseBinding('R2') then
-            M.HandleBinding('R2', true)
-        end
+        M.HandleBinding('R2', true)
     end
     previousR2 = currentR2
 

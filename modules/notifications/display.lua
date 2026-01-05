@@ -289,6 +289,13 @@ local function renderToast(toast, targetY)
         return 60
     end
     
+    -- Apply font scale
+    local app = _G.FFXIFriendListApp
+    if app and app.features and app.features.themes then
+        local fontScale = app.features.themes:getFontScale() or 1.0
+        imgui.SetWindowFontScale(fontScale)
+    end
+    
     local color = getToastColor(toast.type or ToastType.Info)
     
     imgui.PushStyleColor(ImGuiCol_Text, {color[1], color[2], color[3], alpha})

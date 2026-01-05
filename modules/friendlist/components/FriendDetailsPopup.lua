@@ -101,6 +101,13 @@ function M.Render(friend, state, callbacks)
     
     local windowOpen = {true}
     if imgui.Begin("Friend Details##friend_details", windowOpen, windowFlags) then
+        -- Apply font scale
+        local fontScaleApp = _G.FFXIFriendListApp
+        if fontScaleApp and fontScaleApp.features and fontScaleApp.features.themes then
+            local fontScale = fontScaleApp.features.themes:getFontScale() or 1.0
+            imgui.SetWindowFontScale(fontScale)
+        end
+        
         local displayName = friendName
         local isOnline = friend.isOnline
         local anonColor = {0.4, 0.65, 0.85, 1.0}  -- Dark sky blue

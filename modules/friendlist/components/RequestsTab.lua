@@ -5,7 +5,6 @@ local M = {}
 
 local function renderIncomingSection(dataModule, callbacks)
     imgui.Text("Incoming Requests")
-    imgui.Separator()
     
     local _, availHeight = imgui.GetContentRegionAvail()
     local childHeight = (availHeight or 200) * 0.5 - 30
@@ -45,7 +44,6 @@ end
 
 local function renderOutgoingSection(dataModule, callbacks)
     imgui.Text("Outgoing Requests")
-    imgui.Separator()
     
     imgui.BeginChild("##outgoing_requests_child", {0, 0}, true)
     

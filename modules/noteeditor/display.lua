@@ -215,6 +215,13 @@ function M.DrawWindow(settings, dataModule)
     
     state.windowOpen = windowOpenTable[1]
     
+    -- Apply font scale
+    local fontScaleApp = _G.FFXIFriendListApp
+    if fontScaleApp and fontScaleApp.features and fontScaleApp.features.themes then
+        local fontScale = fontScaleApp.features.themes:getFontScale() or 1.0
+        imgui.SetWindowFontScale(fontScale)
+    end
+    
     if imgui.Button("Lock") then
         state.locked = not state.locked
         saveWindowState()

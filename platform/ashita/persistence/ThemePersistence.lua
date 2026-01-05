@@ -176,6 +176,7 @@ function M.loadFromFile()
         customThemeName = "",
         backgroundAlpha = 0.95,
         textAlpha = 1.0,
+        fontScale = 1.0,
         customThemes = {}
     }
     
@@ -217,6 +218,15 @@ function M.loadFromFile()
         local alpha = tonumber(textAlphaStr)
         if alpha and alpha >= 0.0 and alpha <= 1.0 then
             state.textAlpha = alpha
+        end
+    end
+    
+    -- Read font scale
+    local fontScaleStr = readIniValue(configPath, "FontScale")
+    if fontScaleStr and fontScaleStr ~= "" then
+        local scale = tonumber(fontScaleStr)
+        if scale and scale >= 0.5 and scale <= 2.0 then
+            state.fontScale = scale
         end
     end
     
@@ -346,6 +356,9 @@ function M.saveToFile(state)
     -- Write alpha values
     writeIniValue(configPath, "BackgroundAlpha", tostring(state.backgroundAlpha))
     writeIniValue(configPath, "TextAlpha", tostring(state.textAlpha))
+    
+    -- Write font scale
+    writeIniValue(configPath, "FontScale", tostring(state.fontScale or 1.0))
     
     -- Write custom themes to separate file
     local customThemesPath = getCustomThemesPath()

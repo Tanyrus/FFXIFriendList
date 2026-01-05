@@ -80,6 +80,7 @@ local state = {
     },
     themeBackgroundAlpha = 0.95,
     themeTextAlpha = 1.0,
+    themeFontScale = 1.0,
     themeNewThemeName = {""},
     themeLastThemeIndex = -999,
     sortColumn = "name",
@@ -370,6 +371,13 @@ function M.DrawWindow(settings, dataModule)
     end
     
     if windowOpen then
+        -- Apply font scale
+        local app = _G.FFXIFriendListApp
+        if app and app.features and app.features.themes then
+            local fontScale = app.features.themes:getFontScale() or 1.0
+            imgui.SetWindowFontScale(fontScale)
+        end
+        
         M.SaveWindowState()
         M.RenderContent(dataModule)
     end

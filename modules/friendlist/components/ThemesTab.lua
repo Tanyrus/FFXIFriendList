@@ -20,6 +20,7 @@ function M.Render(state, dataModule, callbacks)
     if app and app.features and app.features.themes then
         state.themeBackgroundAlpha = app.features.themes:getBackgroundAlpha() or 0.95
         state.themeTextAlpha = app.features.themes:getTextAlpha() or 1.0
+        state.themeFontScale = app.features.themes:getFontScale() or 1.0
     end
     
     local currentThemeIndex = themesDataModule.GetCurrentThemeIndex()
@@ -213,6 +214,20 @@ function M.RenderThemeSelection(state, dataModule)
             local app = _G.FFXIFriendListApp
             if app and app.features and app.features.themes then
                 app.features.themes:setTextAlpha(textAlpha[1])
+            end
+        end
+        
+        imgui.Spacing()
+        
+        imgui.Text("Font Scale:")
+        imgui.SameLine()
+        imgui.Text(string.format("(%.0f%%)", (state.themeFontScale or 1.0) * 100))
+        local fontScale = {state.themeFontScale or 1.0}
+        if imgui.SliderFloat("##fontScale", fontScale, 0.5, 2.0, "%.2f") then
+            state.themeFontScale = fontScale[1]
+            local app = _G.FFXIFriendListApp
+            if app and app.features and app.features.themes then
+                app.features.themes:setFontScale(fontScale[1])
             end
         end
         

@@ -258,6 +258,13 @@ function M.DrawWindow(settings, dataModule)
     
     -- Update window state based on Begin return value
     if windowOpen then
+        -- Apply font scale
+        local app = _G.FFXIFriendListApp
+        if app and app.features and app.features.themes then
+            local fontScale = app.features.themes:getFontScale() or 1.0
+            imgui.SetWindowFontScale(fontScale)
+        end
+        
         -- Window is open - render content
         -- Save window state periodically (position, size)
         M.SaveWindowState()

@@ -117,7 +117,7 @@ function M.Render(friend, settings, forceAll)
         if tag and tag ~= "" then
             imgui.Text(tagcore.capitalizeTag(tag))
         else
-            imgui.Text("Untagged")
+            imgui.Text("General")
         end
     end
     

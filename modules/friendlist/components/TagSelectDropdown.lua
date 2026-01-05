@@ -24,7 +24,7 @@ function M.Render(currentTag, friendKey, callbacks)
     
     imgui.PushItemWidth(150)
     if imgui.BeginCombo("##tag_select", displayTag) then
-        if imgui.Selectable("Untagged##tag_untagged", currentTag == nil or currentTag == "") then
+        if imgui.Selectable("General##tag_general", currentTag == nil or currentTag == "") then
             if callbacks and callbacks.onTagChanged then
                 callbacks.onTagChanged(friendKey, nil)
             end
@@ -75,12 +75,12 @@ function M.RenderCompact(currentTag, friendKey, callbacks, uniqueId)
     end
     
     local tagOrder = tagsFeature:getAllTags() or {}
-    local displayTag = currentTag and tagcore.capitalizeTag(currentTag) or "Untagged"
+    local displayTag = currentTag and tagcore.capitalizeTag(currentTag) or "General"
     local comboId = "##tag_select_" .. (uniqueId or "default")
     
     imgui.PushItemWidth(120)
     if imgui.BeginCombo(comboId, displayTag) then
-        if imgui.Selectable("Untagged", currentTag == nil or currentTag == "") then
+        if imgui.Selectable("General", currentTag == nil or currentTag == "") then
             if callbacks and callbacks.onTagChanged then
                 callbacks.onTagChanged(friendKey, nil)
             end

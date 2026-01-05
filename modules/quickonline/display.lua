@@ -9,6 +9,7 @@ local icons = require('libs.icons')
 local scaling = require('scaling')
 local InputHelper = require('ui.helpers.InputHelper')
 local HoverTooltip = require('ui.widgets.HoverTooltip')
+local FontManager = require('app.ui.FontManager')
 
 local FriendContextMenu = require('modules.friendlist.components.FriendContextMenu')
 local FriendDetailsPopup = require('modules.friendlist.components.FriendDetailsPopup')
@@ -256,23 +257,26 @@ function M.DrawWindow(settings, dataModule)
         end
     end
     
-    -- Update window state based on Begin return value
     if windowOpen then
-        -- Window is open - render content
-        -- Save window state periodically (position, size)
-        M.SaveWindowState()
-        
-        -- Render top bar (unless hidden - read directly from gConfig)
-        local hideTopBar = gConfig and gConfig.quickOnlineSettings and gConfig.quickOnlineSettings.hideTopBar or false
-        if not hideTopBar then
-            M.RenderTopBar(dataModule)
-            imgui.Spacing()
+        local app = _G.FFXIFriendListApp
+        local fontSizePx = 14
+        if app and app.features and app.features.themes then
+            fontSizePx = app.features.themes:getFontSizePx() or 14
         end
         
-        -- Friend table (online friends only)
-        imgui.BeginChild("##quick_online_body", {0, 0}, false)
-        M.RenderFriendsTable(dataModule)
-        imgui.EndChild()
+        FontManager.withFont(fontSizePx, function()
+            M.SaveWindowState()
+            
+            local hideTopBar = gConfig and gConfig.quickOnlineSettings and gConfig.quickOnlineSettings.hideTopBar or false
+            if not hideTopBar then
+                M.RenderTopBar(dataModule)
+                imgui.Spacing()
+            end
+            
+            imgui.BeginChild("##quick_online_body", {0, 0}, false)
+            M.RenderFriendsTable(dataModule)
+            imgui.EndChild()
+        end)
     end
     
     imgui.End()
@@ -296,19 +300,18 @@ function M.DrawWindow(settings, dataModule)
     end
 end
 
--- Render top bar (lock button, refresh button)
 function M.RenderTopBar(dataModule)
     local isConnected = dataModule.IsConnected()
+    local s = FontManager.scaled
     
-    -- Increase button frame padding and add rounding for all buttons
-    imgui.PushStyleVar(ImGuiStyleVar_FramePadding, {6, 6})
-    imgui.PushStyleVar(ImGuiStyleVar_FrameRounding, 4)
+    imgui.PushStyleVar(ImGuiStyleVar_FramePadding, {s(6), s(6)})
+    imgui.PushStyleVar(ImGuiStyleVar_FrameRounding, s(4))
     
-    -- Lock button (first)
     local lockIconName = state.locked and "lock" or "unlock"
     local lockTooltip = state.locked and "Window locked (click to unlock)" or "Lock window position"
     
-    local clicked = icons.RenderIconButton(lockIconName, 21, 21, lockTooltip)
+    local lockIconSize = s(21)
+    local clicked = icons.RenderIconButton(lockIconName, lockIconSize, lockIconSize, lockTooltip)
     if clicked == nil then
         local lockLabel = state.locked and "Locked" or "Unlocked"
         clicked = imgui.Button(lockLabel .. "##lock_btn")
@@ -330,9 +333,8 @@ function M.RenderTopBar(dataModule)
         end
     end
     
-    imgui.SameLine(0, 8)
+    imgui.SameLine(0, s(8))
     
-    -- Refresh button
     if not isConnected then
         imgui.PushStyleColor(ImGuiCol_Button, {0.3, 0.3, 0.3, 1.0})
         imgui.PushStyleColor(ImGuiCol_ButtonHovered, {0.3, 0.3, 0.3, 1.0})
@@ -356,7 +358,7 @@ function M.RenderTopBar(dataModule)
         imgui.SetTooltip("Refresh friend list")
     end
     
-    imgui.SameLine(0, 8)
+    imgui.SameLine(0, s(8))
     
     if imgui.Button("Full") then
         if gConfig then
@@ -381,7 +383,6 @@ function M.RenderTopBar(dataModule)
         imgui.SetTooltip("Switch to full view (Main Window)")
     end
     
-    -- Pop button frame padding and rounding
     imgui.PopStyleVar(2)
 end
 

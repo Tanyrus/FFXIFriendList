@@ -171,11 +171,12 @@ end
 -- Load theme state from files
 function M.loadFromFile()
     local state = {
-        themeIndex = 0,  -- Default to Classic
+        themeIndex = 0,
         presetName = "",
         customThemeName = "",
         backgroundAlpha = 0.95,
         textAlpha = 1.0,
+        fontSizePx = 14,
         customThemes = {}
     }
     
@@ -217,6 +218,14 @@ function M.loadFromFile()
         local alpha = tonumber(textAlphaStr)
         if alpha and alpha >= 0.0 and alpha <= 1.0 then
             state.textAlpha = alpha
+        end
+    end
+    
+    local fontSizeStr = readIniValue(configPath, "FontSizePx")
+    if fontSizeStr and fontSizeStr ~= "" then
+        local size = tonumber(fontSizeStr)
+        if size and (size == 14 or size == 18 or size == 24 or size == 32) then
+            state.fontSizePx = size
         end
     end
     
@@ -346,6 +355,8 @@ function M.saveToFile(state)
     -- Write alpha values
     writeIniValue(configPath, "BackgroundAlpha", tostring(state.backgroundAlpha))
     writeIniValue(configPath, "TextAlpha", tostring(state.textAlpha))
+    
+    writeIniValue(configPath, "FontSizePx", tostring(state.fontSizePx or 14))
     
     -- Write custom themes to separate file
     local customThemesPath = getCustomThemesPath()

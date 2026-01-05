@@ -1,5 +1,6 @@
 local imgui = require('imgui')
 local icons = require('libs.icons')
+local FontManager = require('app.ui.FontManager')
 
 local M = {}
 
@@ -20,19 +21,18 @@ end
 
 function M.Render(state, dataModule, onRefresh, onLockChanged, onViewToggle, showAboutPopup)
     local isConnected = dataModule.IsConnected()
+    local s = FontManager.scaled
     
-    -- Add 3 pixel top padding
-    imgui.Dummy({0, 3})
+    imgui.Dummy({0, s(3)})
     
-    -- Increase button frame padding and add rounding for all buttons
-    imgui.PushStyleVar(ImGuiStyleVar_FramePadding, {6, 6})
-    imgui.PushStyleVar(ImGuiStyleVar_FrameRounding, 4)
+    imgui.PushStyleVar(ImGuiStyleVar_FramePadding, {s(6), s(6)})
+    imgui.PushStyleVar(ImGuiStyleVar_FrameRounding, s(4))
     
-    -- Lock button (first)
     local lockIconName = state.locked and "lock" or "unlock"
     local lockTooltip = state.locked and "Window locked (click to unlock)" or "Lock window position"
     
-    local clicked = icons.RenderIconButton(lockIconName, 21, 21, lockTooltip)
+    local lockIconSize = s(21)
+    local clicked = icons.RenderIconButton(lockIconName, lockIconSize, lockIconSize, lockTooltip)
     if clicked == nil then
         local lockLabel = state.locked and "Locked" or "Unlocked"
         clicked = imgui.Button(lockLabel .. "##lock_btn")
@@ -48,9 +48,8 @@ function M.Render(state, dataModule, onRefresh, onLockChanged, onViewToggle, sho
         end
     end
     
-    imgui.SameLine(0, 8)
+    imgui.SameLine(0, s(8))
     
-    -- Refresh button
     if not isConnected then
         imgui.PushStyleColor(ImGuiCol_Button, {0.3, 0.3, 0.3, 1.0})
         imgui.PushStyleColor(ImGuiCol_ButtonHovered, {0.3, 0.3, 0.3, 1.0})
@@ -67,7 +66,7 @@ function M.Render(state, dataModule, onRefresh, onLockChanged, onViewToggle, sho
         imgui.PopStyleColor(3)
     end
     
-    imgui.SameLine(0, 8)
+    imgui.SameLine(0, s(8))
     
     if imgui.Button("Condensed") then
         if onViewToggle then
@@ -78,25 +77,22 @@ function M.Render(state, dataModule, onRefresh, onLockChanged, onViewToggle, sho
         imgui.SetTooltip("Switch to condensed view (Compact Friend List)")
     end
     
-    local iconSize = 24
-    local iconSpacing = 4
-    local buttonPadding = 4  -- Frame padding (2) * 2
+    local iconSize = s(24)
+    local iconSpacing = s(4)
+    local buttonPadding = s(4)
     local iconButtonSize = iconSize + buttonPadding
     
-    -- Calculate width needed for 3 social icons
     local socialIconsWidth = (iconButtonSize * 3) + (iconSpacing * 2)
     
-    -- Get available width and calculate spacer to right-align
     imgui.SameLine(0, 0)
     local availWidth, _ = imgui.GetContentRegionAvail()
     if type(availWidth) == "number" and availWidth > socialIconsWidth then
         imgui.Dummy({availWidth - socialIconsWidth, 1})
         imgui.SameLine(0, 0)
     else
-        imgui.SameLine(0, 16)
+        imgui.SameLine(0, s(16))
     end
     
-    -- Discord button
     local discordClicked = icons.RenderIconButton("discord", iconSize, iconSize, "Discord")
     if discordClicked == nil then
         -- Fallback to text button if icon not loaded
@@ -134,11 +130,9 @@ function M.Render(state, dataModule, onRefresh, onLockChanged, onViewToggle, sho
         if showAboutPopup then showAboutPopup() end
     end
     
-    -- Pop button frame padding and rounding
     imgui.PopStyleVar(2)
     
-    -- Add 3 pixel bottom padding
-    imgui.Dummy({0, 3})
+    imgui.Dummy({0, s(3)})
 end
 
 return M

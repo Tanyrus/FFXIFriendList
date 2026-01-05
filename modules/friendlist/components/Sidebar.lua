@@ -1,12 +1,26 @@
 local imgui = require('imgui')
-local UIConstants = require('core.UIConstants')
+local FontManager = require('app.ui.FontManager')
 
 local M = {}
 
-function M.Render(state, onTabChange, onSaveState)
-    local tabs = {"Friends", "General", "Privacy", "Tags", "Notifications", "Controls", "Themes"}
+function M.Render(state, dataModule, onSaveState)
+    local incomingCount = 0
+    if dataModule and dataModule.GetIncomingRequestsCount then
+        incomingCount = dataModule.GetIncomingRequestsCount()
+    end
     
-    imgui.PushStyleVar(ImGuiStyleVar_FramePadding, UIConstants.FRAME_PADDING)
+    local requestsLabel = "Requests"
+    if incomingCount > 0 then
+        requestsLabel = "Requests (" .. incomingCount .. ")"
+    end
+    
+    local tabs = {"Friends", requestsLabel, "General", "Privacy", "Tags", "Notifications", "Controls", "Themes"}
+    
+    local s = FontManager.scaled
+    local framePadding = {s(10), s(8)}
+    local buttonSize = {s(164), s(32)}
+    
+    imgui.PushStyleVar(ImGuiStyleVar_FramePadding, framePadding)
     
     for i = 0, #tabs - 1 do
         local isSelected = (state.selectedTab == i)
@@ -18,11 +32,8 @@ function M.Render(state, onTabChange, onSaveState)
             imgui.PushStyleColor(ImGuiCol_ButtonActive, {0.1, 0.4, 0.7, 1.0})
         end
         
-        if imgui.Button(tabLabel .. "##tab_" .. i, UIConstants.BUTTON_SIZE) then
+        if imgui.Button(tabLabel .. "##tab_" .. i, buttonSize) then
             state.selectedTab = i
-            if onTabChange then
-                onTabChange(i)
-            end
             if onSaveState then
                 onSaveState()
             end

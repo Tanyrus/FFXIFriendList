@@ -3,6 +3,7 @@ local ThemeHelper = require('libs.themehelper')
 local utils = require('modules.friendlist.components.helpers.utils')
 local tagcore = require('core.tagcore')
 local TagSelectDropdown = require('modules.friendlist.components.TagSelectDropdown')
+local FontManager = require('app.ui.FontManager')
 
 local M = {}
 
@@ -101,6 +102,13 @@ function M.Render(friend, state, callbacks)
     
     local windowOpen = {true}
     if imgui.Begin("Friend Details##friend_details", windowOpen, windowFlags) then
+        local app = _G.FFXIFriendListApp
+        local fontSizePx = 14
+        if app and app.features and app.features.themes then
+            fontSizePx = app.features.themes:getFontSizePx() or 14
+        end
+        
+        FontManager.withFont(fontSizePx, function()
         local displayName = friendName
         local isOnline = friend.isOnline
         local anonColor = {0.4, 0.65, 0.85, 1.0}  -- Dark sky blue
@@ -261,6 +269,7 @@ function M.Render(friend, state, callbacks)
                 detailsState.statusMessage = ""
             end
         end
+        end)
     end
     imgui.End()
     

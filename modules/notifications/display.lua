@@ -2,6 +2,7 @@ local imgui = require('imgui')
 local NotificationSoundPolicy = require('core.notificationsoundpolicy')
 local ThemeHelper = require('libs.themehelper')
 local SoundPlayer = require('platform.services.SoundPlayer')
+local FontManager = require('app.ui.FontManager')
 
 local M = {}
 
@@ -289,23 +290,31 @@ local function renderToast(toast, targetY)
         return 60
     end
     
-    local color = getToastColor(toast.type or ToastType.Info)
-    
-    imgui.PushStyleColor(ImGuiCol_Text, {color[1], color[2], color[3], alpha})
-    imgui.Text(toast.title or "")
-    imgui.PopStyleColor()
-    
-    imgui.PushStyleColor(ImGuiCol_Text, {1.0, 1.0, 1.0, alpha * 0.9})
-    imgui.Text(toast.message or "")
-    imgui.PopStyleColor()
-    
-    local windowHeight = 60
-    local _, height = imgui.GetWindowSize()
-    if height and height > 0 then
-        windowHeight = height
+    local app = _G.FFXIFriendListApp
+    local fontSizePx = 14
+    if app and app.features and app.features.themes then
+        fontSizePx = app.features.themes:getFontSizePx() or 14
     end
     
-    toast.lastHeight = windowHeight
+    local windowHeight = 60
+    FontManager.withFont(fontSizePx, function()
+        local color = getToastColor(toast.type or ToastType.Info)
+        
+        imgui.PushStyleColor(ImGuiCol_Text, {color[1], color[2], color[3], alpha})
+        imgui.Text(toast.title or "")
+        imgui.PopStyleColor()
+        
+        imgui.PushStyleColor(ImGuiCol_Text, {1.0, 1.0, 1.0, alpha * 0.9})
+        imgui.Text(toast.message or "")
+        imgui.PopStyleColor()
+        
+        local _, height = imgui.GetWindowSize()
+        if height and height > 0 then
+            windowHeight = height
+        end
+        
+        toast.lastHeight = windowHeight
+    end)
     
     imgui.End()
     imgui.PopStyleColor(1)

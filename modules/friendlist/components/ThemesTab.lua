@@ -20,6 +20,7 @@ function M.Render(state, dataModule, callbacks)
     if app and app.features and app.features.themes then
         state.themeBackgroundAlpha = app.features.themes:getBackgroundAlpha() or 0.95
         state.themeTextAlpha = app.features.themes:getTextAlpha() or 1.0
+        state.themeFontSizePx = app.features.themes:getFontSizePx() or 14
     end
     
     local currentThemeIndex = themesDataModule.GetCurrentThemeIndex()
@@ -214,6 +215,38 @@ function M.RenderThemeSelection(state, dataModule)
             if app and app.features and app.features.themes then
                 app.features.themes:setTextAlpha(textAlpha[1])
             end
+        end
+        
+        imgui.Spacing()
+        
+        imgui.Text("Font Size:")
+        local fontSizes = {14, 18, 24, 32}
+        local fontSizeLabels = {"14px", "18px", "24px", "32px"}
+        local currentFontSize = state.themeFontSizePx or 14
+        local currentFontIndex = 0
+        for i, size in ipairs(fontSizes) do
+            if size == currentFontSize then
+                currentFontIndex = i - 1
+                break
+            end
+        end
+        
+        local previewLabel = fontSizeLabels[currentFontIndex + 1] or "14px"
+        if imgui.BeginCombo("##fontSizePx", previewLabel) then
+            for i, label in ipairs(fontSizeLabels) do
+                local isSelected = (i - 1 == currentFontIndex)
+                if imgui.Selectable(label, isSelected) then
+                    state.themeFontSizePx = fontSizes[i]
+                    local app = _G.FFXIFriendListApp
+                    if app and app.features and app.features.themes then
+                        app.features.themes:setFontSizePx(fontSizes[i])
+                    end
+                end
+                if isSelected then
+                    imgui.SetItemDefaultFocus()
+                end
+            end
+            imgui.EndCombo()
         end
         
         imgui.Spacing()

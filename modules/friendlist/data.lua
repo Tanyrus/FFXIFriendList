@@ -84,6 +84,11 @@ function M.GetOutgoingRequests()
     return state.outgoingRequests
 end
 
+-- Get incoming requests count
+function M.GetIncomingRequestsCount()
+    return #state.incomingRequests
+end
+
 -- Get connection state
 function M.GetConnectionState()
     return state.connectionState

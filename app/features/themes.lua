@@ -75,6 +75,7 @@ function M.Themes.new(deps)
     self.customThemes = {}
     self.backgroundAlpha = 0.95
     self.textAlpha = 1.0
+    self.fontSizePx = 14
     -- Editing state: temporary copy of theme being edited
     self.currentCustomTheme = nil  -- Temporary copy for built-in theme editing
     self.isEditingBuiltInTheme = false  -- Flag indicating if built-in theme is being edited
@@ -116,6 +117,11 @@ function M.Themes:loadThemes()
             self.textAlpha = state.textAlpha
         end
         
+        local FontManager = require('app.ui.FontManager')
+        if state.fontSizePx and FontManager.isValidSize(state.fontSizePx) then
+            self.fontSizePx = state.fontSizePx
+        end
+        
         -- Initialize currentCustomTheme if custom theme is selected
         if self.themeIndex == -1 and self.customThemeName and self.customThemeName ~= "" then
             for _, theme in ipairs(self.customThemes) do
@@ -149,20 +155,21 @@ function M.Themes:saveThemes()
         customThemeName = self.customThemeName,
         backgroundAlpha = self.backgroundAlpha,
         textAlpha = self.textAlpha,
+        fontSizePx = self.fontSizePx,
         customThemes = self.customThemes
     }
     
     return ThemePersistence.saveToFile(state)
 end
 
--- Get state snapshot (required interface)
 function M.Themes:getState()
     return {
         themeIndex = self.themeIndex,
         presetName = self.presetName,
         customThemeName = self.customThemeName,
         backgroundAlpha = self.backgroundAlpha,
-        textAlpha = self.textAlpha
+        textAlpha = self.textAlpha,
+        fontSizePx = self.fontSizePx
     }
 end
 
@@ -232,6 +239,18 @@ function M.Themes:setTextAlpha(alpha)
     end
     self.textAlpha = num
     -- Save to persistence
+    self:saveThemes()
+    return true
+end
+
+function M.Themes:getFontSizePx()
+    return self.fontSizePx
+end
+
+function M.Themes:setFontSizePx(size)
+    local FontManager = require('app.ui.FontManager')
+    local normalized = FontManager.normalizeSize(size)
+    self.fontSizePx = normalized
     self:saveThemes()
     return true
 end

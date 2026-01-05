@@ -63,6 +63,19 @@ function M.normalizeSize(size)
     return DEFAULT_SIZE
 end
 
+function M.getScale()
+    local app = _G.FFXIFriendListApp
+    local fontSizePx = DEFAULT_SIZE
+    if app and app.features and app.features.themes then
+        fontSizePx = app.features.themes:getFontSizePx() or DEFAULT_SIZE
+    end
+    return fontSizePx / DEFAULT_SIZE
+end
+
+function M.scaled(value)
+    return math.floor(value * M.getScale() + 0.5)
+end
+
 function M.withFont(sizePx, fn)
     if not fn then
         return

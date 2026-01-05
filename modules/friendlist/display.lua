@@ -466,7 +466,8 @@ function M.RenderContent(dataModule)
     
     imgui.Spacing()
     
-    imgui.BeginChild("Sidebar", {UIConstants.SIDEBAR_WIDTH, 0}, false)
+    local sidebarWidth = FontManager.scaled(UIConstants.SIDEBAR_WIDTH)
+    imgui.BeginChild("Sidebar", {sidebarWidth, 0}, false)
     Sidebar.Render(state, dataModule, M.SaveWindowState)
     imgui.EndChild()
     

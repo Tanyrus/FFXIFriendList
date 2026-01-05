@@ -328,10 +328,11 @@ end
 function M.Connection:getHeaders(characterName)
     characterName = characterName or ""
     local ProtocolVersion = require("protocol.ProtocolVersion")
+    local addonVersion = addon and addon.version or "0.9.9"
     
     local headers = {
         ["Content-Type"] = "application/json",
-        ["User-Agent"] = "FFXIFriendList/1.0.0",
+        ["User-Agent"] = "FFXIFriendList/" .. addonVersion,
         ["X-Protocol-Version"] = ProtocolVersion.PROTOCOL_VERSION
     }
     
@@ -404,22 +405,50 @@ function M.Connection:autoConnect(characterName)
     
     local storedApiKey = self:getApiKey(normalizedName)
     
+    -- If no API key for this character, use any available API key from linked characters
+    -- This allows alt registration to link to the existing account
+    if not storedApiKey or storedApiKey == "" then
+        for charName, apiKey in pairs(self.apiKeys) do
+            if apiKey and apiKey ~= "" then
+                storedApiKey = apiKey
+                if self.logger and self.logger.debug then
+                    self.logger.debug("[Connection] Using API key from " .. charName .. " for alt registration")
+                end
+                break
+            end
+        end
+    end
+    
     local function attemptConnect()
         local baseUrl = self:getBaseUrl()
         baseUrl = baseUrl:gsub("/+$", "")
-        local url = baseUrl .. Endpoints.AUTH.ENSURE
         
-        local requestBody = RequestEncoder.encodeAuthEnsure(normalizedName, realmId)
+        -- If we have an API key, use /api/characters/active (auto-creates character on same account)
+        -- If no API key, use /api/auth/ensure (new registration or recovery)
+        local hasApiKey = storedApiKey and storedApiKey ~= ""
+        local url, requestBody
+        
+        if hasApiKey then
+            -- Use characters/active endpoint (matches C++ behavior)
+            url = baseUrl .. Endpoints.CHARACTERS.ACTIVE
+            requestBody = RequestEncoder.encodeSetActiveCharacter(normalizedName, realmId)
+        else
+            -- Use auth/ensure for new registrations
+            url = baseUrl .. Endpoints.AUTH.ENSURE
+            requestBody = RequestEncoder.encodeAuthEnsure(normalizedName, realmId)
+        end
         
         local ProtocolVersion = require("protocol.ProtocolVersion")
+        local addonVersion = addon and addon.version or "0.9.9"
         local headers = {
             ["Content-Type"] = "application/json",
-            ["User-Agent"] = "FFXIFriendList/1.0.0",
+            ["User-Agent"] = "FFXIFriendList/" .. addonVersion,
             ["X-Protocol-Version"] = ProtocolVersion.PROTOCOL_VERSION
         }
         
-        if storedApiKey and storedApiKey ~= "" then
+        if hasApiKey then
             headers["X-API-Key"] = storedApiKey
+            headers["characterName"] = normalizedName
         end
         
         if self.session and self.session.getSessionId then
@@ -495,7 +524,12 @@ function M.Connection:handleAuthResponse(success, response, characterName, fallb
         return
     end
     
-    if not envelope.success or envelope.type ~= MessageTypes.ResponseType.AuthEnsureResponse then
+    -- Accept both AuthEnsureResponse (new registration) and SetActiveCharacterResponse (alt linking)
+    local validResponseTypes = {
+        [MessageTypes.ResponseType.AuthEnsureResponse] = true,
+        [MessageTypes.ResponseType.SetActiveCharacterResponse] = true
+    }
+    if not envelope.success or not validResponseTypes[envelope.type] then
         self:setFailed()
         self.lastError = envelope.error or "Authentication failed"
         if self.logger and self.logger.echo then

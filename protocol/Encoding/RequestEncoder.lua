@@ -407,5 +407,17 @@ function M.encodeAuthEnsure(characterName, realmId)
     return Json.encode(body)
 end
 
+-- Encode SetActiveCharacter request (for /api/characters/active endpoint)
+-- Used when switching to a character with an existing API key (alt registration)
+-- Server will auto-create the character if it doesn't exist
+-- Body: {"characterName": "...", "realmId": "..."}
+function M.encodeSetActiveCharacter(characterName, realmId)
+    local body = {
+        characterName = characterName,
+        realmId = realmId or "notARealServer"
+    }
+    return Json.encode(body)
+end
+
 return M
 

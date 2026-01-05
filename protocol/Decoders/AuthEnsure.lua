@@ -18,12 +18,18 @@ function M.decode(payload)
         isNewAccount = false,
         isNewCharacter = false,
         wasRecovered = false,
+        wasMerged = false,
         preferences = {},
         privacy = {}
     }
     
     if payload.characterName then
         result.characterName = payload.characterName
+    end
+    
+    -- SetActiveCharacterResponse uses activeCharacterName instead of characterName
+    if payload.activeCharacterName then
+        result.characterName = payload.activeCharacterName
     end
     
     if payload.apiKey then
@@ -56,6 +62,15 @@ function M.decode(payload)
     
     if payload.wasRecovered ~= nil then
         result.wasRecovered = payload.wasRecovered == true
+    end
+    
+    -- SetActiveCharacterResponse uses wasCreated/wasMerged instead of isNewAccount/isNewCharacter
+    if payload.wasCreated ~= nil then
+        result.isNewCharacter = payload.wasCreated == true
+    end
+    
+    if payload.wasMerged ~= nil then
+        result.wasMerged = payload.wasMerged == true
     end
     
     if payload.preferences and type(payload.preferences) == "table" then

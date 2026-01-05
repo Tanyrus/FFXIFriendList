@@ -156,6 +156,24 @@ function M.Render(state, dataModule, callbacks)
     
     imgui.Spacing()
     
+    local showTestPreview = {prefs.notificationShowTestPreview or false}
+    if imgui.Checkbox("Show test notification", showTestPreview) then
+        if app and app.features and app.features.preferences then
+            app.features.preferences:setPref("notificationShowTestPreview", showTestPreview[1])
+            app.features.preferences:save()
+        end
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("Show a persistent test notification that can be dragged with Shift to set the position.")
+    end
+    
+    imgui.Spacing()
+    
+    imgui.Text("Tip: Hold Shift and drag a notification to reposition it.")
+    imgui.Text("Enable 'Show test notification' to place it easily.")
+    
+    imgui.Spacing()
+    
     M.RenderNotificationPosition(state, prefs)
 end
 

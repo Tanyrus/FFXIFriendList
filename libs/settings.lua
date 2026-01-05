@@ -156,6 +156,7 @@ local defaultSettings = T{
             soundOnFriendOnline = true,
             soundOnFriendRequest = true,
             notificationSoundVolume = 0.6,
+            notificationShowTestPreview = false,
             mainShowJob = true,
             mainShowZone = false,
             mainShowNationRank = false,

@@ -90,6 +90,7 @@ function M.Preferences:load()
     self.prefs.soundOnFriendOnline = getVal(prefs.soundOnFriendOnline, true)
     self.prefs.soundOnFriendRequest = getVal(prefs.soundOnFriendRequest, true)
     self.prefs.notificationSoundVolume = getVal(prefs.notificationSoundVolume, 0.6)
+    self.prefs.notificationShowTestPreview = getVal(prefs.notificationShowTestPreview, false)
     -- Notification background color (nil = use theme, otherwise {r, g, b, a})
     if prefs.notificationBgColor and type(prefs.notificationBgColor) == "table" then
         self.prefs.notificationBgColor = {
@@ -142,6 +143,7 @@ function M.Preferences:save()
         soundOnFriendOnline = self.prefs.soundOnFriendOnline,
         soundOnFriendRequest = self.prefs.soundOnFriendRequest,
         notificationSoundVolume = self.prefs.notificationSoundVolume,
+        notificationShowTestPreview = self.prefs.notificationShowTestPreview,
         notificationBgColor = self.prefs.notificationBgColor,
         controllerLayout = self.prefs.controllerLayout,
         flistBindButton = self.prefs.flistBindButton,
@@ -170,6 +172,7 @@ function M.Preferences:setPref(key, value)
     -- Use rawget to check for key existence without triggering __index
     if rawget(self.prefs, key) ~= nil or 
        key == "notificationBgColor" or  -- Allow notificationBgColor even if nil
+       key == "notificationShowTestPreview" or  -- Allow notificationShowTestPreview
        (self.prefs[key] == nil and key ~= nil) then  -- Key exists but value is nil
         self.prefs[key] = value
         return true
@@ -177,6 +180,7 @@ function M.Preferences:setPref(key, value)
     -- Fallback: if it's a known preference field, allow setting it
     local knownPrefs = {
         notificationBgColor = true,
+        notificationShowTestPreview = true,
         -- Add other optional fields here if needed
     }
     if knownPrefs[key] then

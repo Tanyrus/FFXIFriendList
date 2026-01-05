@@ -12,6 +12,7 @@ print("=" .. string.rep("=", 50))
 local tests = {
     require("tests.app.ConnectionTest"),
     require("tests.app.FriendsTest"),
+    require("tests.app.FriendsNotificationsTest"),
     require("tests.app.NotesTest"),
     -- TODO: Add more tests:
     -- require("tests.app.ServerListTest"),

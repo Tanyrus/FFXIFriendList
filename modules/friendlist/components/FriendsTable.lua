@@ -104,6 +104,7 @@ function M.Render(state, dataModule, callbacks)
     if state.columnVisible.zone then table.insert(visibleColumns, "Zone") end
     if state.columnVisible.nationRank then table.insert(visibleColumns, "Nation/Rank") end
     if state.columnVisible.lastSeen then table.insert(visibleColumns, "Last Seen") end
+    if state.columnVisible.addedAs then table.insert(visibleColumns, "Added As") end
     
     if imgui.BeginTable("##friends_table", #visibleColumns, ImGuiTableFlags_Borders) then
         for _, colName in ipairs(visibleColumns) do
@@ -118,6 +119,8 @@ function M.Render(state, dataModule, callbacks)
                 imgui.TableSetupColumn("Nation/Rank", flags, 80.0)
             elseif colName == "Last Seen" then
                 imgui.TableSetupColumn("Last Seen", flags, 120.0)
+            elseif colName == "Added As" then
+                imgui.TableSetupColumn("Added As", flags, 100.0)
             end
         end
         imgui.TableHeadersRow()
@@ -151,6 +154,12 @@ function M.Render(state, dataModule, callbacks)
                 if callbacks.onSaveState then callbacks.onSaveState() end
             end
             
+            local addedAsVisible = {state.columnVisible.addedAs}
+            if imgui.Checkbox("Added As##ctx_col_addedas", addedAsVisible) then
+                state.columnVisible.addedAs = addedAsVisible[1]
+                if callbacks.onSaveState then callbacks.onSaveState() end
+            end
+            
             imgui.EndPopup()
         end
         
@@ -170,6 +179,8 @@ function M.Render(state, dataModule, callbacks)
                     M.RenderNationRankCell(friend)
                 elseif colName == "Last Seen" then
                     M.RenderLastSeenCell(friend)
+                elseif colName == "Added As" then
+                    M.RenderAddedAsCell(friend)
                 end
             end
         end
@@ -349,6 +360,22 @@ function M.RenderLastSeenCell(friend)
         else
             imgui.TextDisabled("Unknown")
         end
+    end
+end
+
+function M.RenderAddedAsCell(friend)
+    local friendedAs = friend.friendedAs or ""
+    local isOnline = friend.isOnline or false
+    
+    -- Capitalize the name for display
+    local displayName = utils.capitalizeName(friendedAs)
+    
+    if displayName == "" then
+        imgui.TextDisabled("-")
+    elseif isOnline then
+        imgui.Text(displayName)
+    else
+        imgui.TextDisabled(displayName)
     end
 end
 

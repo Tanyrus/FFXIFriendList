@@ -333,6 +333,11 @@ ashita.events.register('d3d_present', 'ffxifriendlist_present', function()
         App.tick(app, deltaTime)  -- deltaTime is already in seconds from os.clock()
     end
     
+    -- Don't render or process input until character is loaded
+    if not App.isGameReady() then
+        return nil
+    end
+    
     -- Update menu detection (polling method, every frame but throttled internally)
     if initialized then
         inputHandler.update(deltaTime)

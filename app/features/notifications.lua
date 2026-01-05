@@ -138,6 +138,9 @@ function M.Notifications:push(type, payload)
     if dedupeKey then
         for _, toast in ipairs(self.queue) do
             if toast.dedupeKey == dedupeKey and not toast.dismissed then
+                if self.deps and self.deps.logger and self.deps.logger.debug then
+                    self.deps.logger.debug(string.format("[Notifications] Skipping duplicate toast: type=%s dedupeKey=%s", tostring(type), tostring(dedupeKey)))
+                end
                 return
             end
         end
@@ -146,6 +149,10 @@ function M.Notifications:push(type, payload)
     local toast = M.Toast.new(type, title, message, getTime(self), payload.duration)
     toast.dedupeKey = dedupeKey
     table.insert(self.queue, toast)
+    
+    if self.deps and self.deps.logger and self.deps.logger.debug then
+        self.deps.logger.debug(string.format("[Notifications] Toast enqueued: type=%s title=%s", tostring(type), tostring(title)))
+    end
 end
 
 function M.Notifications:showTestNotification()

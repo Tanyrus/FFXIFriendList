@@ -24,29 +24,35 @@ M.Connection = {}
 M.Connection.__index = M.Connection
 
 local function isGameAlive()
+    -- Safely check if game is alive and character is loaded
     if not AshitaCore then
         return false
     end
     
-    local memoryMgr = AshitaCore:GetMemoryManager()
-    if not memoryMgr then
-        return false
-    end
+    local success, result = pcall(function()
+        local memoryMgr = AshitaCore:GetMemoryManager()
+        if not memoryMgr then
+            return false
+        end
+        
+        local party = memoryMgr:GetParty()
+        if not party then
+            return false
+        end
+        
+        local mainJobLevel = party:GetMemberMainJobLevel(0)
+        if not mainJobLevel or mainJobLevel == 0 then
+            return false
+        end
+        
+        return true
+    end)
     
-    local party = memoryMgr:GetParty()
-    if not party then
-        return false
-    end
-    
-    local mainJobLevel = party:GetMemberMainJobLevel(0)
-    if not mainJobLevel or mainJobLevel == 0 then
-        return false
-    end
-    
-    return true
+    return success and result == true
 end
 
 local function getCharacterName()
+    -- Safely get character name, returns "" if game/character not ready
     if not AshitaCore then
         return ""
     end
@@ -56,27 +62,33 @@ local function getCharacterName()
         return ""
     end
     
+    -- Primary method: Get name from party member 0 (the player)
     local party = memoryMgr:GetParty()
     if party then
-        local playerName = party:GetMemberName(0)
-        if playerName and playerName ~= "" then
+        local success, playerName = pcall(function()
+            return party:GetMemberName(0)
+        end)
+        if success and playerName and playerName ~= "" then
             return string.lower(playerName)
         end
     end
     
-    local entityMgr = memoryMgr:GetEntity()
-    if entityMgr then
-        local resourceMgr = AshitaCore:GetResourceManager()
-        if resourceMgr then
-            local entityCount = resourceMgr:GetEntityCount()
-            for i = 0, entityCount - 1 do
-                local entityType = entityMgr:GetType(i)
-                local namePtr = entityMgr:GetName(i)
-                if entityType == 0 and namePtr and namePtr ~= "" then
-                    return string.lower(namePtr)
-                end
+    -- Fallback: Try entity manager (wrapped in pcall for safety)
+    local success, result = pcall(function()
+        local entityMgr = memoryMgr:GetEntity()
+        if entityMgr then
+            -- Check player entity (index 0 is typically the player)
+            local entityType = entityMgr:GetType(0)
+            local namePtr = entityMgr:GetName(0)
+            if entityType == 0 and namePtr and namePtr ~= "" then
+                return string.lower(namePtr)
             end
         end
+        return ""
+    end)
+    
+    if success and result and result ~= "" then
+        return result
     end
     
     return ""

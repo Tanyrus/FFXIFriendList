@@ -86,7 +86,8 @@ local state = {
         job = true,
         zone = false,
         nationRank = false,
-        lastSeen = false
+        lastSeen = false,
+        addedAs = false
     }
 }
 

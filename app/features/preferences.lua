@@ -88,6 +88,8 @@ function M.Preferences:load()
     self.prefs.soundOnFriendOnline = getVal(prefs.soundOnFriendOnline, true)
     self.prefs.soundOnFriendRequest = getVal(prefs.soundOnFriendRequest, true)
     self.prefs.notificationSoundVolume = getVal(prefs.notificationSoundVolume, 0.6)
+    self.prefs.controllerLayout = getVal(prefs.controllerLayout, 'xinput')
+    self.prefs.flistBindButton = getVal(prefs.flistBindButton, '')
     return true
 end
 
@@ -122,7 +124,9 @@ function M.Preferences:save()
         notificationSoundsEnabled = self.prefs.notificationSoundsEnabled,
         soundOnFriendOnline = self.prefs.soundOnFriendOnline,
         soundOnFriendRequest = self.prefs.soundOnFriendRequest,
-        notificationSoundVolume = self.prefs.notificationSoundVolume
+        notificationSoundVolume = self.prefs.notificationSoundVolume,
+        controllerLayout = self.prefs.controllerLayout,
+        flistBindButton = self.prefs.flistBindButton
     }
     
     -- Update preferences in the data section (preserves apiKeys, serverSelection, etc.)

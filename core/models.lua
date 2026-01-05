@@ -111,6 +111,8 @@ function M.Preferences.new()
     self.soundOnFriendOnline = true
     self.soundOnFriendRequest = true
     self.notificationSoundVolume = 0.6
+    self.controllerLayout = 'xinput'
+    self.flistBindButton = ''
     return self
 end
 
@@ -136,7 +138,9 @@ function M.Preferences:__eq(other)
            self.notificationSoundsEnabled == other.notificationSoundsEnabled and
            self.soundOnFriendOnline == other.soundOnFriendOnline and
            self.soundOnFriendRequest == other.soundOnFriendRequest and
-           self.notificationSoundVolume == other.notificationSoundVolume
+           self.notificationSoundVolume == other.notificationSoundVolume and
+           self.controllerLayout == other.controllerLayout and
+           self.flistBindButton == other.flistBindButton
 end
 
 M.BuiltInTheme = {

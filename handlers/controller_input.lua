@@ -71,6 +71,29 @@ local function handleCloseButton()
     end
 end
 
+-- Handle close button binding
+local function handleCloseBinding(buttonName)
+    local app = _G.FFXIFriendListApp
+    if not app or not app.features or not app.features.preferences then
+        return false
+    end
+
+    local prefs = app.features.preferences:getPrefs()
+    local closeButton = prefs.closeBindButton
+    
+    if closeButton and closeButton ~= '' and buttonName == closeButton then
+        -- Use pcall to prevent errors from breaking controller handling
+        local success, result = pcall(handleCloseButton)
+        if success then
+            return result
+        end
+        -- On error, return false so other bindings can still work
+        return false
+    end
+    
+    return false
+end
+
 -- Global handle binding function to be called by controller files
 -- Using a TRUE global (no _G. prefix) so Lua resolves it at call time, matching cBind's pattern
 HandleBinding = function(buttonName, newState)
@@ -114,29 +137,6 @@ function M.HandleBinding(buttonName, newState)
         end
         return true
     end
-end
-
--- Handle close button binding
-local function handleCloseBinding(buttonName)
-    local app = _G.FFXIFriendListApp
-    if not app or not app.features or not app.features.preferences then
-        return false
-    end
-
-    local prefs = app.features.preferences:getPrefs()
-    local closeButton = prefs.closeBindButton
-    
-    if closeButton and closeButton ~= '' and buttonName == closeButton then
-        -- Use pcall to prevent errors from breaking controller handling
-        local success, result = pcall(handleCloseButton)
-        if success then
-            return result
-        end
-        -- On error, return false so other bindings can still work
-        return false
-    end
-    
-    return false
 end
 
 -- Handle XInput state event (polled every frame)

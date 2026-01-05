@@ -9,6 +9,7 @@ local icons = require('libs.icons')
 local scaling = require('scaling')
 local InputHelper = require('ui.helpers.InputHelper')
 local HoverTooltip = require('ui.widgets.HoverTooltip')
+local FontManager = require('app.ui.FontManager')
 
 local FriendContextMenu = require('modules.friendlist.components.FriendContextMenu')
 local FriendDetailsPopup = require('modules.friendlist.components.FriendDetailsPopup')
@@ -256,30 +257,26 @@ function M.DrawWindow(settings, dataModule)
         end
     end
     
-    -- Update window state based on Begin return value
     if windowOpen then
-        -- Apply font scale
         local app = _G.FFXIFriendListApp
+        local fontSizePx = 14
         if app and app.features and app.features.themes then
-            local fontScale = app.features.themes:getFontScale() or 1.0
-            imgui.SetWindowFontScale(fontScale)
+            fontSizePx = app.features.themes:getFontSizePx() or 14
         end
         
-        -- Window is open - render content
-        -- Save window state periodically (position, size)
-        M.SaveWindowState()
-        
-        -- Render top bar (unless hidden - read directly from gConfig)
-        local hideTopBar = gConfig and gConfig.quickOnlineSettings and gConfig.quickOnlineSettings.hideTopBar or false
-        if not hideTopBar then
-            M.RenderTopBar(dataModule)
-            imgui.Spacing()
-        end
-        
-        -- Friend table (online friends only)
-        imgui.BeginChild("##quick_online_body", {0, 0}, false)
-        M.RenderFriendsTable(dataModule)
-        imgui.EndChild()
+        FontManager.withFont(fontSizePx, function()
+            M.SaveWindowState()
+            
+            local hideTopBar = gConfig and gConfig.quickOnlineSettings and gConfig.quickOnlineSettings.hideTopBar or false
+            if not hideTopBar then
+                M.RenderTopBar(dataModule)
+                imgui.Spacing()
+            end
+            
+            imgui.BeginChild("##quick_online_body", {0, 0}, false)
+            M.RenderFriendsTable(dataModule)
+            imgui.EndChild()
+        end)
     end
     
     imgui.End()

@@ -2,6 +2,7 @@ local imgui = require('imgui')
 local ThemeHelper = require('libs.themehelper')
 local UIConstants = require('core.UIConstants')
 local scaling = require('scaling')
+local FontManager = require('app.ui.FontManager')
 
 local Sidebar = require('modules.friendlist.components.Sidebar')
 local TopBar = require('modules.friendlist.components.TopBar')
@@ -80,7 +81,7 @@ local state = {
     },
     themeBackgroundAlpha = 0.95,
     themeTextAlpha = 1.0,
-    themeFontScale = 1.0,
+    themeFontSizePx = 14,
     themeNewThemeName = {""},
     themeLastThemeIndex = -999,
     sortColumn = "name",
@@ -371,15 +372,16 @@ function M.DrawWindow(settings, dataModule)
     end
     
     if windowOpen then
-        -- Apply font scale
         local app = _G.FFXIFriendListApp
+        local fontSizePx = 14
         if app and app.features and app.features.themes then
-            local fontScale = app.features.themes:getFontScale() or 1.0
-            imgui.SetWindowFontScale(fontScale)
+            fontSizePx = app.features.themes:getFontSizePx() or 14
         end
         
-        M.SaveWindowState()
-        M.RenderContent(dataModule)
+        FontManager.withFont(fontSizePx, function()
+            M.SaveWindowState()
+            M.RenderContent(dataModule)
+        end)
     end
     
     imgui.End()

@@ -75,7 +75,7 @@ function M.Themes.new(deps)
     self.customThemes = {}
     self.backgroundAlpha = 0.95
     self.textAlpha = 1.0
-    self.fontScale = 1.0  -- Font scale multiplier (0.5 to 2.0)
+    self.fontSizePx = 14
     -- Editing state: temporary copy of theme being edited
     self.currentCustomTheme = nil  -- Temporary copy for built-in theme editing
     self.isEditingBuiltInTheme = false  -- Flag indicating if built-in theme is being edited
@@ -117,9 +117,9 @@ function M.Themes:loadThemes()
             self.textAlpha = state.textAlpha
         end
         
-        -- Validate and set font scale
-        if state.fontScale and state.fontScale >= 0.5 and state.fontScale <= 2.0 then
-            self.fontScale = state.fontScale
+        local FontManager = require('app.ui.FontManager')
+        if state.fontSizePx and FontManager.isValidSize(state.fontSizePx) then
+            self.fontSizePx = state.fontSizePx
         end
         
         -- Initialize currentCustomTheme if custom theme is selected
@@ -155,14 +155,13 @@ function M.Themes:saveThemes()
         customThemeName = self.customThemeName,
         backgroundAlpha = self.backgroundAlpha,
         textAlpha = self.textAlpha,
-        fontScale = self.fontScale,
+        fontSizePx = self.fontSizePx,
         customThemes = self.customThemes
     }
     
     return ThemePersistence.saveToFile(state)
 end
 
--- Get state snapshot (required interface)
 function M.Themes:getState()
     return {
         themeIndex = self.themeIndex,
@@ -170,7 +169,7 @@ function M.Themes:getState()
         customThemeName = self.customThemeName,
         backgroundAlpha = self.backgroundAlpha,
         textAlpha = self.textAlpha,
-        fontScale = self.fontScale
+        fontSizePx = self.fontSizePx
     }
 end
 
@@ -244,21 +243,14 @@ function M.Themes:setTextAlpha(alpha)
     return true
 end
 
-function M.Themes:getFontScale()
-    return self.fontScale
+function M.Themes:getFontSizePx()
+    return self.fontSizePx
 end
 
-function M.Themes:setFontScale(scale)
-    -- Validate font scale range (0.5 to 2.0)
-    local num = tonumber(scale)
-    if not num then
-        return false, "Font scale is not a number: " .. tostring(scale)
-    end
-    if num < 0.5 or num > 2.0 then
-        return false, "Font scale is out of range: " .. tostring(num) .. " (must be 0.5-2.0)"
-    end
-    self.fontScale = num
-    -- Save to persistence
+function M.Themes:setFontSizePx(size)
+    local FontManager = require('app.ui.FontManager')
+    local normalized = FontManager.normalizeSize(size)
+    self.fontSizePx = normalized
     self:saveThemes()
     return true
 end

@@ -9,6 +9,10 @@ addon.author = 'Tanyrus'
 addon.version = '0.9.9'
 addon.desc = 'Friend list addon for FFXI'
 
+-- DEV ONLY: Set to true to run font capability diagnostics on load
+-- Output will appear in game chat. Set back to false after testing.
+_G._FFXIFL_DEV_PROBE_FONTS = false
+
 -- Set up package.path (absolute requires only)
 local addonPath = string.match(debug.getinfo(1, "S").source:sub(2), "(.*[/\\])")
 if addonPath then
@@ -116,6 +120,16 @@ ashita.events.register('load', 'ffxifriendlist_load', function()
     -- Uses Ashita-style Lua table format, account-wide (not per-character)
     -- API keys are obtained from auth/ensure endpoint and saved here
     gConfig = settings.initialize()
+    
+    -- DEV ONLY: Font capability probe (set to true to run diagnostics)
+    if rawget(_G, '_FFXIFL_DEV_PROBE_FONTS') then
+        local success, probe = pcall(require, 'dev.font_capability_probe')
+        if success and probe then
+            probe.run()
+        else
+            print("[FFXIFriendList] Font probe failed to load: " .. tostring(probe))
+        end
+    end
     
     -- Ensure data structure exists
     if not gConfig.data then

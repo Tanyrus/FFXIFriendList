@@ -5,6 +5,7 @@
 
 local imgui = require('imgui')
 local ThemeHelper = require('libs.themehelper')
+local FontManager = require('app.ui.FontManager')
 
 local M = {}
 
@@ -165,14 +166,13 @@ function M.DrawWindow(settings, dataModule)
         saveWindowState()
     end
     
-    -- Apply font scale
-    local fontScaleApp = _G.FFXIFriendListApp
-    if fontScaleApp and fontScaleApp.features and fontScaleApp.features.themes then
-        local fontScale = fontScaleApp.features.themes:getFontScale() or 1.0
-        imgui.SetWindowFontScale(fontScale)
+    local app = _G.FFXIFriendListApp
+    local fontSizePx = 14
+    if app and app.features and app.features.themes then
+        fontSizePx = app.features.themes:getFontSizePx() or 14
     end
     
-    -- Explanation text
+    FontManager.withFont(fontSizePx, function()
     imgui.TextWrapped("The plugin will not connect to the server until you select and save a server.")
     
     imgui.Separator()
@@ -351,6 +351,7 @@ function M.DrawWindow(settings, dataModule)
             gConfig.windows.serverSelection.sizeY = sizeY
         end
     end
+    end)
     
     imgui.End()
     

@@ -5,10 +5,12 @@ local FriendsTable = require('modules.friendlist.components.FriendsTable')
 
 local M = {}
 
-function M.Render(tagGroup, state, callbacks, renderFriendsTable)
+function M.Render(tagGroup, state, callbacks, renderFriendsTable, idSuffix)
     if not tagGroup then
         return
     end
+    
+    idSuffix = idSuffix or ""
     
     local tag = tagGroup.tag
     local displayTag = tagGroup.displayTag or tag
@@ -21,7 +23,7 @@ function M.Render(tagGroup, state, callbacks, renderFriendsTable)
     
     local app = _G.FFXIFriendListApp
     local tagsFeature = app and app.features and app.features.tags
-    local isCollapsed = tagsFeature and tagsFeature:isCollapsed(tag)
+    local isCollapsed = tagsFeature and tagsFeature:isCollapsed(tag .. idSuffix)
     
     local flags = 0
     if not isCollapsed then
@@ -30,7 +32,7 @@ function M.Render(tagGroup, state, callbacks, renderFriendsTable)
     
     local dragState = FriendsTable.getDragState()
     
-    local headerOpen = imgui.CollapsingHeader(headerLabel .. "##tag_" .. tag, flags)
+    local headerOpen = imgui.CollapsingHeader(headerLabel .. "##tag_" .. tag .. idSuffix, flags)
     
     local hoverFlags = ImGuiHoveredFlags_AllowWhenBlockedByActiveItem
     if dragState.isDragging and imgui.IsItemHovered(hoverFlags) then
@@ -44,7 +46,7 @@ function M.Render(tagGroup, state, callbacks, renderFriendsTable)
     local wasOpen = not isCollapsed
     local nowOpen = headerOpen
     if wasOpen ~= nowOpen and tagsFeature then
-        tagsFeature:setCollapsed(tag, not nowOpen)
+        tagsFeature:setCollapsed(tag .. idSuffix, not nowOpen)
     end
     
     if headerOpen then
@@ -70,9 +72,9 @@ function M.Render(tagGroup, state, callbacks, renderFriendsTable)
     end
 end
 
-function M.RenderAllSections(groups, state, callbacks, renderFriendsTable)
+function M.RenderAllSections(groups, state, callbacks, renderFriendsTable, idSuffix)
     for _, tagGroup in ipairs(groups or {}) do
-        M.Render(tagGroup, state, callbacks, renderFriendsTable)
+        M.Render(tagGroup, state, callbacks, renderFriendsTable, idSuffix)
         imgui.Spacing()
     end
     

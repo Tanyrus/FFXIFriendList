@@ -4,7 +4,7 @@ local UIConstants = require('core.UIConstants')
 local M = {}
 
 function M.Render(state, onTabChange, onSaveState)
-    local tabs = {"Friends", "General", "Tags", "Notifications", "Controls", "Themes"}
+    local tabs = {"Friends", "General", "Privacy", "Tags", "Notifications", "Controls", "Themes"}
     
     imgui.PushStyleVar(ImGuiStyleVar_FramePadding, UIConstants.FRAME_PADDING)
     

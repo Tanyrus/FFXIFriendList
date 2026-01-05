@@ -48,7 +48,10 @@ local state = {
     -- Server selection state
     serverSelectionOpened = false,
     serverWindowNeedsCenter = false,
-    serverListRefreshTriggered = false
+    serverListRefreshTriggered = false,
+    -- Online/Offline grouping (groupByOnlineStatus and hideTopBar are read directly from gConfig)
+    collapsedOnlineSection = false,
+    collapsedOfflineSection = false
 }
 
 -- Window ID (stable internal ID with ## pattern)
@@ -98,6 +101,14 @@ function M.Initialize(settings)
                 state.columnVisible.status = settings.columns.status
             end
         end
+        -- Note: groupByOnlineStatus is read directly from gConfig, not cached in state
+        if settings.collapsedOnlineSection ~= nil then
+            state.collapsedOnlineSection = settings.collapsedOnlineSection
+        end
+        if settings.collapsedOfflineSection ~= nil then
+            state.collapsedOfflineSection = settings.collapsedOfflineSection
+        end
+        -- Note: hideTopBar is read directly from gConfig, not cached in state
     end
 end
 
@@ -251,10 +262,12 @@ function M.DrawWindow(settings, dataModule)
         -- Save window state periodically (position, size)
         M.SaveWindowState()
         
-        -- Render top bar
-        M.RenderTopBar(dataModule)
-        
-        imgui.Spacing()
+        -- Render top bar (unless hidden - read directly from gConfig)
+        local hideTopBar = gConfig and gConfig.quickOnlineSettings and gConfig.quickOnlineSettings.hideTopBar or false
+        if not hideTopBar then
+            M.RenderTopBar(dataModule)
+            imgui.Spacing()
+        end
         
         -- Friend table (online friends only)
         imgui.BeginChild("##quick_online_body", {0, 0}, false)
@@ -414,11 +427,8 @@ function M.RenderFriendsTable(dataModule)
         return tagsFeature:getTagForFriend(friendKey)
     end
     
-    local groups = taggrouper.groupFriendsByTag(filteredFriends, tagOrder, getFriendTag)
-    
     local sortMode = gConfig and gConfig.quickOnlineSettings and gConfig.quickOnlineSettings.sortMode or "status"
     local sortDirection = gConfig and gConfig.quickOnlineSettings and gConfig.quickOnlineSettings.sortDirection or "asc"
-    taggrouper.sortAllGroups(groups, sortMode, sortDirection)
     
     local callbacks = M.GetCallbacks(dataModule)
     local sectionCallbacks = {
@@ -434,7 +444,67 @@ function M.RenderFriendsTable(dataModule)
         M.RenderCompactFriendsList(groupFriends, sectionTag, dataModule)
     end
     
-    CollapsibleTagSection.RenderAllSections(groups, state, sectionCallbacks, renderFriendsTable)
+    -- Read groupByOnlineStatus directly from gConfig (set in General tab)
+    local groupByOnlineStatus = gConfig and gConfig.quickOnlineSettings and gConfig.quickOnlineSettings.groupByOnlineStatus or false
+    if groupByOnlineStatus then
+        -- Split friends by online/offline status first
+        local onlineFriends = {}
+        local offlineFriends = {}
+        for _, friend in ipairs(filteredFriends) do
+            if friend.isOnline then
+                table.insert(onlineFriends, friend)
+            else
+                table.insert(offlineFriends, friend)
+            end
+        end
+        
+        -- Group online friends by tag
+        local onlineGroups = taggrouper.groupFriendsByTag(onlineFriends, tagOrder, getFriendTag)
+        taggrouper.sortAllGroups(onlineGroups, sortMode, sortDirection)
+        
+        -- Group offline friends by tag
+        local offlineGroups = taggrouper.groupFriendsByTag(offlineFriends, tagOrder, getFriendTag)
+        taggrouper.sortAllGroups(offlineGroups, sortMode, sortDirection)
+        
+        -- Render Online section
+        local onlineCount = #onlineFriends
+        -- Auto-collapse if empty
+        local onlineShouldBeOpen = onlineCount > 0 and not state.collapsedOnlineSection
+        imgui.SetNextItemOpen(onlineShouldBeOpen)
+        local onlineExpanded = imgui.CollapsingHeader("Online (" .. onlineCount .. ")##qo_online_section")
+        if imgui.IsItemClicked() then
+            state.collapsedOnlineSection = not state.collapsedOnlineSection
+            M.SaveWindowState()
+        end
+        
+        if onlineExpanded then
+            imgui.Indent(10)
+            CollapsibleTagSection.RenderAllSections(onlineGroups, state, sectionCallbacks, renderFriendsTable, "_qo_online")
+            imgui.Unindent(10)
+        end
+        
+        -- Render Offline section
+        local offlineCount = #offlineFriends
+        -- Auto-collapse if empty
+        local offlineShouldBeOpen = offlineCount > 0 and not state.collapsedOfflineSection
+        imgui.SetNextItemOpen(offlineShouldBeOpen)
+        local offlineExpanded = imgui.CollapsingHeader("Offline (" .. offlineCount .. ")##qo_offline_section")
+        if imgui.IsItemClicked() then
+            state.collapsedOfflineSection = not state.collapsedOfflineSection
+            M.SaveWindowState()
+        end
+        
+        if offlineExpanded then
+            imgui.Indent(10)
+            CollapsibleTagSection.RenderAllSections(offlineGroups, state, sectionCallbacks, renderFriendsTable, "_qo_offline")
+            imgui.Unindent(10)
+        end
+    else
+        -- Default behavior: just tag sections without online/offline grouping
+        local groups = taggrouper.groupFriendsByTag(filteredFriends, tagOrder, getFriendTag)
+        taggrouper.sortAllGroups(groups, sortMode, sortDirection)
+        CollapsibleTagSection.RenderAllSections(groups, state, sectionCallbacks, renderFriendsTable)
+    end
     
     if tagsFeature then
         tagsFeature:flushRetagQueue()
@@ -619,6 +689,9 @@ function M.SaveWindowState()
         zone = state.columnVisible.zone,
         status = state.columnVisible.status
     }
+    -- Note: groupByOnlineStatus and hideTopBar are controlled by General tab, don't overwrite them here
+    settings.collapsedOnlineSection = state.collapsedOnlineSection
+    settings.collapsedOfflineSection = state.collapsedOfflineSection
     
     -- Persist to disk
     local settings = require('libs.settings')

@@ -90,7 +90,10 @@ local defaultSettings = T{
             ["Nation/Rank"] = 80.0,
             ["Last Seen"] = 120.0,
             ["Added As"] = 100.0
-        }
+        },
+        groupByOnlineStatus = false,
+        collapsedOnlineSection = false,
+        collapsedOfflineSection = false
     },
     
     -- Quick online settings
@@ -107,7 +110,11 @@ local defaultSettings = T{
             job = true,
             zone = true,
             status = true
-        }
+        },
+        groupByOnlineStatus = false,
+        collapsedOnlineSection = false,
+        collapsedOfflineSection = false,
+        hideTopBar = false
     },
     
     -- Tag settings

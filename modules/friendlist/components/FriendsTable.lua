@@ -21,6 +21,10 @@ function M.getDragState()
     return dragState
 end
 
+function M.isDraggingFriend()
+    return dragState.isDragging
+end
+
 function M.setHoveredTag(tag)
     if dragState.isDragging then
         dragState.hoveredTag = tag

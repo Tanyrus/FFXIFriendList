@@ -104,7 +104,12 @@ local state = {
     },
     draggingColumn = nil,
     hoveredColumn = nil,
-    tagManagerExpanded = false
+    tagManagerExpanded = false,
+    groupByOnlineStatus = false,
+    collapsedOnlineSection = false,
+    collapsedOfflineSection = false,
+    groupByStatusExpanded = true,
+    compactFriendListExpanded = false
 }
 
 local WINDOW_ID = "##friendlist_main"
@@ -184,6 +189,15 @@ function M.Initialize(settings)
                 state.columnWidths[colName] = width
             end
         end
+        if settings.groupByOnlineStatus ~= nil then
+            state.groupByOnlineStatus = settings.groupByOnlineStatus
+        end
+        if settings.collapsedOnlineSection ~= nil then
+            state.collapsedOnlineSection = settings.collapsedOnlineSection
+        end
+        if settings.collapsedOfflineSection ~= nil then
+            state.collapsedOfflineSection = settings.collapsedOfflineSection
+        end
     end
 end
 
@@ -253,6 +267,9 @@ function M.SaveWindowState()
     for colName, width in pairs(state.columnWidths) do
         gConfig.friendListSettings.columnWidths[colName] = width
     end
+    gConfig.friendListSettings.groupByOnlineStatus = state.groupByOnlineStatus
+    gConfig.friendListSettings.collapsedOnlineSection = state.collapsedOnlineSection
+    gConfig.friendListSettings.collapsedOfflineSection = state.collapsedOfflineSection
 end
 
 function M.GetWindowTitle(dataModule)
@@ -454,16 +471,111 @@ function M.RenderContentArea(dataModule, callbacks)
     if state.selectedTab == 0 then
         M.RenderFriendsTab(dataModule, callbacks)
     elseif state.selectedTab == 1 then
-        PrivacyTab.Render(state, dataModule, callbacks)
+        M.RenderGeneralTab(dataModule, callbacks)
     elseif state.selectedTab == 2 then
-        M.RenderTagsTab()
+        M.RenderPrivacyTab(dataModule, callbacks)
     elseif state.selectedTab == 3 then
-        NotificationsTab.Render(state, dataModule, callbacks)
+        M.RenderTagsTab()
     elseif state.selectedTab == 4 then
-        ControlsTab.Render(state, dataModule, callbacks)
+        NotificationsTab.Render(state, dataModule, callbacks)
     elseif state.selectedTab == 5 then
+        ControlsTab.Render(state, dataModule, callbacks)
+    elseif state.selectedTab == 6 then
         ThemesTab.Render(state, dataModule, callbacks)
     end
+end
+
+function M.RenderGeneralTab(dataModule, callbacks)
+    -- General settings (Menu Detection, Friend View, Hover Tooltip, Group by Status, Compact Friend List)
+    PrivacyTab.RenderMenuDetectionSection(state, callbacks)
+    imgui.Spacing()
+    PrivacyTab.RenderFriendViewSettingsSection(state, callbacks)
+    imgui.Spacing()
+    PrivacyTab.RenderHoverTooltipSettings(state, callbacks)
+    imgui.Spacing()
+    M.RenderGroupByStatusSection(callbacks)
+    imgui.Spacing()
+    M.RenderCompactFriendListSettings(callbacks)
+end
+
+function M.RenderGroupByStatusSection(callbacks)
+    local headerLabel = "Group by Status"
+    local isOpen = imgui.CollapsingHeader(headerLabel, state.groupByStatusExpanded and ImGuiTreeNodeFlags_DefaultOpen or 0)
+    
+    if isOpen ~= state.groupByStatusExpanded then
+        state.groupByStatusExpanded = isOpen
+        if callbacks.onSaveState then callbacks.onSaveState() end
+    end
+    
+    if not isOpen then return end
+    
+    imgui.TextWrapped("Group friends by Online/Offline status first, then by tags within each group.")
+    imgui.Spacing()
+    
+    -- Main Window toggle
+    local mainGroupByStatus = {state.groupByOnlineStatus}
+    if imgui.Checkbox("Main Window##main_group_status", mainGroupByStatus) then
+        state.groupByOnlineStatus = mainGroupByStatus[1]
+        if callbacks.onSaveState then callbacks.onSaveState() end
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("Enable Online/Offline sections in the Main Friend List window")
+    end
+    
+    -- Compact Friend List toggle
+    local qoGroupByStatus = {gConfig and gConfig.quickOnlineSettings and gConfig.quickOnlineSettings.groupByOnlineStatus or false}
+    if imgui.Checkbox("Compact Friend List##qo_group_status", qoGroupByStatus) then
+        if gConfig then
+            if not gConfig.quickOnlineSettings then
+                gConfig.quickOnlineSettings = {}
+            end
+            gConfig.quickOnlineSettings.groupByOnlineStatus = qoGroupByStatus[1]
+            local settings = require('libs.settings')
+            if settings and settings.save then
+                settings.save()
+            end
+        end
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("Enable Online/Offline sections in the Compact Friend List window")
+    end
+end
+
+function M.RenderCompactFriendListSettings(callbacks)
+    local headerLabel = "Compact Friend List"
+    local isOpen = imgui.CollapsingHeader(headerLabel, state.compactFriendListExpanded and ImGuiTreeNodeFlags_DefaultOpen or 0)
+    
+    if isOpen ~= state.compactFriendListExpanded then
+        state.compactFriendListExpanded = isOpen
+        if callbacks.onSaveState then callbacks.onSaveState() end
+    end
+    
+    if not isOpen then return end
+    
+    -- Hide Top Bar toggle
+    local hideTopBar = {gConfig and gConfig.quickOnlineSettings and gConfig.quickOnlineSettings.hideTopBar or false}
+    if imgui.Checkbox("Hide Top Bar##qo_hide_topbar", hideTopBar) then
+        if gConfig then
+            if not gConfig.quickOnlineSettings then
+                gConfig.quickOnlineSettings = {}
+            end
+            gConfig.quickOnlineSettings.hideTopBar = hideTopBar[1]
+            local settings = require('libs.settings')
+            if settings and settings.save then
+                settings.save()
+            end
+        end
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("Hide the top bar (lock, refresh, switch view buttons) in the Compact Friend List window")
+    end
+end
+
+function M.RenderPrivacyTab(dataModule, callbacks)
+    -- Privacy settings (Privacy Controls, Alt Visibility)
+    PrivacyTab.RenderPrivacyControlsSection(state, callbacks)
+    imgui.Spacing()
+    PrivacyTab.RenderAltVisibilitySection(state, dataModule, callbacks)
 end
 
 function M.RenderTagsTab()
@@ -686,7 +798,79 @@ function M.RenderTaggedFriendSections(dataModule, callbacks)
         imgui.EndTable()
     end
     
-    CollapsibleTagSection.RenderAllSections(groups, state, sectionCallbacks, renderFriendsTable)
+    if state.groupByOnlineStatus then
+        -- Split friends by online/offline status first
+        local onlineFriends = {}
+        local offlineFriends = {}
+        for _, friend in ipairs(friends) do
+            if friend.isOnline then
+                table.insert(onlineFriends, friend)
+            else
+                table.insert(offlineFriends, friend)
+            end
+        end
+        
+        -- Group online friends by tag
+        local onlineGroups = taggrouper.groupFriendsByTag(onlineFriends, tagOrder, getFriendTag)
+        taggrouper.sortAllGroups(onlineGroups, sortMode, sortDirection)
+        
+        -- Group offline friends by tag
+        local offlineGroups = taggrouper.groupFriendsByTag(offlineFriends, tagOrder, getFriendTag)
+        taggrouper.sortAllGroups(offlineGroups, sortMode, sortDirection)
+        
+        -- Render Online section
+        local onlineCount = #onlineFriends
+        local onlineCollapsed = {state.collapsedOnlineSection}
+        -- Auto-collapse if empty
+        local onlineShouldBeOpen = onlineCount > 0 and not onlineCollapsed[1]
+        imgui.SetNextItemOpen(onlineShouldBeOpen)
+        local onlineExpanded = imgui.CollapsingHeader("Online (" .. onlineCount .. ")##online_section")
+        if imgui.IsItemClicked() then
+            state.collapsedOnlineSection = not state.collapsedOnlineSection
+            if callbacks.onSaveState then callbacks.onSaveState() end
+        end
+        
+        -- Online section drop target for drag-and-drop (retag to first tag or untagged)
+        if FriendsTable.isDraggingFriend() then
+            if imgui.BeginDragDropTarget() then
+                imgui.EndDragDropTarget()
+            end
+        end
+        
+        if onlineExpanded then
+            imgui.Indent(10)
+            CollapsibleTagSection.RenderAllSections(onlineGroups, state, sectionCallbacks, renderFriendsTable, "_online")
+            imgui.Unindent(10)
+        end
+        
+        -- Render Offline section
+        local offlineCount = #offlineFriends
+        local offlineCollapsed = {state.collapsedOfflineSection}
+        -- Auto-collapse if empty
+        local offlineShouldBeOpen = offlineCount > 0 and not offlineCollapsed[1]
+        imgui.SetNextItemOpen(offlineShouldBeOpen)
+        local offlineExpanded = imgui.CollapsingHeader("Offline (" .. offlineCount .. ")##offline_section")
+        if imgui.IsItemClicked() then
+            state.collapsedOfflineSection = not state.collapsedOfflineSection
+            if callbacks.onSaveState then callbacks.onSaveState() end
+        end
+        
+        -- Offline section drop target for drag-and-drop
+        if FriendsTable.isDraggingFriend() then
+            if imgui.BeginDragDropTarget() then
+                imgui.EndDragDropTarget()
+            end
+        end
+        
+        if offlineExpanded then
+            imgui.Indent(10)
+            CollapsibleTagSection.RenderAllSections(offlineGroups, state, sectionCallbacks, renderFriendsTable, "_offline")
+            imgui.Unindent(10)
+        end
+    else
+        -- Default behavior: just tag sections without online/offline grouping
+        CollapsibleTagSection.RenderAllSections(groups, state, sectionCallbacks, renderFriendsTable)
+    end
 end
 
 function M.RenderAboutPopup()

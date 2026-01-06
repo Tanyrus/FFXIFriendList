@@ -154,9 +154,17 @@ function M.Blocklist:block(characterName, callback)
     end
     
     local url = self.deps.connection:getBaseUrl() .. Endpoints.BLOCK.ADD
-    local headers = self.deps.connection:getHeaders(self:_getCharacterName())
     
-    local body = '{"characterName":"' .. tostring(characterName) .. '"}'
+    -- Get current user's character name for authentication headers
+    -- NOTE: characterName parameter is the person TO BLOCK, not the current user
+    local currentUserCharacterName = self:_getCharacterName()
+    
+    local headers = self.deps.connection:getHeaders(currentUserCharacterName)
+    
+    -- Use JSON encoding to properly escape special characters
+    -- characterName parameter is the person TO BLOCK, not the current user
+    local Json = require("protocol.Json")
+    local body = Json.encode({characterName = tostring(characterName)})
     
     local requestId = self.deps.net.request({
         url = url,
@@ -216,7 +224,8 @@ function M.Blocklist:unblock(accountId, callback)
     end
     
     local url = self.deps.connection:getBaseUrl() .. Endpoints.blockRemove(accountId)
-    local headers = self.deps.connection:getHeaders(self:_getCharacterName())
+    local currentCharacterName = self:_getCharacterName()
+    local headers = self.deps.connection:getHeaders(currentCharacterName)
     
     local requestId = self.deps.net.request({
         url = url,
@@ -275,10 +284,28 @@ function M.Blocklist:unblockByName(characterName, callback)
 end
 
 function M.Blocklist:_getCharacterName()
+    -- Try to get character name from connection (same pattern as preferences.lua)
+    if self.deps.connection then
+        if self.deps.connection.getCharacterName then
+            local name = self.deps.connection:getCharacterName()
+            if name and name ~= "" then
+                return name
+            end
+        end
+        if self.deps.connection.lastCharacterName then
+            local name = self.deps.connection.lastCharacterName
+            if name and name ~= "" then
+                return name
+            end
+        end
+    end
+    
+    -- Fallback: try to get from app
     local app = _G.FFXIFriendListApp
     if app and app.getCharacterName then
         return app.getCharacterName()
     end
+    
     return nil
 end
 

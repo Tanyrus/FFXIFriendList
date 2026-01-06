@@ -41,7 +41,7 @@ local function renderIncomingSection(dataModule, callbacks)
             imgui.PushStyleColor(ImGuiCol_ButtonActive, {0.5, 0.1, 0.1, 1.0})
             if imgui.Button("Block") then
                 if callbacks.onBlockPlayer then
-                    callbacks.onBlockPlayer(request.accountId, request.name)
+                    callbacks.onBlockPlayer(request.accountId, request.name, request.id)
                 end
             end
             imgui.PopStyleColor(3)

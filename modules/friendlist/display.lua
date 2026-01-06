@@ -37,6 +37,7 @@ local state = {
     friendViewSettingsExpanded = true,
     hoverTooltipSettingsExpanded = false,
     privacyControlsExpanded = false,
+    blockedPlayersExpanded = false,
     altVisibilityExpanded = false,
     notificationsSettingsExpanded = true,
     controlsSettingsExpanded = true,
@@ -794,8 +795,10 @@ function M.RenderCompactFriendListSettings(callbacks)
 end
 
 function M.RenderPrivacyTab(dataModule, callbacks)
-    -- Privacy settings (Privacy Controls, Alt Visibility)
+    -- Privacy settings (Privacy Controls, Blocked Players, Alt Visibility)
     PrivacyTab.RenderPrivacyControlsSection(state, callbacks)
+    imgui.Spacing()
+    PrivacyTab.RenderBlockedPlayersSection(state, dataModule, callbacks)
     imgui.Spacing()
     PrivacyTab.RenderAltVisibilitySection(state, dataModule, callbacks)
 end
@@ -1336,22 +1339,58 @@ function M.GetCallbacks(dataModule)
             end
         end,
         
-        onBlockPlayer = function(accountId, characterName)
-            if app and app.features and app.features.blocklist then
-                app.features.blocklist:block(characterName, function(success, result)
-                    if success then
-                        if app.features.friends and app.features.friends.refreshFriendRequests then
-                            app.features.friends:refreshFriendRequests()
-                        end
-                    end
-                end)
+        onBlockPlayer = function(accountId, characterName, requestId)
+            print("[FriendList] onBlockPlayer called: accountId=" .. tostring(accountId) .. ", name=" .. tostring(characterName) .. ", requestId=" .. tostring(requestId))
+            if not app then
+                print("[FriendList] ERROR: app is nil")
+                return
             end
+            if not app.features then
+                print("[FriendList] ERROR: app.features is nil")
+                return
+            end
+            if not app.features.blocklist then
+                print("[FriendList] ERROR: app.features.blocklist is nil")
+                return
+            end
+            print("[FriendList] Calling blocklist:block()")
+            app.features.blocklist:block(characterName, function(success, result)
+                print("[FriendList] block callback: success=" .. tostring(success) .. ", result=" .. tostring(result))
+                if success then
+                    -- Server automatically filters blocked accounts from incoming requests
+                    -- The request will disappear from our view but remain pending on the sender's side
+                    -- (they won't know they've been blocked)
+                    if app.features.friends and app.features.friends.refreshFriendRequests then
+                        app.features.friends:refreshFriendRequests()
+                    end
+                end
+            end)
         end,
         
         onUnblockPlayer = function(accountId)
-            if app and app.features and app.features.blocklist then
-                app.features.blocklist:unblock(accountId)
+            print("[FriendList] onUnblockPlayer called: accountId=" .. tostring(accountId))
+            if not app then
+                print("[FriendList] ERROR: app is nil")
+                return
             end
+            if not app.features then
+                print("[FriendList] ERROR: app.features is nil")
+                return
+            end
+            if not app.features.blocklist then
+                print("[FriendList] ERROR: app.features.blocklist is nil")
+                return
+            end
+            print("[FriendList] Calling blocklist:unblock()")
+            app.features.blocklist:unblock(accountId, function(success, result)
+                print("[FriendList] unblock callback: success=" .. tostring(success) .. ", result=" .. tostring(result))
+                if success then
+                    -- Refresh the blocklist to update the UI
+                    if app.features.blocklist and app.features.blocklist.refresh then
+                        app.features.blocklist:refresh()
+                    end
+                end
+            end)
         end,
         
         onRemoveFriend = function(friendName)

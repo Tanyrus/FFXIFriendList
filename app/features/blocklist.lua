@@ -143,54 +143,38 @@ function M.Blocklist:handleRefreshResponse(success, response)
 end
 
 function M.Blocklist:block(characterName, callback)
-    print("[Blocklist] block() called for: " .. tostring(characterName))
     if not self.deps.net or not self.deps.connection then
-        print("[Blocklist] ERROR: net or connection not available")
         if callback then callback(false, "Not connected") end
         return false
     end
     
     if not self.deps.connection:isConnected() then
-        print("[Blocklist] ERROR: not connected to server")
         if callback then callback(false, "Not connected") end
         return false
     end
     
     local url = self.deps.connection:getBaseUrl() .. Endpoints.BLOCK.ADD
-    print("[Blocklist] URL: " .. tostring(url))
     
     -- Get current user's character name for authentication headers
     -- NOTE: characterName parameter is the person TO BLOCK, not the current user
     local currentUserCharacterName = self:_getCharacterName()
-    print("[Blocklist] Current user characterName: " .. tostring(currentUserCharacterName))
-    print("[Blocklist] Blocking characterName: " .. tostring(characterName))
     
     local headers = self.deps.connection:getHeaders(currentUserCharacterName)
-    print("[Blocklist] Headers: X-API-Key=" .. tostring(headers["X-API-Key"] and "present" or "missing") .. ", characterName=" .. tostring(headers["characterName"] or "missing"))
     
     -- Use JSON encoding to properly escape special characters
     -- characterName parameter is the person TO BLOCK, not the current user
     local Json = require("protocol.Json")
     local body = Json.encode({characterName = tostring(characterName)})
-    print("[Blocklist] Body: " .. tostring(body))
     
-    print("[Blocklist] Sending block request...")
     local requestId = self.deps.net.request({
         url = url,
         method = "POST",
         headers = headers,
         body = body,
         callback = function(success, response)
-            print("[Blocklist] Request callback: success=" .. tostring(success) .. ", response length=" .. tostring(response and #response or 0))
             self:handleBlockResponse(success, response, characterName, callback)
         end
     })
-    
-    if not requestId then
-        print("[Blocklist] ERROR: Failed to enqueue block request")
-    else
-        print("[Blocklist] Request enqueued with ID: " .. tostring(requestId))
-    end
     
     return requestId ~= nil
 end
@@ -229,43 +213,29 @@ function M.Blocklist:handleBlockResponse(success, response, characterName, callb
 end
 
 function M.Blocklist:unblock(accountId, callback)
-    print("[Blocklist] unblock() called for accountId: " .. tostring(accountId))
     if not self.deps.net or not self.deps.connection then
-        print("[Blocklist] ERROR: net or connection not available")
         if callback then callback(false, "Not connected") end
         return false
     end
     
     if not self.deps.connection:isConnected() then
-        print("[Blocklist] ERROR: not connected to server")
         if callback then callback(false, "Not connected") end
         return false
     end
     
     local url = self.deps.connection:getBaseUrl() .. Endpoints.blockRemove(accountId)
-    print("[Blocklist] URL: " .. tostring(url))
     local currentCharacterName = self:_getCharacterName()
-    print("[Blocklist] Current user characterName: " .. tostring(currentCharacterName))
     local headers = self.deps.connection:getHeaders(currentCharacterName)
-    print("[Blocklist] Headers: X-API-Key=" .. tostring(headers["X-API-Key"] and "present" or "missing"))
     
-    print("[Blocklist] Sending unblock request...")
     local requestId = self.deps.net.request({
         url = url,
         method = "DELETE",
         headers = headers,
         body = "",
         callback = function(success, response)
-            print("[Blocklist] Request callback: success=" .. tostring(success) .. ", response length=" .. tostring(response and #response or 0))
             self:handleUnblockResponse(success, response, accountId, callback)
         end
     })
-    
-    if not requestId then
-        print("[Blocklist] ERROR: Failed to enqueue unblock request")
-    else
-        print("[Blocklist] Request enqueued with ID: " .. tostring(requestId))
-    end
     
     return requestId ~= nil
 end

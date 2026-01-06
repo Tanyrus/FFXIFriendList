@@ -1340,22 +1340,10 @@ function M.GetCallbacks(dataModule)
         end,
         
         onBlockPlayer = function(accountId, characterName, requestId)
-            print("[FriendList] onBlockPlayer called: accountId=" .. tostring(accountId) .. ", name=" .. tostring(characterName) .. ", requestId=" .. tostring(requestId))
-            if not app then
-                print("[FriendList] ERROR: app is nil")
+            if not app or not app.features or not app.features.blocklist then
                 return
             end
-            if not app.features then
-                print("[FriendList] ERROR: app.features is nil")
-                return
-            end
-            if not app.features.blocklist then
-                print("[FriendList] ERROR: app.features.blocklist is nil")
-                return
-            end
-            print("[FriendList] Calling blocklist:block()")
             app.features.blocklist:block(characterName, function(success, result)
-                print("[FriendList] block callback: success=" .. tostring(success) .. ", result=" .. tostring(result))
                 if success then
                     -- Server automatically filters blocked accounts from incoming requests
                     -- The request will disappear from our view but remain pending on the sender's side
@@ -1368,22 +1356,10 @@ function M.GetCallbacks(dataModule)
         end,
         
         onUnblockPlayer = function(accountId)
-            print("[FriendList] onUnblockPlayer called: accountId=" .. tostring(accountId))
-            if not app then
-                print("[FriendList] ERROR: app is nil")
+            if not app or not app.features or not app.features.blocklist then
                 return
             end
-            if not app.features then
-                print("[FriendList] ERROR: app.features is nil")
-                return
-            end
-            if not app.features.blocklist then
-                print("[FriendList] ERROR: app.features.blocklist is nil")
-                return
-            end
-            print("[FriendList] Calling blocklist:unblock()")
             app.features.blocklist:unblock(accountId, function(success, result)
-                print("[FriendList] unblock callback: success=" .. tostring(success) .. ", result=" .. tostring(result))
                 if success then
                     -- Refresh the blocklist to update the UI
                     if app.features.blocklist and app.features.blocklist.refresh then

@@ -40,12 +40,8 @@ local function renderIncomingSection(dataModule, callbacks)
             imgui.PushStyleColor(ImGuiCol_ButtonHovered, {0.7, 0.3, 0.3, 1.0})
             imgui.PushStyleColor(ImGuiCol_ButtonActive, {0.5, 0.1, 0.1, 1.0})
             if imgui.Button("Block") then
-                print("[RequestsTab] Block button clicked for: " .. tostring(request.name) .. " (accountId=" .. tostring(request.accountId) .. ", requestId=" .. tostring(request.id) .. ")")
                 if callbacks.onBlockPlayer then
-                    print("[RequestsTab] Calling onBlockPlayer callback")
                     callbacks.onBlockPlayer(request.accountId, request.name, request.id)
-                else
-                    print("[RequestsTab] ERROR: onBlockPlayer callback is nil")
                 end
             end
             imgui.PopStyleColor(3)

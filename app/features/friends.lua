@@ -680,15 +680,9 @@ function M.Friends:updatePresence()
         return false
     end
     
-    -- isAnonymous = gameIsAnonymous AND NOT shareJobWhenAnonymous
-    local app = _G.FFXIFriendListApp
-    if app and app.features and app.features.preferences and app.features.preferences.getPrefs then
-        local prefs = app.features.preferences:getPrefs()
-        if prefs then
-            local gameIsAnonymous = presence.isAnonymous
-            presence.isAnonymous = gameIsAnonymous and not prefs.shareJobWhenAnonymous
-        end
-    end
+    -- Send RAW game state to server (don't calculate isAnonymous here)
+    -- Server will use isAnonymous (raw game state) + shareCharacterData (shareJobWhenAnonymous preference)
+    -- to decide what data to show to friends
     
     local requestBody = RequestEncoder.encodeUpdatePresence(presence)
     local url = self.deps.connection:getBaseUrl() .. Endpoints.CHARACTERS.STATE

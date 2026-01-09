@@ -83,8 +83,9 @@ local function testConnectionHeaders()
     
     local headers = conn:getHeaders("TestChar")
     assert(headers["Content-Type"] == "application/json", "Should have Content-Type header")
-    assert(headers["X-API-Key"] == "test-key", "Should have API key header")
-    assert(headers["characterName"] == "TestChar", "Should have character name header")
+    -- New auth format: Authorization: Bearer <apiKey>
+    assert(headers["Authorization"] == "Bearer test-key", "Should have Authorization Bearer header")
+    assert(headers["X-Character-Name"] == "TestChar", "Should have X-Character-Name header")
     assert(headers["X-Session-Id"] == "test-session", "Should have session ID header")
     
     return true

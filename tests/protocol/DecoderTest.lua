@@ -1,8 +1,8 @@
 -- DecoderTest.lua
 -- Test individual payload decoders
+-- NOTE: Heartbeat decoder removed - heartbeat response is now ignored per migration plan
 
 local FriendsListDecoder = require("protocol.Decoders.FriendsList")
-local HeartbeatDecoder = require("protocol.Decoders.Heartbeat")
 local PreferencesDecoder = require("protocol.Decoders.Preferences")
 
 local function assert(condition, message)
@@ -34,22 +34,6 @@ local function testFriendsListDecoderMissingFields()
     print("✓ testFriendsListDecoderMissingFields passed")
 end
 
-local function testHeartbeatDecoder()
-    local payload = {
-        serverTime = 1234567890,
-        nextHeartbeatMs = 30000,
-        onlineThresholdMs = 60000,
-        is_outdated = false
-    }
-    
-    local ok, result = HeartbeatDecoder.decode(payload)
-    assert(ok, "Should decode valid payload")
-    assert(result.serverTime == 1234567890, "Should decode serverTime")
-    assert(result.nextHeartbeatMs == 30000, "Should decode nextHeartbeatMs")
-    assert(result.is_outdated == false, "Should decode is_outdated")
-    print("✓ testHeartbeatDecoder passed")
-end
-
 local function testPreferencesDecoder()
     local payload = {
         preferences = {useServerNotes = true},
@@ -74,7 +58,6 @@ local function runAllTests()
     print("Running Decoder tests...")
     testFriendsListDecoder()
     testFriendsListDecoderMissingFields()
-    testHeartbeatDecoder()
     testPreferencesDecoder()
     testDecoderInvalidPayload()
     print("All Decoder tests passed!")

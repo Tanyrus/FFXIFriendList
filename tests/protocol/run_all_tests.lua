@@ -10,7 +10,6 @@ local tests = {
     require("tests.protocol.JsonTest"),
     require("tests.protocol.ProtocolVersionTest"),
     require("tests.protocol.EnvelopeTest"),
-    require("tests.protocol.DecodeRouterTest"),
     require("tests.protocol.DecoderTest"),
     require("tests.protocol.RequestEncoderTest")
 }

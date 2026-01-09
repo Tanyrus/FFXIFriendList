@@ -1,7 +1,3 @@
-local RequestEncoder = require("protocol.Encoding.RequestEncoder")
-local Envelope = require("protocol.Envelope")
-local DecodeRouter = require("protocol.DecodeRouter")
-local MessageTypes = require("protocol.MessageTypes")
 local ServerListCore = require("core.serverlistcore")
 local Endpoints = require("protocol.Endpoints")
 

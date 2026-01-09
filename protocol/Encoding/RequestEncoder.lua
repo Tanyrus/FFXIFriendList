@@ -396,26 +396,82 @@ function M.encodeGetServerList()
     return M.encode(request)
 end
 
--- Encode AuthEnsure request (for /api/auth/ensure endpoint)
--- Note: Server expects simple JSON body, not wrapped in protocol envelope
--- Body: {"characterName": "...", "realmId": "..."}
-function M.encodeAuthEnsure(characterName, realmId)
+-- ============================================================================
+-- New Server Endpoints (friendlist-server)
+-- ============================================================================
+
+-- Encode AddCharacter request (for /api/auth/add-character endpoint)
+-- Adds a character to the authenticated account
+-- Body: {"name": "...", "realmId": "..."}
+function M.encodeAddCharacter(characterName, realmId)
     local body = {
-        characterName = characterName,
-        realmId = realmId or "notARealServer"  -- Default - indicates realm detection failed
+        name = characterName,
+        realmId = realmId or "unknown"
     }
     return Json.encode(body)
 end
 
--- Encode SetActiveCharacter request (for /api/characters/active endpoint)
--- Used when switching to a character with an existing API key (alt registration)
--- Server will auto-create the character if it doesn't exist
+-- Encode SetActiveCharacter request (for /api/auth/set-active endpoint)
+-- Sets the active character for the account
+-- Body: {"characterId": "uuid"}
+function M.encodeSetActiveCharacter(characterId)
+    local body = {
+        characterId = characterId
+    }
+    return Json.encode(body)
+end
+
+-- Encode SendFriendRequest for new server (for /api/friends/request endpoint)
 -- Body: {"characterName": "...", "realmId": "..."}
-function M.encodeSetActiveCharacter(characterName, realmId)
+function M.encodeNewSendFriendRequest(characterName, realmId)
     local body = {
         characterName = characterName,
-        realmId = realmId or "notARealServer"
+        realmId = realmId or "unknown"
     }
+    return Json.encode(body)
+end
+
+-- Encode Block request (for /api/block endpoint)
+-- Body: {"characterName": "...", "realmId": "..."}
+function M.encodeBlock(characterName, realmId)
+    local body = {
+        characterName = characterName,
+        realmId = realmId or "unknown"
+    }
+    return Json.encode(body)
+end
+
+-- Encode PresenceUpdate request (for /api/presence/update endpoint)
+-- Body: { job?, subJob?, jobLevel?, subJobLevel?, zone?, nation?, rank?, isAnonymous? }
+function M.encodePresenceUpdate(presence)
+    local body = {}
+    if presence.job then body.job = presence.job end
+    if presence.subJob then body.subJob = presence.subJob end
+    if presence.jobLevel then body.jobLevel = presence.jobLevel end
+    if presence.subJobLevel then body.subJobLevel = presence.subJobLevel end
+    if presence.zone then body.zone = presence.zone end
+    if presence.nation then body.nation = presence.nation end
+    if presence.rank then body.rank = presence.rank end
+    if presence.isAnonymous ~= nil then body.isAnonymous = presence.isAnonymous end
+    return Json.encode(body)
+end
+
+-- Encode Heartbeat request (for /api/presence/heartbeat endpoint)
+-- Body: { timestamp?: string, characterId?: string }
+function M.encodeHeartbeat(timestamp, characterId)
+    local body = {}
+    if timestamp then body.timestamp = timestamp end
+    if characterId then body.characterId = characterId end
+    return Json.encode(body)
+end
+
+-- Encode UpdatePreferences request (for PATCH /api/preferences endpoint)
+-- Body: { presenceStatus?, shareLocation?, shareJobWhenAnonymous? }
+function M.encodeUpdatePreferences(prefs)
+    local body = {}
+    if prefs.presenceStatus then body.presenceStatus = prefs.presenceStatus end
+    if prefs.shareLocation ~= nil then body.shareLocation = prefs.shareLocation end
+    if prefs.shareJobWhenAnonymous ~= nil then body.shareJobWhenAnonymous = prefs.shareJobWhenAnonymous end
     return Json.encode(body)
 end
 

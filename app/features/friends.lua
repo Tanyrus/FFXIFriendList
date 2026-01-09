@@ -1,8 +1,6 @@
 local FriendList = require("core.friendlist")
 local RequestEncoder = require("protocol.Encoding.RequestEncoder")
 local Envelope = require("protocol.Envelope")
-local DecodeRouter = require("protocol.DecodeRouter")
-local MessageTypes = require("protocol.MessageTypes")
 local TimingConstants = require("core.TimingConstants")
 local Endpoints = require("protocol.Endpoints")
 
@@ -27,17 +25,12 @@ function M.Friends.new(deps)
     self.maxRetries = TimingConstants.MAX_RETRIES
     self.nextRetryAt = nil
     
-    self.refreshInterval = TimingConstants.REFRESH_INTERVAL_MS
-    self.lastRefreshAt = nil
-    
+    -- Heartbeat interval (safety signal only - NOT polling)
     self.heartbeatInterval = TimingConstants.HEARTBEAT_INTERVAL_MS
     self.lastHeartbeatAt = nil
-    self.lastEventTimestamp = 0
-    self.lastRequestEventTimestamp = 0
     self.heartbeatInFlight = false
     self.refreshInFlight = false
     self.friendRequestsInFlight = false
-    self.hasReportedVersion = false
     
     self.pendingZoneChange = nil
     self.zoneChangeScheduledAt = nil
@@ -98,7 +91,7 @@ end
 function M.Friends:tick(dtSeconds)
     local now = getTime(self)
     
-    local dtMs = dtSeconds * 1000
+    -- Handle retry for failed requests
     if self.nextRetryAt and now >= self.nextRetryAt then
         if self.retryCount < self.maxRetries then
             self:refresh()
@@ -108,6 +101,7 @@ function M.Friends:tick(dtSeconds)
         end
     end
     
+    -- Send heartbeat (safety signal only - NOT polling)
     if self.deps.connection and self.deps.connection:isConnected() then
         if not self.heartbeatInFlight then
             local shouldHeartbeat = false
@@ -123,13 +117,10 @@ function M.Friends:tick(dtSeconds)
         end
     end
     
-    if self.lastRefreshAt and (now - self.lastRefreshAt) >= self.refreshInterval then
-        if self.deps.connection and self.deps.connection:isConnected() then
-            self:refresh()
-            self:refreshFriendRequests()
-        end
-    end
+    -- NO POLLING - removed refresh interval check
+    -- WS events are the sole source of real-time updates
     
+    -- Handle zone change debounce
     if self.zoneChangeScheduledAt and (now - self.zoneChangeScheduledAt) >= TimingConstants.ZONE_CHANGE_DEBOUNCE_MS then
         if self.pendingZoneChange then
             self:handleZoneChange(self.pendingZoneChange)
@@ -171,6 +162,7 @@ function M.Friends:refresh()
     self.state = "syncing"
     self.lastError = nil
     
+    -- Use new server endpoint: GET /api/friends
     local url = self.deps.connection:getBaseUrl() .. Endpoints.FRIENDS.LIST
     
     local headers = self.deps.connection:getHeaders(self:_getCharacterName())
@@ -222,60 +214,17 @@ function M.Friends:handleRefreshResponse(success, response)
         return
     end
     
-    local ok, envelope = Envelope.decode(response)
+    -- Use new envelope format: { success, data, timestamp }
+    local ok, envelope, errorMsg = Envelope.decode(response)
     if not ok then
         self.state = "error"
-        local errorMsg = envelope
-        if type(errorMsg) == "table" then
-            errorMsg = "Failed to decode envelope"
-        else
-            errorMsg = tostring(errorMsg or "Failed to decode envelope")
-        end
-        self.lastError = { type = "ProtocolError", message = errorMsg }
+        self.lastError = { type = "ProtocolError", message = errorMsg or "Failed to decode response" }
         self:scheduleRetry()
         return
     end
     
-    if not envelope.success then
-        if envelope.errorCode == "IncompatibleVersion" then
-            self.state = "error"
-            local errorMsg = envelope.error
-            if type(errorMsg) == "table" then
-                errorMsg = "Incompatible protocol version"
-            else
-                errorMsg = tostring(errorMsg or "Incompatible protocol version")
-            end
-            self.lastError = { 
-                type = "IncompatibleVersion", 
-                message = errorMsg
-            }
-            return
-        end
-        self.state = "error"
-        local errorMsg = envelope.error
-        if type(errorMsg) == "table" then
-            errorMsg = "Server error"
-        else
-            errorMsg = tostring(errorMsg or "Server error")
-        end
-        self.lastError = { type = "ServerError", message = errorMsg }
-        self:scheduleRetry()
-        return
-    end
-    
-    local decodeOk, result = DecodeRouter.decode(envelope)
-    if not decodeOk then
-        self.state = "error"
-        local errorMsg = result
-        if type(errorMsg) == "table" then
-            errorMsg = "Failed to decode response"
-        else
-            errorMsg = tostring(errorMsg or "Failed to decode response")
-        end
-        self.lastError = { type = "DecodeError", message = errorMsg }
-        self:scheduleRetry()
-        return
-    end
+    -- Extract friends from data (new server format)
+    local result = envelope.data or {}
     
     local stateUpdateStartMs = 0
     if self.deps.time then
@@ -286,63 +235,39 @@ function M.Friends:handleRefreshResponse(success, response)
     local decodeTime = stateUpdateStartMs - decodeStartMs
     
     self.friendList:clear()
-    if result.friends and type(result.friends) == "table" then
-        for _, friendData in ipairs(result.friends) do
-            if friendData.name or friendData.friendedAsName then
-                local displayName = friendData.name or friendData.friendedAsName
-                local friendedAs = friendData.friendedAsName or friendData.friendedAs or displayName
-                local friend = FriendList.Friend.new(displayName, friendedAs)
-                if friendData.linkedCharacters and type(friendData.linkedCharacters) == "table" then
-                    friend.linkedCharacters = friendData.linkedCharacters
-                end
-                friend.isOnline = friendData.isOnline == true
-                friend.job = friendData.job or ""
-                friend.zone = friendData.zone or ""
-                friend.rank = friendData.rank or ""
-                friend.nation = friendData.nation
-                friend.lastSeenAt = friendData.lastSeenAt
-                friend.sharesOnlineStatus = friendData.sharesOnlineStatus
-                friend.friendAccountId = friendData.friendAccountId
-                self.friendList:addFriend(friend)
-            end
-        end
-    end
     
-    if result.statuses and type(result.statuses) == "table" then
-        for _, statusData in ipairs(result.statuses) do
-            if statusData.name or statusData.characterName then
-                local characterName = statusData.name or statusData.characterName
-                local status = FriendList.FriendStatus.new()
-                status.characterName = string.lower(characterName)
-                status.displayName = statusData.name or statusData.characterName or ""
-                status.isOnline = statusData.isOnline == true
-                status.isAway = statusData.isAway == true
-                status.job = statusData.job or ""
-                status.rank = statusData.rank or ""
-                status.zone = statusData.zone or ""
-                status.nation = statusData.nation
-                if status.nation == nil then
-                    status.nation = -1
-                end
-                status.lastSeenAt = statusData.lastSeenAt or 0
-                if type(status.lastSeenAt) == "string" and status.lastSeenAt == "null" then
-                    status.lastSeenAt = 0
-                end
-                status.showOnlineStatus = statusData.sharesOnlineStatus ~= false
-                status.friendedAs = statusData.friendedAsName or statusData.friendedAs or ""
-                if statusData.linkedCharacters and type(statusData.linkedCharacters) == "table" then
-                    status.linkedCharacters = statusData.linkedCharacters
-                    status.isLinkedCharacter = #statusData.linkedCharacters > 1
-                else
-                    status.linkedCharacters = {}
-                    status.isLinkedCharacter = false
-                end
-                status.isOnAltCharacter = false
-                status.altCharacterName = ""
-                
-                self.friendList:updateFriendStatus(status)
-            end
-        end
+    -- New server returns { friends: FriendInfo[] }
+    local friends = result.friends or {}
+    for _, friendData in ipairs(friends) do
+        -- New server uses accountId, characterName, isOnline, lastSeen, state
+        local displayName = friendData.characterName or ""
+        local friend = FriendList.Friend.new(displayName, displayName)
+        friend.friendAccountId = friendData.accountId
+        friend.isOnline = friendData.isOnline == true
+        friend.lastSeenAt = friendData.lastSeen
+        
+        -- State contains job, zone, nation, rank info
+        local state = friendData.state or {}
+        friend.job = state.job or ""
+        friend.zone = state.zone or ""
+        friend.nation = state.nation
+        friend.rank = state.rank
+        
+        self.friendList:addFriend(friend)
+        
+        -- Also update status
+        local status = FriendList.FriendStatus.new()
+        status.characterName = string.lower(displayName)
+        status.displayName = displayName
+        status.isOnline = friend.isOnline
+        status.job = friend.job
+        status.zone = friend.zone
+        status.nation = friend.nation or -1
+        status.rank = friend.rank or ""
+        status.lastSeenAt = friend.lastSeenAt or 0
+        status.showOnlineStatus = true
+        
+        self.friendList:updateFriendStatus(status)
     end
     
     self.state = "idle"
@@ -362,15 +287,12 @@ function M.Friends:handleRefreshResponse(success, response)
     
     if self.deps.logger and self.deps.logger.debug then
         local friendCount = #self.friendList:getFriends()
-        local statusCount = result.statuses and #result.statuses or 0
-        self.deps.logger.debug(string.format("[Friends] [%d] Refresh complete: %d friends, %d statuses (decode: %dms, state: %dms)", 
-            stateUpdateEndMs, friendCount, statusCount, decodeTime, stateUpdateTime))
+        self.deps.logger.debug(string.format("[Friends] [%d] Refresh complete: %d friends (decode: %dms, state: %dms)", 
+            stateUpdateEndMs, friendCount, decodeTime, stateUpdateTime))
     end
     
-    -- Check for status changes and trigger notifications
-    if result.statuses and type(result.statuses) == "table" then
-        self:checkForStatusChanges(self.friendList:getFriendStatuses())
-    end
+    -- Status change notifications are now handled via WS events
+    -- See: wsEventHandler.lua
 end
 
 function M.Friends:scheduleRetry()
@@ -399,11 +321,19 @@ function M.Friends:addFriend(name)
         return false
     end
     
-    local requestBody = RequestEncoder.encodeSendFriendRequest(name)
+    -- Get realm ID for the request
+    local realmId = "unknown"
+    if self.deps.connection.savedRealmId then
+        realmId = self.deps.connection.savedRealmId
+    end
+    
+    -- Use new server endpoint: POST /api/friends/request
+    local requestBody = RequestEncoder.encodeNewSendFriendRequest(name, realmId)
     local url = self.deps.connection:getBaseUrl() .. Endpoints.FRIENDS.SEND_REQUEST
     
     local headers = self.deps.connection:getHeaders(self:_getCharacterName())
     
+    -- Optimistic add to outgoing requests
     local tempRequest = {
         id = "pending_" .. name .. "_" .. os.time(),
         name = name,
@@ -418,8 +348,11 @@ function M.Friends:addFriend(name)
         headers = headers,
         body = requestBody,
         callback = function(success, response)
-            self:refresh()
-            self:refreshFriendRequests()
+            -- HTTP response is confirmation only
+            -- WS events are authoritative for state
+            if not success and self.deps.logger and self.deps.logger.warn then
+                self.deps.logger.warn("[Friends] Send request failed: " .. tostring(response))
+            end
         end
     })
     
@@ -435,7 +368,25 @@ function M.Friends:removeFriend(name)
         return false
     end
     
-    local url = self.deps.connection:getBaseUrl() .. Endpoints.friendDelete(name)
+    -- Find friend account ID by name
+    local accountId = nil
+    local allFriends = self.friendList:getFriends()
+    for _, friend in ipairs(allFriends) do
+        if string.lower(friend.name) == string.lower(name) then
+            accountId = friend.friendAccountId
+            break
+        end
+    end
+    
+    if not accountId then
+        if self.deps.logger and self.deps.logger.warn then
+            self.deps.logger.warn("[Friends] Cannot remove: friend not found - " .. tostring(name))
+        end
+        return false
+    end
+    
+    -- Use new server endpoint: DELETE /api/friends/:accountId
+    local url = self.deps.connection:getBaseUrl() .. Endpoints.friendRemove(accountId)
     
     local headers = self.deps.connection:getHeaders(self:_getCharacterName())
     
@@ -445,8 +396,10 @@ function M.Friends:removeFriend(name)
         headers = headers,
         body = "",
         callback = function(success, response)
-            if success then
-                self:refresh()
+            -- HTTP response is confirmation only
+            -- WS friend_removed event is authoritative
+            if not success and self.deps.logger and self.deps.logger.warn then
+                self.deps.logger.warn("[Friends] Remove friend failed: " .. tostring(response))
             end
         end
     })
@@ -463,25 +416,26 @@ function M.Friends:acceptRequest(requestId)
         return false
     end
     
-    local requestBody = RequestEncoder.encodeAcceptFriendRequest(requestId)
-    local url = self.deps.connection:getBaseUrl() .. Endpoints.FRIENDS.ACCEPT
+    -- Use new server endpoint: POST /api/friends/requests/:id/accept
+    local url = self.deps.connection:getBaseUrl() .. Endpoints.friendRequestAccept(requestId)
     
     local headers = self.deps.connection:getHeaders(self:_getCharacterName())
     
-    local requestId2 = self.deps.net.request({
+    local netRequestId = self.deps.net.request({
         url = url,
         method = "POST",
         headers = headers,
-        body = requestBody,
+        body = "{}",
         callback = function(success, response)
-            if success then
-                self:refresh()
-                self:refreshFriendRequests()
+            -- HTTP response is confirmation only
+            -- WS friend_added event is authoritative
+            if not success and self.deps.logger and self.deps.logger.warn then
+                self.deps.logger.warn("[Friends] Accept request failed: " .. tostring(response))
             end
         end
     })
     
-    return requestId2 ~= nil
+    return netRequestId ~= nil
 end
 
 function M.Friends:rejectRequest(requestId)
@@ -493,27 +447,29 @@ function M.Friends:rejectRequest(requestId)
         return false
     end
     
-    local requestBody = RequestEncoder.encodeRejectFriendRequest(requestId)
-    local url = self.deps.connection:getBaseUrl() .. Endpoints.FRIENDS.REJECT
+    -- Use new server endpoint: POST /api/friends/requests/:id/decline
+    local url = self.deps.connection:getBaseUrl() .. Endpoints.friendRequestDecline(requestId)
     
     local headers = self.deps.connection:getHeaders(self:_getCharacterName())
     
-    local requestId2 = self.deps.net.request({
+    local netRequestId = self.deps.net.request({
         url = url,
         method = "POST",
         headers = headers,
-        body = requestBody,
+        body = "{}",
         callback = function(success, response)
-            if success then
-                self:refresh()
-                self:refreshFriendRequests()
+            -- HTTP response is confirmation only
+            -- WS friend_request_declined event is authoritative
+            if not success and self.deps.logger and self.deps.logger.warn then
+                self.deps.logger.warn("[Friends] Reject request failed: " .. tostring(response))
             end
         end
     })
     
-    return requestId2 ~= nil
+    return netRequestId ~= nil
 end
 
+-- Cancel outgoing request (decline our own request)
 function M.Friends:cancelRequest(requestId)
     if not self.deps.net or not self.deps.connection then
         return false
@@ -523,25 +479,26 @@ function M.Friends:cancelRequest(requestId)
         return false
     end
     
-    local requestBody = RequestEncoder.encodeCancelFriendRequest(requestId)
-    local url = self.deps.connection:getBaseUrl() .. Endpoints.FRIENDS.CANCEL
+    -- Use decline endpoint for canceling (same effect)
+    local url = self.deps.connection:getBaseUrl() .. Endpoints.friendRequestDecline(requestId)
     
     local headers = self.deps.connection:getHeaders(self:_getCharacterName())
     
-    local requestId2 = self.deps.net.request({
+    local netRequestId = self.deps.net.request({
         url = url,
         method = "POST",
         headers = headers,
-        body = requestBody,
+        body = "{}",
         callback = function(success, response)
-            if success then
-                self:refresh()
-                self:refreshFriendRequests()
+            -- HTTP response is confirmation only
+            -- WS friend_request_declined event is authoritative
+            if not success and self.deps.logger and self.deps.logger.warn then
+                self.deps.logger.warn("[Friends] Cancel request failed: " .. tostring(response))
             end
         end
     })
     
-    return requestId2 ~= nil
+    return netRequestId ~= nil
 end
 
 function M.Friends:getFriends()
@@ -567,24 +524,39 @@ function M.Friends:refreshFriendRequests()
     
     self.friendRequestsInFlight = true
     
-    local url = self.deps.connection:getBaseUrl() .. Endpoints.FRIENDS.REQUESTS
-    
     local headers = self.deps.connection:getHeaders(self:_getCharacterName())
+    local baseUrl = self.deps.connection:getBaseUrl()
     
-    local requestId = self.deps.net.request({
-        url = url,
+    -- Fetch pending (incoming) requests
+    local pendingUrl = baseUrl .. Endpoints.FRIENDS.REQUESTS_PENDING
+    self.deps.net.request({
+        url = pendingUrl,
         method = "GET",
         headers = headers,
         body = "",
         callback = function(success, response)
-            self:handleFriendRequestsResponse(success, response)
+            self:handleFriendRequestsResponse(success, response, "pending")
         end
     })
     
-    return requestId ~= nil
+    -- Fetch outgoing requests
+    local outgoingUrl = baseUrl .. Endpoints.FRIENDS.REQUESTS_OUTGOING
+    self.deps.net.request({
+        url = outgoingUrl,
+        method = "GET",
+        headers = headers,
+        body = "",
+        callback = function(success, response)
+            self:handleFriendRequestsResponse(success, response, "outgoing")
+            -- Clear in-flight flag after both complete
+            self.friendRequestsInFlight = false
+        end
+    })
+    
+    return true
 end
 
-function M.Friends:handleFriendRequestsResponse(success, response)
+function M.Friends:handleFriendRequestsResponse(success, response, requestType)
     self.friendRequestsInFlight = false
     
     if not success then
@@ -594,49 +566,31 @@ function M.Friends:handleFriendRequestsResponse(success, response)
         return
     end
     
-    local ok, envelope = Envelope.decode(response)
+    -- Use new envelope format: { success, data, timestamp }
+    local ok, envelope, errorMsg = Envelope.decode(response)
     if not ok then
         if self.deps.logger and self.deps.logger.warn then
-            self.deps.logger.warn("[Friends] Failed to decode friend requests envelope")
+            self.deps.logger.warn("[Friends] Failed to decode friend requests: " .. tostring(errorMsg))
         end
         return
     end
     
-    if not envelope.success then
-        if self.deps.logger and self.deps.logger.warn then
-            self.deps.logger.warn("[Friends] Friend requests request failed: " .. tostring(envelope.error))
-        end
-        return
-    end
+    -- Extract requests from data
+    local data = envelope.data or {}
+    local requests = data.requests or {}
     
-    local decodeOk, result = DecodeRouter.decode(envelope)
-    if not decodeOk then
-        if self.deps.logger and self.deps.logger.warn then
-            self.deps.logger.warn("[Friends] Failed to decode friend requests payload")
-        end
-        return
-    end
-    
-    if result.incoming and type(result.incoming) == "table" then
-        self.incomingRequests = result.incoming
-    else
-        self.incomingRequests = {}
-    end
-    
-    if result.outgoing and type(result.outgoing) == "table" then
-        self.outgoingRequests = result.outgoing
-    else
-        self.outgoingRequests = {}
+    -- Update the appropriate list based on request type
+    if requestType == "pending" then
+        self.incomingRequests = requests
+        -- Check for new friend requests and trigger notifications
+        self:checkForNewFriendRequests(self.incomingRequests)
+    elseif requestType == "outgoing" then
+        self.outgoingRequests = requests
     end
     
     if self.deps.logger and self.deps.logger.debug then
-        self.deps.logger.debug("[Friends] Refreshed friend requests: " .. 
-            #self.incomingRequests .. " incoming, " .. 
-            #self.outgoingRequests .. " outgoing")
+        self.deps.logger.debug("[Friends] Refreshed " .. tostring(requestType) .. " requests: " .. #requests)
     end
-    
-    -- Check for new friend requests and trigger notifications
-    self:checkForNewFriendRequests(self.incomingRequests)
 end
 
 function M.Friends:getIncomingRequests()
@@ -680,12 +634,9 @@ function M.Friends:updatePresence()
         return false
     end
     
-    -- Send RAW game state to server (don't calculate isAnonymous here)
-    -- Server will use isAnonymous (raw game state) + shareCharacterData (shareJobWhenAnonymous preference)
-    -- to decide what data to show to friends
-    
-    local requestBody = RequestEncoder.encodeUpdatePresence(presence)
-    local url = self.deps.connection:getBaseUrl() .. Endpoints.CHARACTERS.STATE
+    -- Use new server endpoint: POST /api/presence/update
+    local requestBody = RequestEncoder.encodePresenceUpdate(presence)
+    local url = self.deps.connection:getBaseUrl() .. Endpoints.PRESENCE.UPDATE
     
     local characterName = presence.characterName or ""
     if characterName == "" and self.deps.connection.getCharacterName then
@@ -696,12 +647,12 @@ function M.Friends:updatePresence()
     
     local requestId = self.deps.net.request({
         url = url,
-        method = "PATCH",
+        method = "POST",
         headers = headers,
         body = requestBody,
         callback = function(success, response)
             if not success and self.deps.logger and self.deps.logger.error then
-                self.deps.logger.error("Failed to update presence: " .. tostring(response))
+                self.deps.logger.error("[Friends] Failed to update presence: " .. tostring(response))
             end
         end
     })
@@ -709,6 +660,9 @@ function M.Friends:updatePresence()
     return requestId ~= nil
 end
 
+-- Send heartbeat (safety signal only - response body is IGNORED)
+-- This is NOT polling. Heartbeat is fire-and-forget.
+-- WS is the sole source of real-time updates.
 function M.Friends:sendHeartbeat()
     if not self.deps.net or not self.deps.connection then
         return false
@@ -736,22 +690,11 @@ function M.Friends:sendHeartbeat()
         return false
     end
     
-    local pluginVersion = nil
-    local shouldReportVersion = not self.hasReportedVersion
-    if shouldReportVersion then
-        local addonVersion = addon and addon.version or "0.9.9"
-        pluginVersion = addonVersion
-    end
-    
+    -- Use new server endpoint: POST /api/presence/heartbeat
     local RequestEncoder = require("protocol.Encoding.RequestEncoder")
-    local requestBody = RequestEncoder.encodeGetHeartbeat(
-        characterName,
-        self.lastEventTimestamp or 0,
-        self.lastRequestEventTimestamp or 0,
-        pluginVersion
-    )
+    local requestBody = RequestEncoder.encodeHeartbeat()
     
-    local url = self.deps.connection:getBaseUrl() .. Endpoints.HEARTBEAT
+    local url = self.deps.connection:getBaseUrl() .. Endpoints.PRESENCE.HEARTBEAT
     local headers = self.deps.connection:getHeaders(characterName)
     
     local requestId = self.deps.net.request({
@@ -762,36 +705,17 @@ function M.Friends:sendHeartbeat()
         callback = function(success, response)
             self.heartbeatInFlight = false
             
+            -- IGNORE response body entirely (per migration plan)
+            -- Heartbeat is fire-and-forget safety signal
+            -- WS events are authoritative for all state updates
+            
             if not success then
                 if self.deps.logger and self.deps.logger.warn then
-                    self.deps.logger.warn("Heartbeat failed: " .. tostring(response))
+                    self.deps.logger.warn("[Friends] Heartbeat failed: " .. tostring(response))
                 end
-                return
-            end
-            
-            -- Only mark version as reported after successful heartbeat
-            if shouldReportVersion then
-                self.hasReportedVersion = true
-            end
-            
-            local ResponseDecoder = require("protocol.Decoding.ResponseDecoder")
-            local decodeSuccess, result = ResponseDecoder.decode(response)
-            
-            if decodeSuccess and result then
-                if result.lastEventTimestamp then
-                    self.lastEventTimestamp = result.lastEventTimestamp
-                end
-                if result.lastRequestEventTimestamp then
-                    self.lastRequestEventTimestamp = result.lastRequestEventTimestamp
-                end
-                
-                if result.statuses and type(result.statuses) == "table" then
-                    self:updateFriendStatuses(result.statuses)
-                end
-                
+            else
                 if self.deps.logger and self.deps.logger.debug then
-                    self.deps.logger.debug("Heartbeat success, updated " .. 
-                        tostring(result.statuses and #result.statuses or 0) .. " friend statuses")
+                    self.deps.logger.debug("[Friends] Heartbeat sent (response ignored)")
                 end
             end
         end
@@ -800,40 +724,10 @@ function M.Friends:sendHeartbeat()
     return requestId ~= nil
 end
 
-function M.Friends:updateFriendStatuses(statuses)
-    local FriendList = require("core.friendlist")
-    
-    for _, statusData in ipairs(statuses) do
-        local characterName = statusData.name or statusData.characterName
-        if characterName then
-            local status = FriendList.FriendStatus.new()
-            status.characterName = string.lower(characterName)
-            status.displayName = statusData.name or statusData.characterName or ""
-            status.isOnline = statusData.isOnline == true
-            status.isAway = statusData.isAway == true
-            status.job = statusData.job or ""
-            status.rank = statusData.rank or ""
-            status.zone = statusData.zone or ""
-            status.nation = statusData.nation
-            if status.nation == nil then
-                status.nation = -1
-            end
-            status.lastSeenAt = statusData.lastSeenAt or 0
-            if type(status.lastSeenAt) == "string" and status.lastSeenAt == "null" then
-                status.lastSeenAt = 0
-            end
-            status.showOnlineStatus = statusData.sharesOnlineStatus ~= false
-            status.friendedAs = statusData.friendedAsName or statusData.friendedAs or ""
-            
-            self.friendList:updateFriendStatus(status)
-        end
-    end
-    
-    self.lastUpdatedAt = getTime(self)
-    
-    -- Check for status changes and trigger notifications (heartbeat path)
-    self:checkForStatusChanges(self.friendList:getFriendStatuses())
-end
+-- REMOVED: updateFriendStatuses
+-- This method was used for heartbeat status parsing which is now FORBIDDEN
+-- WS events are the sole source of real-time updates
+-- See: wsEventHandler.lua for WS-based status handling
 
 local function capitalizeName(name)
     if not name or name == "" then

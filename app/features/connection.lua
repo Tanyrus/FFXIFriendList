@@ -1,8 +1,6 @@
 local M = {}
 local RequestEncoder = require("protocol.Encoding.RequestEncoder")
 local Envelope = require("protocol.Envelope")
-local DecodeRouter = require("protocol.DecodeRouter")
-local MessageTypes = require("protocol.MessageTypes")
 local Endpoints = require("protocol.Endpoints")
 
 local DEFAULT_SERVER_URL = "https://api.horizonfriendlist.com"
@@ -325,17 +323,24 @@ function M.Connection:isGameAlive()
     return isGameAlive()
 end
 
+-- Get auth headers matching new server middleware (friendlist-server/src/middleware/auth.ts)
+-- Required: Authorization: Bearer <apiKey>
+-- Optional: X-Character-Name, X-Realm-Id (for endpoints requiring character context)
 function M.Connection:getHeaders(characterName)
     characterName = characterName or ""
-    local ProtocolVersion = require("protocol.ProtocolVersion")
     local addonVersion = addon and addon.version or "0.9.9"
     
     local headers = {
         ["Content-Type"] = "application/json",
-        ["User-Agent"] = "FFXIFriendList/" .. addonVersion,
-        ["X-Protocol-Version"] = ProtocolVersion.PROTOCOL_VERSION
+        ["User-Agent"] = "FFXIFriendList/" .. addonVersion
     }
     
+    -- Add character name header if provided
+    if characterName ~= "" then
+        headers["X-Character-Name"] = characterName
+    end
+    
+    -- Add realm ID header
     local realmIdForHeader = nil
     if self.savedRealmId and self.savedRealmId ~= "" then
         realmIdForHeader = self.savedRealmId
@@ -346,24 +351,17 @@ function M.Connection:getHeaders(characterName)
         headers["X-Realm-Id"] = realmIdForHeader
     end
     
+    -- Add Authorization header (Bearer token format)
     if characterName ~= "" then
         local apiKey = self:getApiKey(characterName)
         if apiKey ~= "" then
-            headers["X-API-Key"] = apiKey
-            headers["characterName"] = characterName
+            headers["Authorization"] = "Bearer " .. apiKey
             if self.logger and self.logger.debug then
-                self.logger.debug("[Connection] Headers: API key present for " .. characterName)
+                self.logger.debug("[Connection] Headers: Auth token present for " .. characterName)
             end
         else
             if self.logger and self.logger.warn then
                 self.logger.warn("[Connection] Headers: No API key for " .. characterName)
-            end
-        end
-        
-        if self.session and self.session.getSessionId then
-            local sessionId = self.session:getSessionId()
-            if sessionId and sessionId ~= "" then
-                headers["X-Session-Id"] = sessionId
             end
         end
     end
@@ -423,41 +421,41 @@ function M.Connection:autoConnect(characterName)
         local baseUrl = self:getBaseUrl()
         baseUrl = baseUrl:gsub("/+$", "")
         
-        -- If we have an API key, use /api/characters/active (auto-creates character on same account)
-        -- If no API key, use /api/auth/ensure (new registration or recovery)
+        -- New server auth flow:
+        -- If we have an API key, use /api/auth/add-character to register this character
+        -- then the server will automatically link it to our account
         local hasApiKey = storedApiKey and storedApiKey ~= ""
         local url, requestBody
         
         if hasApiKey then
-            -- Use characters/active endpoint (matches C++ behavior)
-            url = baseUrl .. Endpoints.CHARACTERS.ACTIVE
-            requestBody = RequestEncoder.encodeSetActiveCharacter(normalizedName, realmId)
+            -- Add character to account (creates if needed, links if exists)
+            url = baseUrl .. Endpoints.AUTH.ADD_CHARACTER
+            requestBody = RequestEncoder.encodeAddCharacter(normalizedName, realmId)
         else
-            -- Use auth/ensure for new registrations
-            url = baseUrl .. Endpoints.AUTH.ENSURE
-            requestBody = RequestEncoder.encodeAuthEnsure(normalizedName, realmId)
+            -- No API key - cannot authenticate with new server
+            -- User needs to obtain an API key through server registration
+            if self.logger and self.logger.warn then
+                self.logger.warn("[Connection] No API key available - cannot authenticate")
+            end
+            self.autoConnectInProgress = false
+            self:setFailed()
+            self.lastError = "No API key - please register through the server"
+            return false
         end
         
-        local ProtocolVersion = require("protocol.ProtocolVersion")
         local addonVersion = addon and addon.version or "0.9.9"
         local headers = {
             ["Content-Type"] = "application/json",
             ["User-Agent"] = "FFXIFriendList/" .. addonVersion,
-            ["X-Protocol-Version"] = ProtocolVersion.PROTOCOL_VERSION
+            ["X-Character-Name"] = normalizedName
         }
         
+        -- Add Authorization header (Bearer token format) if we have an API key
         if hasApiKey then
-            headers["X-API-Key"] = storedApiKey
-            headers["characterName"] = normalizedName
+            headers["Authorization"] = "Bearer " .. storedApiKey
         end
         
-        if self.session and self.session.getSessionId then
-            local sessionId = self.session:getSessionId()
-            if sessionId and sessionId ~= "" then
-                headers["X-Session-Id"] = sessionId
-            end
-        end
-        
+        -- Add realm ID header
         local realmIdForHeader = nil
         if self.savedRealmId and self.savedRealmId ~= "" then
             realmIdForHeader = self.savedRealmId
@@ -514,50 +512,23 @@ function M.Connection:handleAuthResponse(success, response, characterName, fallb
         return
     end
     
-    local ok, envelope = Envelope.decode(response)
+    -- Use new envelope decoder for { success, data, timestamp } format
+    local ok, result, errorMsg = Envelope.decode(response)
     if not ok then
         self:setFailed()
-        self.lastError = envelope or "Failed to decode response"
+        self.lastError = errorMsg or result or "Failed to decode response"
         if self.logger and self.logger.error then
             self.logger.error("[Connection] Envelope decode failed: " .. tostring(self.lastError))
         end
         return
     end
     
-    -- Accept both AuthEnsureResponse (new registration) and SetActiveCharacterResponse (alt linking)
-    local validResponseTypes = {
-        [MessageTypes.ResponseType.AuthEnsureResponse] = true,
-        [MessageTypes.ResponseType.SetActiveCharacterResponse] = true
-    }
-    if not envelope.success or not validResponseTypes[envelope.type] then
-        self:setFailed()
-        self.lastError = envelope.error or "Authentication failed"
-        if self.logger and self.logger.echo then
-            self.logger.echo("Authentication failed: " .. tostring(self.lastError))
-        elseif self.logger and self.logger.error then
-            self.logger.error("[Connection] Auth failed: " .. tostring(self.lastError))
-        end
-        return
-    end
+    -- result contains { success, data, timestamp }
+    local data = result.data or {}
     
-    local decodeOk, result = DecodeRouter.decode(envelope)
-    if not decodeOk then
-        self:setFailed()
-        self.lastError = result or "Failed to decode response"
-        return
-    end
-    
-    local apiKey = ""
-    if result and type(result) == "table" then
-        apiKey = result.apiKey or ""
-    end
-    if apiKey == "" and envelope.payload and type(envelope.payload) == "table" then
-        apiKey = envelope.payload.apiKey or ""
-    end
-    
-    if apiKey == "" then
-        apiKey = fallbackApiKey or ""
-    end
+    -- The add-character response includes character info
+    -- We keep using the fallback API key since the new server doesn't return new keys
+    local apiKey = fallbackApiKey or ""
     
     if apiKey and apiKey ~= "" then
         self:setApiKey(characterName, apiKey)

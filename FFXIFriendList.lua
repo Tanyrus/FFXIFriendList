@@ -62,6 +62,9 @@ local closeInputHandler = require('ui.input.close_input')
 -- Load sound player service
 local SoundPlayer = require('platform.services.SoundPlayer')
 
+-- Load diagnostics runner
+local DiagnosticsRunner = require('app.diagnostics.DiagnosticsRunner')
+
 -- Simple services (no platform dependencies)
 local SessionManager = {}
 SessionManager.new = function()
@@ -87,6 +90,9 @@ gAdjustedSettings = nil
 local app = nil
 local initialized = false
 local installPath = nil
+
+-- Diagnostics runner
+local diagRunner = nil
 
 -- Update timing (for network polling - now per-frame for faster response)
 local lastUpdateTime = 0
@@ -199,6 +205,19 @@ ashita.events.register('load', 'ffxifriendlist_load', function()
         
         -- Set global app instance for modules to access
         _G.FFXIFriendListApp = app
+        
+        -- Create diagnostics runner
+        diagRunner = DiagnosticsRunner.new({
+            logger = deps.logger,
+            net = netClient,
+            connection = app.features.connection,
+            wsClient = app.features.wsClient
+        })
+        
+        -- Enable diagnostics if DebugMode is set
+        if gConfig and gConfig.DebugMode then
+            diagRunner:setEnabled(true)
+        end
     end
     
     -- Initialize handlers
@@ -593,7 +612,34 @@ ashita.events.register('command', 'ffxifriendlist_command', function(e)
                 print("  /fl block <name> - Block a player from sending friend requests")
                 print("  /fl unblock <name> - Unblock a player")
                 print("  /fl blocked - List all blocked players")
+                print("  /fl diag <cmd> - Run diagnostics (requires DebugMode=true)")
                 print("  /befriend <name> [tag] - Send friend request with optional tag")
+                return
+            end
+            
+            if subcmd == "diag" then
+                if diagRunner then
+                    -- Collect remaining args
+                    local diagArgs = {}
+                    for i = 3, #command_args do
+                        table.insert(diagArgs, command_args[i])
+                    end
+                    diagRunner:handleCommand(diagArgs)
+                else
+                    print("[FFXIFriendList] Diagnostics not available")
+                end
+                return
+            end
+            
+            if subcmd == "debug" then
+                -- Toggle debug mode which enables diagnostics
+                if gConfig then
+                    gConfig.DebugMode = not gConfig.DebugMode
+                    if diagRunner then
+                        diagRunner:setEnabled(gConfig.DebugMode)
+                    end
+                    print("[FFXIFriendList] Debug mode " .. (gConfig.DebugMode and "ENABLED" or "DISABLED"))
+                end
                 return
             end
             

@@ -38,6 +38,7 @@ require('imgui')
 -- config module removed - using libs.settings directly
 local moduleRegistry = require('core.moduleregistry')
 local settings = require('libs.settings')
+local ServerConfig = require('core.ServerConfig')
 
 -- Expose moduleRegistry globally for window close policy
 _G.moduleRegistry = moduleRegistry
@@ -133,7 +134,7 @@ ashita.events.register('load', 'ffxifriendlist_load', function()
     if not gConfig.data.serverSelection then
         gConfig.data.serverSelection = {
             savedServerId = "",
-            savedServerBaseUrl = "https://api.horizonfriendlist.com",
+            savedServerBaseUrl = ServerConfig.DEFAULT_SERVER_URL,
             detectedServerShownOnce = false
         }
     end
@@ -443,10 +444,12 @@ ashita.events.register('packet_in', 'ffxifriendlist_packet', function(e)
     return false
 end)
 
+local Assets = require('constants.assets')
+
 local function M_playSoundTest(soundType)
     local sounds = {
-        online = "online.wav",
-        request = "friend-request.wav"
+        online = Assets.SOUNDS.FRIEND_ONLINE,
+        request = Assets.SOUNDS.FRIEND_REQUEST
     }
     
     if soundType == "all" then

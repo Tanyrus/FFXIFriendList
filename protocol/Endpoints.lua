@@ -44,6 +44,11 @@ function M.friendRequestDecline(requestId)
     return "/api/friends/requests/" .. tostring(requestId) .. "/decline"
 end
 
+-- Cancel friend request (dynamic path by requestId)
+function M.friendRequestCancel(requestId)
+    return "/api/friends/requests/" .. tostring(requestId)
+end
+
 -- Remove friend (dynamic path by accountId)
 function M.friendRemove(accountId)
     return "/api/friends/" .. tostring(accountId)

@@ -7,6 +7,7 @@
 ]]--
 
 require('common')
+local ServerConfig = require('core.ServerConfig')
 
 local M = {}
 
@@ -133,7 +134,7 @@ local defaultSettings = T{
         apiKeys = T{},
         serverSelection = T{
             savedServerId = "",
-            savedServerBaseUrl = "https://api.horizonfriendlist.com",
+            savedServerBaseUrl = ServerConfig.DEFAULT_SERVER_URL,
             detectedServerShownOnce = false,
             helpSeenPerServer = T{}
         },

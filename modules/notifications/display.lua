@@ -5,13 +5,18 @@ local SoundPlayer = require('platform.services.SoundPlayer')
 local FontManager = require('app.ui.FontManager')
 local InputHelper = require('ui.helpers.InputHelper')
 local scaling = require('scaling')
+local TimingConstants = require('core.TimingConstants')
+local UIConst = require('constants.ui')
+local Colors = require('constants.colors')
+local Assets = require('constants.assets')
 
 local M = {}
 
-local TOAST_SPACING = 10.0
-local DEFAULT_POSITION_X = 10.0
-local DEFAULT_POSITION_Y = 15.0
-local DEFAULT_DURATION_MS = 8000
+-- Use centralized constants (originals kept as fallbacks for compatibility)
+local TOAST_SPACING = UIConst.SPACING.TOAST_SPACING
+local DEFAULT_POSITION_X = UIConst.NOTIFICATION_POSITION and UIConst.NOTIFICATION_POSITION[1] or 10.0
+local DEFAULT_POSITION_Y = UIConst.NOTIFICATION_POSITION and UIConst.NOTIFICATION_POSITION[2] or 15.0
+local DEFAULT_DURATION_MS = TimingConstants.NOTIFICATION_DEFAULT_DURATION_MS or 8000
 
 local TOAST_WINDOW_FLAGS = bit.bor(
     ImGuiWindowFlags_NoTitleBar or 0x00000001,
@@ -205,11 +210,12 @@ local function maybePlaySound(toast)
         return
     end
     
+    -- Use centralized asset constants for sound filenames
     local soundFile = nil
     if soundType == NotificationSoundPolicy.NotificationSoundType.FriendOnline then
-        soundFile = "online.wav"
+        soundFile = Assets.SOUNDS.FRIEND_ONLINE
     elseif soundType == NotificationSoundPolicy.NotificationSoundType.FriendRequest then
-        soundFile = "friend-request.wav"
+        soundFile = Assets.SOUNDS.FRIEND_REQUEST
     end
     
     if soundFile then

@@ -1,12 +1,11 @@
 local ServerListCore = require("core.serverlistcore")
 local Endpoints = require("protocol.Endpoints")
+local ServerConfig = require("core.ServerConfig")
 
 local M = {}
 
 M.ServerList = {}
 M.ServerList.__index = M.ServerList
-
-local DEFAULT_SERVER_URL = "https://api.horizonfriendlist.com"
 
 function M.ServerList.new(deps)
     local self = setmetatable({}, M.ServerList)
@@ -24,7 +23,7 @@ function M.ServerList.new(deps)
             self.selected = ServerListCore.ServerInfo.new(
                 serverSel.savedServerId,
                 serverSel.savedServerId,
-                serverSel.savedServerBaseUrl or DEFAULT_SERVER_URL,
+                serverSel.savedServerBaseUrl or ServerConfig.DEFAULT_SERVER_URL,
                 serverSel.savedServerId,
                 false
             )
@@ -62,7 +61,7 @@ function M.ServerList:refresh()
     self.state = "loading"
     self.lastError = nil
     
-    local url = DEFAULT_SERVER_URL .. Endpoints.SERVERS
+    local url = ServerConfig.DEFAULT_SERVER_URL .. Endpoints.SERVERS
     
     local requestId = self.deps.net.request({
         url = url,

@@ -2,8 +2,7 @@ local M = {}
 local RequestEncoder = require("protocol.Encoding.RequestEncoder")
 local Envelope = require("protocol.Envelope")
 local Endpoints = require("protocol.Endpoints")
-
-local DEFAULT_SERVER_URL = "https://api.horizonfriendlist.com"
+local ServerConfig = require("core.ServerConfig")
 
 M.ConnectionState = {
     Disconnected = "Disconnected",
@@ -127,7 +126,7 @@ function M.Connection.new(deps)
         local serverSel = _G.gConfig.data.serverSelection
         if serverSel.savedServerId and serverSel.savedServerId ~= "" then
             self.savedServerId = serverSel.savedServerId
-            self.savedServerBaseUrl = serverSel.savedServerBaseUrl or DEFAULT_SERVER_URL
+            self.savedServerBaseUrl = serverSel.savedServerBaseUrl or ServerConfig.DEFAULT_SERVER_URL
             self.savedRealmId = serverSel.savedServerId
             if self.logger and self.logger.info then
                 self.logger.info("[Connection] Loaded saved server: " .. tostring(self.savedServerId) .. " (" .. tostring(self.savedServerBaseUrl) .. "), realm: " .. tostring(self.savedRealmId))
@@ -312,7 +311,7 @@ function M.Connection:getBaseUrl()
     if self.savedServerBaseUrl and self.savedServerBaseUrl ~= "" then
         return self.savedServerBaseUrl
     end
-    return DEFAULT_SERVER_URL
+    return ServerConfig.DEFAULT_SERVER_URL
 end
 
 function M.Connection:getCharacterName()

@@ -479,16 +479,16 @@ function M.Friends:cancelRequest(requestId)
         return false
     end
     
-    -- Use decline endpoint for canceling (same effect)
-    local url = self.deps.connection:getBaseUrl() .. Endpoints.friendRequestDecline(requestId)
+    -- Use proper cancel endpoint: DELETE /api/friends/requests/:id
+    local url = self.deps.connection:getBaseUrl() .. Endpoints.friendRequestCancel(requestId)
     
     local headers = self.deps.connection:getHeaders(self:_getCharacterName())
     
     local netRequestId = self.deps.net.request({
         url = url,
-        method = "POST",
+        method = "DELETE",
         headers = headers,
-        body = "{}",
+        body = "",
         callback = function(success, response)
             -- HTTP response is confirmation only
             -- WS friend_request_declined event is authoritative

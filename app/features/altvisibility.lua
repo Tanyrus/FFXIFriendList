@@ -319,11 +319,13 @@ function M.AltVisibility:refresh()
             end
             
             if result.success == false then
-                selfRef:setError(result.error or "Server error")
+                selfRef:setError(result.error and result.error.message or "Server error")
                 return
             end
             
-            selfRef:updateFromResult(result.friends, result.characters)
+            -- Handle response envelope: { success: true, data: { friends, characters } }
+            local data = result.data or result
+            selfRef:updateFromResult(data.friends, data.characters)
             selfRef:setLastUpdateTime(getTime(selfRef))
             
             if selfRef.deps.logger then

@@ -21,6 +21,7 @@ M.WEBSOCKET = "/ws"
 
 -- Authentication endpoints
 M.AUTH = {
+    REGISTER = "/api/auth/register",
     ENSURE = "/api/auth/ensure",
     ADD_CHARACTER = "/api/auth/add-character",
     SET_ACTIVE = "/api/auth/set-active",
@@ -32,7 +33,8 @@ M.FRIENDS = {
     LIST = "/api/friends",
     SEND_REQUEST = "/api/friends/request",
     REQUESTS_PENDING = "/api/friends/requests/pending",
-    REQUESTS_OUTGOING = "/api/friends/requests/outgoing"
+    REQUESTS_OUTGOING = "/api/friends/requests/outgoing",
+    VISIBILITY = "/api/friends/visibility"  -- Alt visibility settings (not yet implemented on server)
 }
 
 -- Friend request actions (dynamic paths)

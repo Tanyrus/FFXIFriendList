@@ -102,7 +102,7 @@ function M.Connection.new(deps)
     self.realmDetector = deps.realmDetector
     
     self.state = M.ConnectionState.Disconnected
-    self.apiKeys = {}
+    self.apiKey = ""  -- Single API key for the account
     self.savedServerId = nil
     self.savedServerBaseUrl = nil
     self.savedRealmId = nil
@@ -114,10 +114,27 @@ function M.Connection.new(deps)
     self.autoConnectInProgress = false
     self.lastCharacterName = ""
     
-    if _G.gConfig and _G.gConfig.data and _G.gConfig.data.apiKeys then
-        for charName, apiKey in pairs(_G.gConfig.data.apiKeys) do
-            if apiKey and apiKey ~= "" then
-                self.apiKeys[charName] = apiKey
+    -- Load API key (single key model)
+    if _G.gConfig and _G.gConfig.data and _G.gConfig.data.apiKey and _G.gConfig.data.apiKey ~= "" then
+        self.apiKey = _G.gConfig.data.apiKey
+    -- Migration: check old per-realm or per-character keys
+    elseif _G.gConfig and _G.gConfig.data then
+        -- Try apiKeysByRealm first
+        if _G.gConfig.data.apiKeysByRealm then
+            for _, apiKey in pairs(_G.gConfig.data.apiKeysByRealm) do
+                if apiKey and apiKey ~= "" then
+                    self.apiKey = apiKey
+                    break
+                end
+            end
+        end
+        -- Try old apiKeys (per-character) if still empty
+        if self.apiKey == "" and _G.gConfig.data.apiKeys then
+            for _, apiKey in pairs(_G.gConfig.data.apiKeys) do
+                if apiKey and apiKey ~= "" then
+                    self.apiKey = apiKey
+                    break
+                end
             end
         end
     end
@@ -252,20 +269,21 @@ function M.Connection:canConnect()
            self.state == M.ConnectionState.Failed
 end
 
+-- Single API key for the account (characterName param kept for backward compat but ignored)
 function M.Connection:getApiKey(characterName)
-    return self.apiKeys[characterName] or ""
+    return self.apiKey or ""
 end
 
 function M.Connection:setApiKey(characterName, apiKey)
-    self.apiKeys[characterName] = apiKey
+    self.apiKey = apiKey or ""
 end
 
 function M.Connection:hasApiKey(characterName)
-    return self.apiKeys[characterName] ~= nil and self.apiKeys[characterName] ~= ""
+    return self.apiKey ~= nil and self.apiKey ~= ""
 end
 
 function M.Connection:clearApiKey(characterName)
-    self.apiKeys[characterName] = nil
+    self.apiKey = ""
 end
 
 function M.Connection:hasSavedServer()
@@ -280,6 +298,11 @@ function M.Connection:setSavedServer(serverId, baseUrl)
     self.savedServerId = serverId
     self.savedServerBaseUrl = baseUrl
     self.savedRealmId = serverId
+    
+    -- Reset auto-connect flags so tick() will trigger a new connection attempt
+    self.autoConnectAttempted = false
+    self.autoConnectInProgress = false
+    
     if self.logger and self.logger.echo then
         self.logger.echo("Server selected: " .. tostring(serverId) .. " (" .. tostring(baseUrl) .. ")")
     elseif self.logger and self.logger.info then
@@ -402,27 +425,16 @@ function M.Connection:autoConnect(characterName)
     
     local storedApiKey = self:getApiKey(normalizedName)
     
-    -- If no API key for this character, use any available API key from linked characters
-    -- This allows alt registration to link to the existing account
-    if not storedApiKey or storedApiKey == "" then
-        for charName, apiKey in pairs(self.apiKeys) do
-            if apiKey and apiKey ~= "" then
-                storedApiKey = apiKey
-                if self.logger and self.logger.debug then
-                    self.logger.debug("[Connection] Using API key from " .. charName .. " for alt registration")
-                end
-                break
-            end
-        end
-    end
+    -- With per-realm API keys, we don't need to search through character keys
+    -- The getApiKey() already returns the realm's API key if available
     
     local function attemptConnect()
         local baseUrl = self:getBaseUrl()
         baseUrl = baseUrl:gsub("/+$", "")
         
         -- New server auth flow:
-        -- If we have an API key, use /api/auth/add-character to register this character
-        -- then the server will automatically link it to our account
+        -- If we have an API key, use /api/auth/add-character to add this character
+        -- If no API key, use /api/auth/register to create a new account
         local hasApiKey = storedApiKey and storedApiKey ~= ""
         local url, requestBody
         
@@ -431,15 +443,9 @@ function M.Connection:autoConnect(characterName)
             url = baseUrl .. Endpoints.AUTH.ADD_CHARACTER
             requestBody = RequestEncoder.encodeAddCharacter(normalizedName, realmId)
         else
-            -- No API key - cannot authenticate with new server
-            -- User needs to obtain an API key through server registration
-            if self.logger and self.logger.warn then
-                self.logger.warn("[Connection] No API key available - cannot authenticate")
-            end
-            self.autoConnectInProgress = false
-            self:setFailed()
-            self.lastError = "No API key - please register through the server"
-            return false
+            -- No API key - register as new user
+            url = baseUrl .. Endpoints.AUTH.REGISTER
+            requestBody = RequestEncoder.encodeRegister(normalizedName, realmId)
         end
         
         local addonVersion = addon and addon.version or "0.9.9"
@@ -525,20 +531,21 @@ function M.Connection:handleAuthResponse(success, response, characterName, fallb
     -- result contains { success, data, timestamp }
     local data = result.data or {}
     
-    -- The add-character response includes character info
-    -- We keep using the fallback API key since the new server doesn't return new keys
-    local apiKey = fallbackApiKey or ""
+    -- Check for API key in response (from /api/auth/register)
+    -- The register endpoint returns { apiKey, accountId, character }
+    local apiKey = data.apiKey or fallbackApiKey or ""
     
     if apiKey and apiKey ~= "" then
-        self:setApiKey(characterName, apiKey)
+        self:setApiKey(nil, apiKey)  -- Single API key, characterName ignored
+        -- Persist to config
         if _G.gConfig then
             if not _G.gConfig.data then
                 _G.gConfig.data = {}
             end
-            if not _G.gConfig.data.apiKeys then
-                _G.gConfig.data.apiKeys = {}
-            end
-            _G.gConfig.data.apiKeys[characterName] = apiKey
+            _G.gConfig.data.apiKey = apiKey
+            -- Clean up old structures if present
+            _G.gConfig.data.apiKeys = nil
+            _G.gConfig.data.apiKeysByRealm = nil
             local settings = require("libs.settings")
             if settings and settings.save then
                 settings.save()

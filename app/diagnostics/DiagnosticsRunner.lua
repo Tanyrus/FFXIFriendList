@@ -18,7 +18,7 @@
 ]]--
 
 local Endpoints = require('protocol.Endpoints')
-local Json = require('libs.dkjson.dkjson')
+local Json = require('protocol.Json')
 
 local M = {}
 M.__index = M
@@ -136,7 +136,13 @@ function M:getAuthHeaders(includeCharacter)
         return nil, "No connection feature"
     end
     
-    local headers = self.connection:getHeaders()
+    -- Get character name for auth
+    local charName = ""
+    if self.connection.getCharacterName then
+        charName = self.connection:getCharacterName() or ""
+    end
+    
+    local headers = self.connection:getHeaders(charName)
     if not headers then
         return nil, "Not authenticated"
     end
@@ -165,8 +171,8 @@ function M:httpRequest(method, endpoint, body, headers, callback)
     end
     
     local baseUrl = ""
-    if self.connection and self.connection.getServerUrl then
-        baseUrl = self.connection:getServerUrl()
+    if self.connection and self.connection.getBaseUrl then
+        baseUrl = self.connection:getBaseUrl()
     end
     
     local url = baseUrl .. endpoint
@@ -177,19 +183,28 @@ function M:httpRequest(method, endpoint, body, headers, callback)
         url = url,
         method = method,
         headers = headers or {},
-        body = body
+        body = body,
+        callback = function(success, response, errorStr, httpStatus)
+            -- net.lua callback signature: (success, response, errorStr, httpStatus)
+            -- Use httpStatus if provided, otherwise try to parse from error string
+            local status = httpStatus
+            if not status and errorStr and type(errorStr) == "string" then
+                local statusMatch = errorStr:match("HTTP%s+(%d+)")
+                if statusMatch then
+                    status = tonumber(statusMatch)
+                end
+            end
+            -- If success and no status from error, assume 200
+            if success and not status then
+                status = 200
+            end
+            callback(success, response, status, requestId, not success and errorStr or nil)
+        end
     }
     
     -- Use the net wrapper's request method
-    if self.net.request then
-        self.net:request(options, function(response, err)
-            if err then
-                callback(false, nil, nil, requestId, err)
-            else
-                local success = response and response.status and response.status >= 200 and response.status < 500
-                callback(success, response, response and response.status, requestId)
-            end
-        end)
+    if self.net and self.net.request then
+        self.net.request(options)
     else
         callback(false, nil, nil, requestId, "Network request method not available")
     end
@@ -251,7 +266,14 @@ function M:testEndpoint(name, method, endpoint, options, callback)
             status = STATUS.PENDING
         }
         
-        if err then
+        -- First check if we got the expected status code (even on "failure" responses like 401, 400)
+        if status and type(expectedStatus) == "number" and status == expectedStatus then
+            result.status = STATUS.PASS
+        elseif status and expectedStatus == "any2xx" and status >= 200 and status < 300 then
+            result.status = STATUS.PASS
+        elseif status and expectedStatus == "any4xx" and status >= 400 and status < 500 then
+            result.status = STATUS.PASS
+        elseif err then
             result.status = STATUS.FAIL
             result.reason = "Error: " .. tostring(err)
         elseif not status then
@@ -440,7 +462,8 @@ function M:testWebSocket(callback)
     -- Check current WS state
     local state = self.wsClient:getState()
     
-    if state == "connected" then
+    -- WsClient uses capitalized states: "Connected", "Connecting", "Disconnected", etc.
+    if state == "Connected" then
         self:printResult("WS connection", STATUS.PASS, "Connected")
         
         -- Check if we received snapshot
@@ -449,7 +472,7 @@ function M:testWebSocket(callback)
         else
             self:printResult("WS friends_snapshot", STATUS.FAIL, "Not received yet")
         end
-    elseif state == "connecting" then
+    elseif state == "Connecting" then
         self:printResult("WS connection", STATUS.PENDING, "Still connecting...")
     else
         self:printResult("WS connection", STATUS.FAIL, "State: " .. tostring(state))
@@ -475,16 +498,16 @@ function M:showStatus()
     
     -- Auth status
     if self.connection then
-        local apiKey = self.connection:getApiKey()
+        local charName = self.connection:getCharacterName()
+        local apiKey = self.connection:getApiKey(charName)
         if apiKey and apiKey ~= "" then
             self:printChat("Auth: Authenticated (API key set)", COLORS.GREEN)
         else
             self:printChat("Auth: Not authenticated", COLORS.RED)
         end
         
-        local charName = self.connection:getCharacterName()
-        local realmId = self.connection:getRealmId()
-        if charName and realmId then
+        local realmId = self.connection.savedRealmId or "(unknown)"
+        if charName and charName ~= "" then
             self:printChat("Character: " .. tostring(charName) .. "@" .. tostring(realmId))
         else
             self:printChat("Character: Not set", COLORS.YELLOW)

@@ -129,9 +129,9 @@ local defaultSettings = T{
     tagOrder = T{ "Favorite" },
     collapsedTags = T{},
     
-    -- Data section (API keys, server selection, preferences)
+    -- Data section (API key, server selection, preferences)
     data = T{
-        apiKeys = T{},
+        apiKey = "",  -- Single API key for the account
         serverSelection = T{
             savedServerId = "",
             savedServerBaseUrl = ServerConfig.DEFAULT_SERVER_URL,

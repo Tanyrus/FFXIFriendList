@@ -103,19 +103,27 @@ function M.ServerList:handleRefreshResponse(success, response)
         return
     end
     
+    -- Unwrap the response envelope (new server format: { success, data: { servers }, timestamp })
+    local serverData = data
+    if data and data.success and data.data then
+        serverData = data.data
+    end
+    
     local result = { servers = {} }
-    if data and data.servers and type(data.servers) == "table" then
-        result.servers = data.servers
+    if serverData and serverData.servers and type(serverData.servers) == "table" then
+        result.servers = serverData.servers
     end
     
     self.servers = {}
     if result.servers then
-        for _, serverData in ipairs(result.servers) do
+        for _, srvData in ipairs(result.servers) do
+            -- New server format doesn't include baseUrl/realmId per server
+            -- All servers use the same API endpoint, realmId = server id
             local server = ServerListCore.ServerInfo.new(
-                serverData.id,
-                serverData.name,
-                serverData.baseUrl,
-                serverData.realmId,
+                srvData.id,
+                srvData.name,
+                srvData.baseUrl or ServerConfig.DEFAULT_SERVER_URL,  -- Use default if not provided
+                srvData.realmId or srvData.id,  -- Use id as realmId if not provided
                 true
             )
             table.insert(self.servers, server)

@@ -128,8 +128,8 @@ ashita.events.register('load', 'ffxifriendlist_load', function()
     if not gConfig.data then
         gConfig.data = {}
     end
-    if not gConfig.data.apiKeys then
-        gConfig.data.apiKeys = {}
+    if not gConfig.data.apiKey then
+        gConfig.data.apiKey = ""
     end
     if not gConfig.data.serverSelection then
         gConfig.data.serverSelection = {
@@ -215,8 +215,9 @@ ashita.events.register('load', 'ffxifriendlist_load', function()
             wsClient = app.features.wsClient
         })
         
-        -- Enable diagnostics if DebugMode is set
-        if gConfig and gConfig.DebugMode then
+        -- Enable diagnostics if debugMode is set in preferences
+        local debugModeEnabled = gConfig and gConfig.data and gConfig.data.preferences and gConfig.data.preferences.debugMode
+        if debugModeEnabled then
             diagRunner:setEnabled(true)
         end
     end
@@ -636,12 +637,18 @@ ashita.events.register('command', 'ffxifriendlist_command', function(e)
             
             if subcmd == "debug" then
                 -- Toggle debug mode which enables diagnostics
-                if gConfig then
-                    gConfig.DebugMode = not gConfig.DebugMode
+                if gConfig and gConfig.data and gConfig.data.preferences then
+                    gConfig.data.preferences.debugMode = not gConfig.data.preferences.debugMode
+                    local enabled = gConfig.data.preferences.debugMode
                     if diagRunner then
-                        diagRunner:setEnabled(gConfig.DebugMode)
+                        diagRunner:setEnabled(enabled)
                     end
-                    print("[FFXIFriendList] Debug mode " .. (gConfig.DebugMode and "ENABLED" or "DISABLED"))
+                    print("[FFXIFriendList] Debug mode " .. (enabled and "ENABLED" or "DISABLED"))
+                    -- Save the setting
+                    local settings = require("libs.settings")
+                    if settings and settings.save then
+                        settings.save()
+                    end
                 end
                 return
             end

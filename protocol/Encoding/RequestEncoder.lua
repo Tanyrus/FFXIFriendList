@@ -7,6 +7,20 @@ local Json = require("protocol.Json")
 
 local M = {}
 
+-- Normalize character/realm fields for HTTP payloads
+local function normalizeCharacterName(name)
+    if not name then return "" end
+    local trimmed = tostring(name):match("^%s*(.-)%s*$") or ""
+    return string.lower(trimmed)
+end
+
+local function normalizeRealmId(realmId)
+    if not realmId then return "unknown" end
+    local trimmed = tostring(realmId):match("^%s*(.-)%s*$") or ""
+    if trimmed == "" then return "unknown" end
+    return string.lower(trimmed)
+end
+
 -- Encode a RequestMessage
 function M.encode(request)
     local requestTable = {
@@ -436,8 +450,8 @@ end
 -- Body: {"characterName": "...", "realmId": "..."}
 function M.encodeNewSendFriendRequest(characterName, realmId)
     local body = {
-        characterName = characterName,
-        realmId = realmId or "unknown"
+        characterName = normalizeCharacterName(characterName),
+        realmId = normalizeRealmId(realmId)
     }
     return Json.encode(body)
 end
@@ -446,8 +460,8 @@ end
 -- Body: {"characterName": "...", "realmId": "..."}
 function M.encodeBlock(characterName, realmId)
     local body = {
-        characterName = characterName,
-        realmId = realmId or "unknown"
+        characterName = normalizeCharacterName(characterName),
+        realmId = normalizeRealmId(realmId)
     }
     return Json.encode(body)
 end

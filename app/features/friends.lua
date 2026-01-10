@@ -241,6 +241,10 @@ function M.Friends:handleRefreshResponse(success, response)
     for _, friendData in ipairs(friends) do
         -- New server uses accountId, characterName, isOnline, lastSeen, state
         local displayName = friendData.characterName or ""
+        if displayName == "" then
+            -- Fallback: use accountId prefix if no character name
+            displayName = "Unknown (" .. string.sub(friendData.accountId or "???", 1, 8) .. ")"
+        end
         local friend = FriendList.Friend.new(displayName, displayName)
         friend.friendAccountId = friendData.accountId
         friend.isOnline = friendData.isOnline == true
@@ -323,20 +327,24 @@ function M.Friends:addFriend(name)
     
     -- Get realm ID for the request
     local realmId = "unknown"
-    if self.deps.connection.savedRealmId then
+    if self.deps.connection.savedRealmId and self.deps.connection.savedRealmId ~= "" then
         realmId = self.deps.connection.savedRealmId
+    elseif self.deps.connection.realmDetector and self.deps.connection.realmDetector.getRealmId then
+        realmId = self.deps.connection.realmDetector:getRealmId() or "unknown"
     end
+
+    local normalizedName = string.lower((tostring(name or ""):match("^%s*(.-)%s*$") or ""))
     
     -- Use new server endpoint: POST /api/friends/request
-    local requestBody = RequestEncoder.encodeNewSendFriendRequest(name, realmId)
+    local requestBody = RequestEncoder.encodeNewSendFriendRequest(normalizedName, realmId)
     local url = self.deps.connection:getBaseUrl() .. Endpoints.FRIENDS.SEND_REQUEST
     
     local headers = self.deps.connection:getHeaders(self:_getCharacterName())
     
     -- Optimistic add to outgoing requests
     local tempRequest = {
-        id = "pending_" .. name .. "_" .. os.time(),
-        name = name,
+        id = "pending_" .. normalizedName .. "_" .. os.time(),
+        name = normalizedName,
         status = "PENDING",
         createdAt = os.time() * 1000
     }
@@ -348,10 +356,62 @@ function M.Friends:addFriend(name)
         headers = headers,
         body = requestBody,
         callback = function(success, response)
-            -- HTTP response is confirmation only
-            -- WS events are authoritative for state
-            if not success and self.deps.logger and self.deps.logger.warn then
-                self.deps.logger.warn("[Friends] Send request failed: " .. tostring(response))
+            -- Remove optimistic request on any response
+            for i, req in ipairs(self.outgoingRequests) do
+                if req.id == tempRequest.id then
+                    table.remove(self.outgoingRequests, i)
+                    break
+                end
+            end
+            
+            if not success then
+                -- Try to parse error from response
+                local errorMsg = "Failed to send friend request"
+                local ok, envelope = Envelope.decode(response)
+                if ok == false and envelope == Envelope.DecodeError.ServerError then
+                    -- errorMsg is in the third return value
+                    local _, _, serverMsg = Envelope.decode(response)
+                    if serverMsg then
+                        errorMsg = serverMsg
+                    end
+                elseif type(response) == "string" then
+                    local decoded = Envelope.decode(response)
+                    if not decoded then
+                        -- Try raw JSON parse for error
+                        local Json = require("protocol.Json")
+                        local jsonOk, jsonData = Json.decode(response)
+                        if jsonOk and jsonData.error and jsonData.error.message then
+                            errorMsg = jsonData.error.message
+                        end
+                    end
+                end
+                
+                if self.deps.logger and self.deps.logger.warn then
+                    self.deps.logger.warn("[Friends] Send request failed: " .. errorMsg)
+                end
+                if self.deps.logger and self.deps.logger.echo then
+                    self.deps.logger.echo("Friend request failed: " .. errorMsg)
+                end
+            else
+                -- Success - parse response for real request ID and add to outgoing
+                local ok, envelope = Envelope.decode(response)
+                if ok and envelope.data then
+                    local realRequestId = envelope.data.requestId
+                    if realRequestId then
+                        -- Use normalized UI format: { id, name, accountId, createdAt }
+                        local realRequest = {
+                            id = realRequestId,
+                            name = normalizedName,
+                            accountId = nil,  -- Will be filled by refreshFriendRequests
+                            createdAt = os.date("!%Y-%m-%dT%H:%M:%SZ")
+                        }
+                        table.insert(self.outgoingRequests, realRequest)
+                    end
+                end
+                
+                if self.deps.logger and self.deps.logger.echo then
+                    self.deps.logger.echo("Friend request sent to " .. name)
+                end
             end
         end
     })
@@ -577,7 +637,25 @@ function M.Friends:handleFriendRequestsResponse(success, response, requestType)
     
     -- Extract requests from data
     local data = envelope.data or {}
-    local requests = data.requests or {}
+    local rawRequests = data.requests or {}
+    
+    -- Normalize requests to UI-expected format: { id, name, accountId, createdAt }
+    -- Server returns: { id, fromCharacterName/toCharacterName, fromAccountId/toAccountId, createdAt }
+    local requests = {}
+    for _, req in ipairs(rawRequests) do
+        local normalized = {
+            id = req.id,
+            createdAt = req.createdAt
+        }
+        if requestType == "pending" then
+            normalized.name = req.fromCharacterName
+            normalized.accountId = req.fromAccountId
+        elseif requestType == "outgoing" then
+            normalized.name = req.toCharacterName
+            normalized.accountId = req.toAccountId
+        end
+        table.insert(requests, normalized)
+    end
     
     -- Update the appropriate list based on request type
     if requestType == "pending" then

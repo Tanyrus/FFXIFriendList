@@ -151,8 +151,10 @@ function M.Blocklist:block(characterName, callback)
     
     -- Get realm ID for the request
     local realmId = "unknown"
-    if self.deps.connection.savedRealmId then
+    if self.deps.connection.savedRealmId and self.deps.connection.savedRealmId ~= "" then
         realmId = self.deps.connection.savedRealmId
+    elseif self.deps.connection.realmDetector and self.deps.connection.realmDetector.getRealmId then
+        realmId = self.deps.connection.realmDetector:getRealmId() or "unknown"
     end
     
     -- New server expects: { characterName, realmId }

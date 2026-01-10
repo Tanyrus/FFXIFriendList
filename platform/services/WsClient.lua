@@ -5,6 +5,8 @@
 
 local Bit = require("common.Bit")
 local WsEventRouter = require("protocol.WsEventRouter")
+local Limits = require("constants.limits")
+local TimingConstants = require("core.TimingConstants")
 
 local M = {}
 
@@ -51,11 +53,11 @@ function M.WsClient.new(deps)
     -- Buffer for partial frame reads
     self.readBuffer = ""
     
-    -- Reconnection settings
+    -- Reconnection settings (from centralized constants)
     self.reconnectAttempts = 0
-    self.maxReconnectAttempts = 10
-    self.baseReconnectDelayMs = 1000
-    self.maxReconnectDelayMs = 60000
+    self.maxReconnectAttempts = Limits.MAX_RECONNECT_ATTEMPTS
+    self.baseReconnectDelayMs = TimingConstants.WS_BASE_RECONNECT_DELAY_MS
+    self.maxReconnectDelayMs = TimingConstants.WS_MAX_RECONNECT_DELAY_MS
     self.nextReconnectAt = nil
     
     -- Event callbacks

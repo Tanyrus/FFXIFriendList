@@ -25,6 +25,7 @@ function M.AltVisibility.new(deps)
     self.lastUpdateTime = 0
     self.filterText = ""
     self.pendingRefresh = false
+    self.hasAttemptedRefresh = false  -- Prevents infinite refresh on empty data
     
     return self
 end
@@ -43,7 +44,8 @@ function M.AltVisibility:getState()
         isLoading = self.isLoading,
         lastError = self.lastError,
         lastUpdateTime = self.lastUpdateTime,
-        pendingRefresh = self.pendingRefresh
+        pendingRefresh = self.pendingRefresh,
+        hasAttemptedRefresh = self.hasAttemptedRefresh
     }
 end
 
@@ -259,6 +261,7 @@ function M.AltVisibility:refresh()
     end
     
     self.pendingRefresh = false
+    self.hasAttemptedRefresh = true  -- Mark that we've attempted a refresh
     
     local characterName = connection:getCharacterName()
     local apiKey = connection:getApiKey(characterName)

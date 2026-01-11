@@ -3,6 +3,7 @@ local icons = require('libs.icons')
 local utils = require('modules.friendlist.components.helpers.utils')
 local InputHelper = require('ui.helpers.InputHelper')
 local HoverTooltip = require('ui.widgets.HoverTooltip')
+local PresenceStatusPicker = require('ui.widgets.PresenceStatusPicker')
 local tagcore = require('core.tagcore')
 local nations = require('core.nations')
 local IconText = require('ui.helpers.IconText')
@@ -146,6 +147,12 @@ function M.Render(state, dataModule, callbacks)
     if imgui.IsItemHovered() then
         imgui.SetTooltip("Filter friends by name, job, or zone")
     end
+    
+    -- Add presence status picker to the right of filter
+    imgui.SameLine()
+    imgui.Text(" ")  -- Spacer
+    imgui.SameLine()
+    PresenceStatusPicker.RenderCompact("_friends_table")
     
     if #filteredFriends == 0 then
         imgui.Text("No friends" .. (filterText ~= "" and " matching filter" or ""))
@@ -390,10 +397,8 @@ function M.RenderNationRankCell(friend)
         end
     else
         if nationIcon and rankNum ~= "" then
-            -- Render icon with proper vertical alignment
-            if icons.RenderIcon(nationIcon, IconText.ICON_SIZE.MEDIUM, IconText.ICON_SIZE.MEDIUM) then
-                IconText.prepareTextAfterIcon(IconText.SPACING.NORMAL)
-            end
+            -- Render icon with proper vertical centering
+            IconText.renderIconAligned(nationIcon, IconText.ICON_SIZE.MEDIUM, IconText.SPACING.NORMAL)
             if isOnline then
                 imgui.Text("Rank " .. rankNum)
             else

@@ -66,10 +66,8 @@ function M.Render(friend, settings, forceAll)
         if not nationIconName then
             imgui.Text(TOOLTIP_CONSTANTS.VALUE_ANON)
         else
-            -- Nation is visible - show icon and rank with proper alignment
-            if icons.RenderIcon(nationIconName, TOOLTIP_CONSTANTS.ICON_SIZE, TOOLTIP_CONSTANTS.ICON_SIZE) then
-                IconText.prepareTextAfterIcon(IconText.SPACING.NORMAL)
-            end
+            -- Nation is visible - show icon and rank with proper vertical centering
+            IconText.renderIconAligned(nationIconName, TOOLTIP_CONSTANTS.ICON_SIZE, IconText.SPACING.NORMAL)
             
             local rank = presence.rank or ""
             if type(rank) ~= "string" then rank = tostring(rank) end

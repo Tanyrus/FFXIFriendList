@@ -1,4 +1,6 @@
 local imgui = require('imgui')
+local PresenceStatusPicker = require('ui.widgets.PresenceStatusPicker')
+local nations = require('core.nations')
 
 local M = {}
 
@@ -275,47 +277,120 @@ function M.RenderPrivacyControlsSection(state, callbacks)
         imgui.SetTooltip("Controls how your online status appears to friends.\n\n[Account-wide: Synced to server for all characters]")
     end
     
-    local currentStatus = prefs.presenceStatus or "online"
+    PresenceStatusPicker.RenderRadioButtons("_privacy_tab", true)
     
-    local isOnline = currentStatus == "online"
-    if imgui.RadioButton("Online", isOnline) then
-        if not isOnline and app and app.features and app.features.preferences then
-            app.features.preferences:setPref("presenceStatus", "online")
-            app.features.preferences:setPref("showOnlineStatus", true)
-            app.features.preferences:save()
-            app.features.preferences:syncToServer()
-        end
-    end
-    if imgui.IsItemHovered() then
-        imgui.SetTooltip("You appear online to friends with full status.")
-    end
+    imgui.Spacing()
+    imgui.Spacing()
     
-    imgui.SameLine()
-    local isAway = currentStatus == "away"
-    if imgui.RadioButton("Away", isAway) then
-        if not isAway and app and app.features and app.features.preferences then
-            app.features.preferences:setPref("presenceStatus", "away")
-            app.features.preferences:setPref("showOnlineStatus", true)
-            app.features.preferences:save()
-            app.features.preferences:syncToServer()
-        end
-    end
-    if imgui.IsItemHovered() then
-        imgui.SetTooltip("You appear online but marked as 'Away' to friends.")
+    -- Show preview of how friends see your information
+    M.RenderPresencePreview(prefs)
+end
+
+--- Render a preview showing how friends see your information
+function M.RenderPresencePreview(prefs)
+    local app = _G.FFXIFriendListApp
+    
+    -- Get current player presence
+    local presence = nil
+    if app and app.features and app.features.friends then
+        presence = app.features.friends:queryPlayerPresence()
     end
     
-    imgui.SameLine()
-    local isInvisible = currentStatus == "invisible"
-    if imgui.RadioButton("Invisible", isInvisible) then
-        if not isInvisible and app and app.features and app.features.preferences then
-            app.features.preferences:setPref("presenceStatus", "invisible")
-            app.features.preferences:setPref("showOnlineStatus", false)
-            app.features.preferences:save()
-            app.features.preferences:syncToServer()
+    local presenceStatus = prefs.presenceStatus or "online"
+    local shareLocation = prefs.shareLocation ~= false
+    local shareJobWhenAnonymous = prefs.shareJobWhenAnonymous or false
+    
+    imgui.TextDisabled("Preview: How friends see you")
+    imgui.Separator()
+    
+    if presenceStatus == "invisible" then
+        -- Invisible: friends see you as offline
+        imgui.BeginGroup()
+        imgui.TextDisabled("Status:")
+        imgui.SameLine(80)
+        imgui.TextColored({0.5, 0.5, 0.5, 1.0}, "Offline")
+        imgui.EndGroup()
+        
+        imgui.TextDisabled("(You appear completely offline to friends)")
+    else
+        -- Online or Away
+        local statusColor = presenceStatus == "away" and {1.0, 0.7, 0.2, 1.0} or {0.4, 0.9, 0.4, 1.0}
+        local statusText = presenceStatus == "away" and "Away" or "Online"
+        
+        imgui.BeginGroup()
+        imgui.TextDisabled("Status:")
+        imgui.SameLine(80)
+        imgui.TextColored(statusColor, statusText)
+        imgui.EndGroup()
+        
+        -- Character name
+        local charName = "Your Character"
+        if presence and presence.characterName and presence.characterName ~= "" then
+            charName = presence.characterName:sub(1,1):upper() .. presence.characterName:sub(2)
         end
-    end
-    if imgui.IsItemHovered() then
-        imgui.SetTooltip("You appear offline to friends.\nFriends will not see your online status or activity.")
+        
+        imgui.TextDisabled("Name:")
+        imgui.SameLine(80)
+        imgui.Text(charName)
+        
+        -- Job (depends on anonymous status and shareJobWhenAnonymous)
+        local jobVisible = true
+        local jobText = "Unknown"
+        if presence then
+            if presence.isAnonymous and not shareJobWhenAnonymous then
+                jobVisible = false
+                jobText = "Anonymous"
+            elseif presence.job and presence.job ~= "" then
+                jobText = presence.job
+            end
+        end
+        
+        imgui.TextDisabled("Job:")
+        imgui.SameLine(80)
+        if jobVisible then
+            imgui.Text(jobText)
+        else
+            imgui.TextColored({0.4, 0.65, 0.85, 1.0}, jobText)
+        end
+        
+        -- Nation/Rank (depends on anonymous status and shareJobWhenAnonymous)
+        local nationVisible = true
+        local nationText = "Unknown"
+        if presence then
+            if presence.isAnonymous and not shareJobWhenAnonymous then
+                nationVisible = false
+                nationText = "Anonymous"
+            else
+                local nationName = nations.getDisplayName(presence.nation, "Unknown")
+                local rankText = presence.rank or ""
+                if rankText ~= "" then
+                    nationText = nationName .. " " .. rankText
+                else
+                    nationText = nationName
+                end
+            end
+        end
+        
+        imgui.TextDisabled("Nation:")
+        imgui.SameLine(80)
+        if nationVisible then
+            imgui.Text(nationText)
+        else
+            imgui.TextColored({0.4, 0.65, 0.85, 1.0}, nationText)
+        end
+        
+        -- Zone (depends on shareLocation)
+        imgui.TextDisabled("Zone:")
+        imgui.SameLine(80)
+        if shareLocation then
+            local zoneText = "Unknown"
+            if presence and presence.zone and presence.zone ~= "" then
+                zoneText = presence.zone
+            end
+            imgui.Text(zoneText)
+        else
+            imgui.TextColored({0.4, 0.65, 0.85, 1.0}, "Anonymous")
+        end
     end
 end
 

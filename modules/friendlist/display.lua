@@ -18,6 +18,7 @@ local ThemesTab = require('modules.friendlist.components.ThemesTab')
 local HelpTab = require('modules.friendlist.components.HelpTab')
 local CollapsibleTagSection = require('modules.friendlist.components.CollapsibleTagSection')
 local TagManager = require('modules.friendlist.components.TagManager')
+local PresenceStatusPicker = require('ui.widgets.PresenceStatusPicker')
 local utils = require('modules.friendlist.components.helpers.utils')
 local tagcore = require('core.tagcore')
 local taggrouper = require('core.taggrouper')
@@ -860,6 +861,12 @@ function M.RenderTaggedFriendSections(dataModule, callbacks)
     if imgui.IsItemHovered() then
         imgui.SetTooltip("Filter friends by name, job, or zone")
     end
+    
+    -- Add presence status picker to the right of filter
+    imgui.SameLine()
+    imgui.Text(" ")  -- Spacer
+    imgui.SameLine()
+    PresenceStatusPicker.RenderCompact("_friends_tab")
     
     imgui.Spacing()
     

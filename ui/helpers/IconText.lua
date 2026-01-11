@@ -65,9 +65,11 @@ end
 --- Render an icon with custom vertical alignment
 -- @param iconName string The icon name to render
 -- @param iconSize number The icon size
+-- @param spacing number Optional spacing after icon (default: NORMAL)
 -- @return boolean True if icon was rendered
-function M.renderIconAligned(iconName, iconSize)
+function M.renderIconAligned(iconName, iconSize, spacing)
     iconSize = iconSize or M.ICON_SIZE.MEDIUM
+    spacing = spacing or M.SPACING.NORMAL
     
     local startPosX, startPosY = imgui.GetCursorPos()
     local lineHeight = imgui.GetTextLineHeight()
@@ -77,7 +79,10 @@ function M.renderIconAligned(iconName, iconSize)
     local rendered = icons.RenderIcon(iconName, iconSize, iconSize)
     
     if rendered then
-        imgui.SameLine()
+        -- Reset Y position to original baseline for text
+        local afterIconX = imgui.GetCursorPosX()
+        imgui.SetCursorPos({afterIconX, startPosY})
+        imgui.SameLine(0, spacing)
     end
     
     return rendered

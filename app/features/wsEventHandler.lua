@@ -4,6 +4,7 @@
 
 local WsEnvelope = require("protocol.WsEnvelope")
 local FriendList = require("core.friendlist")
+local utils = require("modules.friendlist.components.helpers.utils")
 
 local M = {}
 
@@ -220,6 +221,8 @@ function M.WsEventHandler:_handleFriendOffline(payload)
     
     local accountId = payload.accountId
     local lastSeen = payload.lastSeen
+    -- Normalize lastSeen to numeric timestamp (handles ISO8601 from server)
+    local lastSeenAt = utils.normalizeLastSeen(lastSeen)
     
     -- Find friend by account ID and update status
     local allFriends = friends.friendList:getFriends()
@@ -234,7 +237,7 @@ function M.WsEventHandler:_handleFriendOffline(payload)
             -- Only update online status and lastSeen, preserve everything else
             status.isOnline = false
             status.isAway = false
-            status.lastSeenAt = lastSeen
+            status.lastSeenAt = lastSeenAt
             friends.friendList:updateFriendStatus(status)
             break
         end
@@ -546,7 +549,8 @@ function M.WsEventHandler:_addFriendFromPayload(friendData)
     friend.friendAccountId = friendData.accountId
     friend.isOnline = friendData.isOnline == true
     friend.isAway = friendData.isAway == true  -- BUG 3 FIX: Read isAway from payload
-    friend.lastSeenAt = friendData.lastSeen
+    -- Normalize lastSeen to numeric timestamp (handles ISO8601 from server)
+    friend.lastSeenAt = utils.normalizeLastSeen(friendData.lastSeen)
     
     if friendData.state then
         friend.job = formatJobFromState(friendData.state)

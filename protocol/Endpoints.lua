@@ -76,4 +76,14 @@ M.PRESENCE = {
     HEARTBEAT = "/api/presence/heartbeat"
 }
 
+-- Characters endpoints (Per-Character Visibility)
+M.CHARACTERS = {
+    VISIBILITY = "/api/characters/visibility"
+}
+
+-- Update character visibility (dynamic path by characterId)
+function M.characterVisibilityUpdate(characterId)
+    return "/api/characters/" .. tostring(characterId) .. "/visibility"
+end
+
 return M

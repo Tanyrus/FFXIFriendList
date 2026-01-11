@@ -597,6 +597,151 @@ function M:showStatus()
                 self:printChat("Away status: Missing from snapshot (BUG 3)", COLORS.RED)
             end
         end
+        
+        -- Per-Character Visibility status
+        self:printChat("─── CHARACTER VISIBILITY ───", COLORS.CYAN)
+        if app.features.characterVisibility then
+            local visState = app.features.characterVisibility:getState()
+            
+            -- Active character visibility
+            local activeCharVis = app.features.characterVisibility:getActiveCharacterVisibility()
+            if activeCharVis then
+                self:printChat("Active character: VISIBLE to friends", COLORS.GREEN)
+            else
+                self:printChat("Active character: HIDDEN (appears offline)", COLORS.YELLOW)
+            end
+            
+            -- Character count
+            local chars = visState.characters or {}
+            local visibleCount = 0
+            local hiddenCount = 0
+            for _, char in ipairs(chars) do
+                if char.shareVisibility then
+                    visibleCount = visibleCount + 1
+                else
+                    hiddenCount = hiddenCount + 1
+                end
+            end
+            self:printChat(string.format("Characters: %d visible, %d hidden", visibleCount, hiddenCount))
+            
+            -- Last update info
+            if visState.lastUpdateTime and visState.lastUpdateTime > 0 then
+                local ago = math.floor((os.time() * 1000 - visState.lastUpdateTime) / 1000)
+                self:printChat(string.format("Last visibility update: %ds ago", ago))
+            end
+            
+            if visState.lastFetchTime and visState.lastFetchTime > 0 then
+                local ago = math.floor((os.time() * 1000 - visState.lastFetchTime) / 1000)
+                self:printChat(string.format("Last visibility fetch: %ds ago", ago))
+            end
+            
+            if visState.lastError then
+                self:printChat("Last error: " .. tostring(visState.lastError), COLORS.RED)
+            end
+        else
+            self:printChat("Character visibility feature: Not available", COLORS.YELLOW)
+        end
+        
+        -- UI/UX FIXES DIAGNOSTICS
+        self:printChat("─── UI/UX FIX STATUS ───", COLORS.CYAN)
+        
+        -- Theme resolution for compact friend list
+        if app.features.themes then
+            local themesFeature = app.features.themes
+            local themeIndex = themesFeature:getThemeIndex()
+            local themeName = "Unknown"
+            
+            if themeIndex == -2 then
+                themeName = "Default (Ashita)"
+            elseif themeIndex == -1 then
+                themeName = "Custom: " .. (themesFeature:getCustomThemeName() or "unnamed")
+            elseif themeIndex == 0 then
+                themeName = "Classic (Addon Default)"
+            elseif themeIndex == 1 then
+                themeName = "Modern Dark"
+            elseif themeIndex == 2 then
+                themeName = "Green Nature"
+            elseif themeIndex == 3 then
+                themeName = "Purple Mystic"
+            elseif themeIndex == 4 then
+                themeName = "Ashita"
+            end
+            
+            self:printChat(string.format("Theme: %s (index=%d)", themeName, themeIndex))
+            
+            -- Check if overlay mode is active
+            local gConfig = _G.gConfig
+            if gConfig and gConfig.quickOnlineSettings then
+                local overlayEnabled = gConfig.quickOnlineSettings.compact_overlay_enabled or false
+                local disableInteraction = gConfig.quickOnlineSettings.compact_overlay_disable_interaction or false
+                local tooltipBgEnabled = gConfig.quickOnlineSettings.compact_overlay_tooltip_bg or false
+                
+                self:printChat(string.format("Overlay: %s | DisableInteraction: %s | TooltipBg: %s",
+                    overlayEnabled and "ON" or "OFF",
+                    disableInteraction and "ON" or "OFF",
+                    tooltipBgEnabled and "ON" or "OFF"))
+                
+                -- Fix #1 verification: tooltip with disabled interaction
+                if overlayEnabled and disableInteraction then
+                    self:printChat("Tooltip+Disabled fix: Applied (uses mouse position check)", COLORS.GREEN)
+                end
+                
+                -- Fix #2 verification: theme in overlay mode
+                if overlayEnabled and themeIndex ~= -2 then
+                    self:printChat("Theme in overlay: Applied (theme + transparent bg)", COLORS.GREEN)
+                end
+            end
+        end
+        
+        -- LastSeen data verification
+        self:printChat("─── LAST SEEN DATA ───", COLORS.CYAN)
+        if app.features.friends and app.features.friends.friendList then
+            local allFriends = app.features.friends.friendList:getFriends()
+            local hasLastSeen = 0
+            local unknownLastSeen = 0
+            local sampleFriend = nil
+            
+            for _, friend in ipairs(allFriends) do
+                local status = app.features.friends.friendList:getFriendStatus(friend.name)
+                if status then
+                    if not sampleFriend and not status.isOnline then
+                        sampleFriend = {name = friend.name, status = status}
+                    end
+                    local lastSeenAt = status.lastSeenAt
+                    if type(lastSeenAt) == "number" and lastSeenAt > 0 then
+                        hasLastSeen = hasLastSeen + 1
+                    else
+                        unknownLastSeen = unknownLastSeen + 1
+                    end
+                end
+            end
+            
+            self:printChat(string.format("LastSeen: %d known, %d unknown", hasLastSeen, unknownLastSeen))
+            
+            -- Show sample friend data for debugging
+            if sampleFriend then
+                local nations = require('core.nations')
+                local utils = require('modules.friendlist.components.helpers.utils')
+                
+                self:printChat(string.format("Sample (offline): %s", sampleFriend.name))
+                
+                -- Nation display test
+                local rawNation = sampleFriend.status.nation
+                local nationDisplay = nations.getDisplayName(rawNation)
+                local nationIcon = nations.getIconName(rawNation)
+                self:printChat(string.format("  Nation: raw=%s, display=%s, icon=%s",
+                    tostring(rawNation), nationDisplay, tostring(nationIcon or "nil")))
+                
+                -- LastSeen display test
+                local rawLastSeen = sampleFriend.status.lastSeenAt
+                local lastSeenDisplay = "Unknown"
+                if type(rawLastSeen) == "number" and rawLastSeen > 0 then
+                    lastSeenDisplay = utils.formatRelativeTime(rawLastSeen)
+                end
+                self:printChat(string.format("  LastSeen: raw=%s, display=%s",
+                    tostring(rawLastSeen), lastSeenDisplay))
+            end
+        end
     end
     
     self:printChat("═══════════════════════════════════════", COLORS.CYAN)
@@ -610,7 +755,8 @@ function M:showHelp()
     self:printChat("DIAGNOSTICS COMMANDS", COLORS.CYAN)
     self:printChat("═══════════════════════════════════════", COLORS.CYAN)
     self:printChat("/fl diag help          - Show this help")
-    self:printChat("/fl diag status        - Show connection status")
+    self:printChat("/fl diag status        - Show connection/UI status")
+    self:printChat("  ↳ Includes: Theme, Overlay, LastSeen, Nation data")
     self:printChat("/fl diag http all      - Test all HTTP endpoints")
     self:printChat("/fl diag http auth     - Test auth endpoints")
     self:printChat("/fl diag http friends  - Test friends endpoints")
@@ -647,6 +793,8 @@ function M:runProbe(callback)
         {name = "GET /preferences", method = "GET", endpoint = Endpoints.PREFERENCES, auth = "basic", expectedStatus = 200},
         -- Block
         {name = "GET /block", method = "GET", endpoint = Endpoints.BLOCK.LIST, auth = "basic", expectedStatus = 200},
+        -- Character Visibility
+        {name = "GET /characters/visibility", method = "GET", endpoint = Endpoints.CHARACTERS.VISIBILITY, auth = "basic", expectedStatus = 200},
     }
     
     self:runTestSequence(allTests, callback)

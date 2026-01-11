@@ -3,6 +3,7 @@ local RequestEncoder = require("protocol.Encoding.RequestEncoder")
 local Envelope = require("protocol.Envelope")
 local TimingConstants = require("core.TimingConstants")
 local Endpoints = require("protocol.Endpoints")
+local utils = require("modules.friendlist.components.helpers.utils")
 
 local M = {}
 
@@ -295,7 +296,8 @@ function M.Friends:handleRefreshResponse(success, response)
         local friend = FriendList.Friend.new(displayName, displayName)
         friend.friendAccountId = friendData.accountId
         friend.isOnline = friendData.isOnline == true
-        friend.lastSeenAt = friendData.lastSeen
+        -- Normalize lastSeen to numeric timestamp (handles ISO8601 from server)
+        friend.lastSeenAt = utils.normalizeLastSeen(friendData.lastSeen)
         
         -- State contains job, zone, nation, rank info
         local state = friendData.state or {}
@@ -315,7 +317,7 @@ function M.Friends:handleRefreshResponse(success, response)
         status.zone = friend.zone
         status.nation = friend.nation or -1
         status.rank = friend.rank or ""
-        status.lastSeenAt = friend.lastSeenAt or 0
+        status.lastSeenAt = friend.lastSeenAt
         status.showOnlineStatus = true
         
         self.friendList:updateFriendStatus(status)

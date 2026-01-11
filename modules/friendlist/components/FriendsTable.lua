@@ -4,6 +4,8 @@ local utils = require('modules.friendlist.components.helpers.utils')
 local InputHelper = require('ui.helpers.InputHelper')
 local HoverTooltip = require('ui.widgets.HoverTooltip')
 local tagcore = require('core.tagcore')
+local nations = require('core.nations')
+local IconText = require('ui.helpers.IconText')
 
 local M = {}
 
@@ -377,28 +379,20 @@ function M.RenderNationRankCell(friend)
     local anonColor = {0.4, 0.65, 0.85, 1.0}  -- Dark sky blue
     local anonColorDim = {0.3, 0.45, 0.6, 1.0}  -- Dimmed for offline
     
-    -- Nation icons map supports both numeric (legacy) and string keys
-    local nationIcons = {
-        [0] = "nation_sandoria",
-        [1] = "nation_bastok",
-        [2] = "nation_windurst",
-        ["San d'Oria"] = "nation_sandoria",
-        ["Bastok"] = "nation_bastok",
-        ["Windurst"] = "nation_windurst"
-    }
+    -- Use nations module for icon lookup (supports both numeric and string values)
+    local nationIcon = nations.getIconName(nation)
     
-    if nation == nil or nation == -1 or (rankNum == "") then
+    if nation == nil or nation == -1 or (rankNum == "" and not nationIcon) then
         if isOnline then
-            imgui.TextColored(anonColor, "Anon")
+            imgui.TextColored(anonColor, "Anonymous")
         else
-            imgui.TextColored(anonColorDim, "Anon")
+            imgui.TextColored(anonColorDim, "Anonymous")
         end
     else
-        local nationIcon = nationIcons[nation]
-        
         if nationIcon and rankNum ~= "" then
-            if icons.RenderIcon(nationIcon, 12, 12) then
-                imgui.SameLine()
+            -- Render icon with proper vertical alignment
+            if icons.RenderIcon(nationIcon, IconText.ICON_SIZE.MEDIUM, IconText.ICON_SIZE.MEDIUM) then
+                IconText.prepareTextAfterIcon(IconText.SPACING.NORMAL)
             end
             if isOnline then
                 imgui.Text("Rank " .. rankNum)
@@ -412,10 +406,12 @@ function M.RenderNationRankCell(friend)
                 imgui.TextDisabled("Rank " .. rankNum)
             end
         else
+            -- Has nation but no rank - show nation name
+            local nationName = nations.getDisplayName(nation, "Anonymous")
             if isOnline then
-                imgui.TextColored(anonColor, "Anon")
+                imgui.Text(nationName)
             else
-                imgui.TextColored(anonColorDim, "Anon")
+                imgui.TextDisabled(nationName)
             end
         end
     end
@@ -428,10 +424,9 @@ function M.RenderLastSeenCell(friend)
     if isOnline then
         imgui.Text("Now")
     else
-        local lastSeenAt = presence.lastSeenAt
-        if type(lastSeenAt) ~= "number" then
-            lastSeenAt = 0
-        end
+        local lastSeenRaw = presence.lastSeenAt
+        -- Normalize to handle ISO8601 strings from server
+        local lastSeenAt = utils.normalizeLastSeen(lastSeenRaw)
         if lastSeenAt > 0 then
             imgui.TextDisabled(utils.formatRelativeTime(lastSeenAt))
         else

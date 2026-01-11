@@ -181,6 +181,48 @@ function M.runTests()
         assertNil(tags:consumePendingTag("NewFriend"))
     end)
     
+    -- BUG 1 FIX TESTS: Pending tag persistence
+    
+    test("setPendingTag persists to storage immediately", function()
+        local storage = createMockStorage()
+        local tags = Tags.Tags.new({ storage = storage })
+        tags:load()
+        
+        tags:setPendingTag("NewFriend", "Linkshell")
+        
+        -- Check that pendingTags is saved to gConfig
+        assertEqual("Linkshell", tags:getPendingTag("NewFriend"))
+        
+        -- After reload, pending tag should persist
+        local tags2 = Tags.Tags.new({ storage = storage })
+        tags2:load()
+        assertEqual("Linkshell", tags2:getPendingTag("NewFriend"))
+    end)
+    
+    test("consumePendingTag removes from persistence", function()
+        local storage = createMockStorage()
+        local tags = Tags.Tags.new({ storage = storage })
+        tags:load()
+        
+        tags:setPendingTag("NewFriend", "Linkshell")
+        local consumed = tags:consumePendingTag("NewFriend")
+        assertEqual("Linkshell", consumed)
+        
+        -- After consume and reload, should be gone
+        local tags2 = Tags.Tags.new({ storage = storage })
+        tags2:load()
+        assertNil(tags2:getPendingTag("NewFriend"))
+    end)
+    
+    test("getState includes pendingCount", function()
+        local tags = Tags.Tags.new({})
+        tags:setPendingTag("Pending1", "Tag1")
+        tags:setPendingTag("Pending2", "Tag2")
+        
+        local state = tags:getState()
+        assertEqual(2, state.pendingCount)
+    end)
+    
     test("save/load persists state correctly", function()
         local storage = createMockStorage()
         local tags1 = Tags.Tags.new({ storage = storage })

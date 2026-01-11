@@ -2,6 +2,9 @@ local tagcore = require("core.tagcore")
 
 local M = {}
 
+-- Pending tag expiry: 7 days in seconds
+local PENDING_EXPIRY_SECONDS = 7 * 24 * 60 * 60
+
 M.Tags = {}
 M.Tags.__index = M.Tags
 
@@ -12,18 +15,24 @@ function M.Tags.new(deps)
     self.friendTags = {}
     self.tagOrder = { "Favorite" }
     self.collapsedTags = {}
-    self.pendingTags = {}
+    self.pendingTags = {}   -- { [lowerName] = { tag = "...", createdAt = timestamp } }
     self.pendingRetags = {}
     self.dirty = false
+    self.pendingDirty = false
     
     return self
 end
 
 function M.Tags:getState()
+    local pendingCount = 0
+    for _ in pairs(self.pendingTags) do
+        pendingCount = pendingCount + 1
+    end
     return {
         tagOrder = self.tagOrder,
         collapsedTags = self.collapsedTags,
-        tagCount = #self.tagOrder
+        tagCount = #self.tagOrder,
+        pendingCount = pendingCount
     }
 end
 
@@ -38,9 +47,44 @@ function M.Tags:load()
         if gConfig.collapsedTags and type(gConfig.collapsedTags) == "table" then
             self.collapsedTags = gConfig.collapsedTags
         end
+        -- Load pending tags (drafts)
+        if gConfig.pendingTags and type(gConfig.pendingTags) == "table" then
+            self.pendingTags = gConfig.pendingTags
+            -- Clean up expired pending tags on load
+            self:cleanupExpiredPending()
+        end
     end
     self.dirty = false
+    self.pendingDirty = false
     return true
+end
+
+-- Clean up pending tags older than 7 days
+function M.Tags:cleanupExpiredPending()
+    local now = os.time()
+    local expired = {}
+    
+    for key, entry in pairs(self.pendingTags) do
+        if type(entry) == "table" and entry.createdAt then
+            local age = now - entry.createdAt
+            if age > PENDING_EXPIRY_SECONDS then
+                table.insert(expired, key)
+            end
+        elseif type(entry) == "string" then
+            -- Migrate old format (just a string) to new format with timestamp
+            self.pendingTags[key] = { tag = entry, createdAt = now }
+            self.pendingDirty = true
+        end
+    end
+    
+    for _, key in ipairs(expired) do
+        self.pendingTags[key] = nil
+        self.pendingDirty = true
+    end
+    
+    if self.pendingDirty then
+        self:save()
+    end
 end
 
 function M.Tags:save()
@@ -49,6 +93,7 @@ function M.Tags:save()
         gConfig.friendTags = self.friendTags
         gConfig.tagOrder = self.tagOrder
         gConfig.collapsedTags = self.collapsedTags
+        gConfig.pendingTags = self.pendingTags
     end
     settings.save()
     self.dirty = false
@@ -267,12 +312,37 @@ function M.Tags:setPendingTag(friendName, tag)
         if not tagcore.tagExistsInOrder(self.tagOrder, normalized) then
             self:createTag(normalized)
         end
-        self.pendingTags[key] = normalized
+        self.pendingTags[key] = {
+            tag = normalized,
+            createdAt = os.time()
+        }
+        self.pendingDirty = true
+        -- Persist immediately
+        self:save()
     else
-        self.pendingTags[key] = nil
+        if self.pendingTags[key] then
+            self.pendingTags[key] = nil
+            self.pendingDirty = true
+            self:save()
+        end
     end
     
     return true
+end
+
+function M.Tags:getPendingTag(friendName)
+    if not friendName or friendName == "" then
+        return nil
+    end
+    
+    local key = string.lower(friendName)
+    local entry = self.pendingTags[key]
+    if type(entry) == "table" then
+        return entry.tag
+    elseif type(entry) == "string" then
+        return entry  -- Legacy format
+    end
+    return nil
 end
 
 function M.Tags:consumePendingTag(friendName)
@@ -281,8 +351,21 @@ function M.Tags:consumePendingTag(friendName)
     end
     
     local key = string.lower(friendName)
-    local tag = self.pendingTags[key]
-    self.pendingTags[key] = nil
+    local entry = self.pendingTags[key]
+    local tag = nil
+    
+    if type(entry) == "table" then
+        tag = entry.tag
+    elseif type(entry) == "string" then
+        tag = entry
+    end
+    
+    if tag then
+        self.pendingTags[key] = nil
+        self.pendingDirty = true
+        self:save()
+    end
+    
     return tag
 end
 

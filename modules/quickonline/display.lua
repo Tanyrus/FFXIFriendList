@@ -636,7 +636,7 @@ function M.RenderCompactFriendsList(friends, sectionTag, dataModule, disableInte
             local isAway = friend.isAway == true
             local uniqueId = (sectionTag or "qo") .. "_" .. i
             
-            if not icons.RenderStatusIcon(isOnline, false, 12, isAway) then
+            if not icons.RenderStatusIcon(isOnline, false, 16, isAway) then
                 if isAway then
                     imgui.TextColored({1.0, 0.7, 0.2, 1.0}, "A")
                 elseif isOnline then

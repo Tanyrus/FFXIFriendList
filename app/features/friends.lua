@@ -50,9 +50,55 @@ local function getTime(self)
     return os.time() * 1000
 end
 
+-- Helper: Format job string from server state (job, subJob, jobLevel, subJobLevel)
+-- Returns formatted string like "SMN 41/BLM 18" or empty string if no job data
+local function formatJobFromState(state)
+    if not state then return "" end
+    
+    local mainJob = state.job
+    local mainJobLevel = state.jobLevel
+    local subJob = state.subJob
+    local subJobLevel = state.subJobLevel
+    
+    -- Type guards - ensure we have proper types
+    if type(mainJobLevel) ~= "number" then mainJobLevel = nil end
+    if type(subJobLevel) ~= "number" then subJobLevel = nil end
+    
+    -- If we already have a pre-formatted string (legacy compatibility), use it
+    if type(mainJob) == "string" and mainJob ~= "" and not mainJobLevel then
+        return mainJob
+    end
+    
+    -- No main job data
+    if not mainJob or mainJob == "" then
+        return ""
+    end
+    
+    -- Format main job
+    local result = mainJob
+    if mainJobLevel and mainJobLevel > 0 then
+        result = result .. " " .. tostring(mainJobLevel)
+    end
+    
+    -- Add sub job if present
+    if subJob and subJob ~= "" then
+        result = result .. "/" .. subJob
+        if subJobLevel and subJobLevel > 0 then
+            result = result .. " " .. tostring(subJobLevel)
+        end
+    end
+    
+    return result
+end
+
 function M.Friends:getState()
     local rawFriends = self.friendList:getFriends()
     local friendsWithPresence = {}
+    
+    -- Debug logging (use info level for visibility)
+    if self.deps.logger and self.deps.logger.info then
+        self.deps.logger.info(string.format("[Friends:getState] rawFriends count: %d", #rawFriends))
+    end
     
     for _, friend in ipairs(rawFriends) do
         local status = self.friendList:getFriendStatus(friend.name)
@@ -102,7 +148,8 @@ function M.Friends:tick(dtSeconds)
     end
     
     -- Send heartbeat (safety signal only - NOT polling)
-    if self.deps.connection and self.deps.connection:isConnected() then
+    -- Skip heartbeat until we've received initial friends snapshot (confirms WS fully connected)
+    if self.deps.connection and self.deps.connection:isConnected() and self.lastUpdatedAt then
         if not self.heartbeatInFlight then
             local shouldHeartbeat = false
             if not self.lastHeartbeatAt then
@@ -252,7 +299,7 @@ function M.Friends:handleRefreshResponse(success, response)
         
         -- State contains job, zone, nation, rank info
         local state = friendData.state or {}
-        friend.job = state.job or ""
+        friend.job = formatJobFromState(state)
         friend.zone = state.zone or ""
         friend.nation = state.nation
         friend.rank = state.rank
@@ -768,6 +815,23 @@ function M.Friends:sendHeartbeat()
         return false
     end
     
+    -- Ensure realm ID is available (required by server)
+    local realmId = nil
+    if self.deps.connection.savedRealmId and self.deps.connection.savedRealmId ~= "" then
+        realmId = self.deps.connection.savedRealmId
+    elseif self.deps.connection.realmDetector and self.deps.connection.realmDetector.getRealmId then
+        realmId = self.deps.connection.realmDetector:getRealmId()
+    end
+    
+    if not realmId or realmId == "" then
+        -- Realm not detected yet, skip heartbeat (will retry next interval)
+        self.heartbeatInFlight = false
+        if self.deps.logger and self.deps.logger.debug then
+            self.deps.logger.debug("[Friends] Heartbeat skipped: realm ID not available yet")
+        end
+        return false
+    end
+    
     -- Use new server endpoint: POST /api/presence/heartbeat
     local RequestEncoder = require("protocol.Encoding.RequestEncoder")
     local requestBody = RequestEncoder.encodeHeartbeat()
@@ -1029,6 +1093,22 @@ function M.Friends:queryPlayerPresence()
             
             presence.job = self:formatJobString(mainJob, mainJobLevel, subJob, subJobLevel)
             
+            -- Set separate fields for server (jobLevel, subJob, subJobLevel)
+            if mainJobLevel and mainJobLevel > 0 then
+                presence.jobLevel = mainJobLevel
+            end
+            if subJob and subJob > 0 and subJob < 23 then
+                local jobNames = {
+                    "NON", "WAR", "MNK", "WHM", "BLM", "RDM", "THF", "PLD", "DRK", "BST",
+                    "BRD", "RNG", "SAM", "NIN", "DRG", "SMN", "BLU", "COR", "PUP", "DNC",
+                    "SCH", "GEO", "RUN"
+                }
+                presence.subJob = jobNames[subJob + 1]
+                if subJobLevel and subJobLevel > 0 then
+                    presence.subJobLevel = subJobLevel
+                end
+            end
+            
             local playerRank = playerData.Rank
             if playerRank and playerRank > 0 then
                 presence.rank = "Rank " .. tostring(playerRank)
@@ -1047,6 +1127,22 @@ function M.Friends:queryPlayerPresence()
         local subJobLevel = party:GetMemberSubJobLevel(0)
         
         presence.job = self:formatJobString(mainJob, mainJobLevel, subJob, subJobLevel)
+        
+        -- Set separate fields for server (jobLevel, subJob, subJobLevel)
+        if mainJobLevel and mainJobLevel > 0 then
+            presence.jobLevel = mainJobLevel
+        end
+        if subJob and subJob > 0 and subJob < 23 then
+            local jobNames = {
+                "NON", "WAR", "MNK", "WHM", "BLM", "RDM", "THF", "PLD", "DRK", "BST",
+                "BRD", "RNG", "SAM", "NIN", "DRG", "SMN", "BLU", "COR", "PUP", "DNC",
+                "SCH", "GEO", "RUN"
+            }
+            presence.subJob = jobNames[subJob + 1]
+            if subJobLevel and subJobLevel > 0 then
+                presence.subJobLevel = subJobLevel
+            end
+        end
     end
     
     presence.isAnonymous = isAnonymous

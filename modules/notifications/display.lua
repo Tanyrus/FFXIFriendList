@@ -151,10 +151,18 @@ local function getToastColor(toastType)
     end
 end
 
-local function getSoundType(toastType)
+local function getSoundType(toast)
+    local toastType = toast.type
     if toastType == ToastType.FriendOnline then
         return NotificationSoundPolicy.NotificationSoundType.FriendOnline
-    elseif toastType == ToastType.FriendRequestReceived or toastType == ToastType.FriendRequestAccepted then
+    elseif toastType == ToastType.FriendRequestAccepted then
+        -- Play friend online sound only if the friend is online, otherwise no sound
+        if toast.isOnline then
+            return NotificationSoundPolicy.NotificationSoundType.FriendOnline
+        else
+            return NotificationSoundPolicy.NotificationSoundType.Unknown
+        end
+    elseif toastType == ToastType.FriendRequestReceived then
         return NotificationSoundPolicy.NotificationSoundType.FriendRequest
     else
         return NotificationSoundPolicy.NotificationSoundType.Unknown
@@ -186,7 +194,7 @@ local function maybePlaySound(toast)
         return
     end
     
-    local soundType = getSoundType(toastType)
+    local soundType = getSoundType(toast)
     if soundType == NotificationSoundPolicy.NotificationSoundType.Unknown then
         return
     end
@@ -260,6 +268,7 @@ local function updateToast(toast, currentTime, prefsDurationMs)
         if fadeProgress >= 1.0 then
             toast.alpha = 0.0
             toast.state = ToastState.COMPLETE
+            toast.dismissed = true  -- Mark as dismissed so it won't block future notifications with same dedupeKey
         else
             toast.alpha = math.max(0.0, 1.0 - fadeProgress)
         end
@@ -430,6 +439,14 @@ local function renderToast(toast, targetY, isFirstToast)
         imgui.PushStyleColor(ImGuiCol_Text, {color[1], color[2], color[3], alpha})
         imgui.Text(toast.title or "")
         imgui.PopStyleColor()
+        
+        -- For FriendRequestAccepted, show online/offline status icon next to the message
+        if toast.type == ToastType.FriendRequestAccepted and toast.isOnline ~= nil then
+            local icons = require('libs.icons')
+            if icons.RenderStatusIcon(toast.isOnline, false, 12, false) then
+                imgui.SameLine()
+            end
+        end
         
         imgui.PushStyleColor(ImGuiCol_Text, {1.0, 1.0, 1.0, alpha * 0.9})
         imgui.Text(toast.message or "")

@@ -144,9 +144,18 @@ function M.FriendList:addFriend(friend)
         newFriend.friendedAs = normalizeName(newFriend.friendedAs)
     end
     newFriend.linkedCharacters = {}
-    for _, linked in ipairs(friend.linkedCharacters) do
+    for _, linked in ipairs(friend.linkedCharacters or {}) do
         table.insert(newFriend.linkedCharacters, linked)
     end
+    
+    -- Copy additional fields from server data
+    newFriend.friendAccountId = friend.friendAccountId
+    newFriend.isOnline = friend.isOnline
+    newFriend.lastSeenAt = friend.lastSeenAt
+    newFriend.job = friend.job
+    newFriend.zone = friend.zone
+    newFriend.nation = friend.nation
+    newFriend.rank = friend.rank
     
     table.insert(self.friends, newFriend)
     return true
@@ -184,9 +193,18 @@ function M.FriendList:updateFriend(friend)
         updatedFriend.friendedAs = normalizeName(updatedFriend.friendedAs)
     end
     updatedFriend.linkedCharacters = {}
-    for _, linked in ipairs(friend.linkedCharacters) do
+    for _, linked in ipairs(friend.linkedCharacters or {}) do
         table.insert(updatedFriend.linkedCharacters, linked)
     end
+    
+    -- Copy additional fields from server data
+    updatedFriend.friendAccountId = friend.friendAccountId
+    updatedFriend.isOnline = friend.isOnline
+    updatedFriend.lastSeenAt = friend.lastSeenAt
+    updatedFriend.job = friend.job
+    updatedFriend.zone = friend.zone
+    updatedFriend.nation = friend.nation
+    updatedFriend.rank = friend.rank
     
     self.friends[index] = updatedFriend
     return true
@@ -225,6 +243,7 @@ function M.FriendList:updateFriendStatus(status)
     updatedStatus.characterName = normalizedName
     updatedStatus.displayName = status.displayName or ""
     updatedStatus.isOnline = status.isOnline or false
+    updatedStatus.isAway = status.isAway or false
     updatedStatus.job = status.job or ""
     updatedStatus.rank = status.rank or ""
     updatedStatus.nation = status.nation or -1

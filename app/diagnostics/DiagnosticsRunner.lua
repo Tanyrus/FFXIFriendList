@@ -512,6 +512,17 @@ function M:showStatus()
         else
             self:printChat("Character: Not set", COLORS.YELLOW)
         end
+        
+        -- BUG 2 FIX: Show active character info
+        if self.connection.lastCharacterId then
+            self:printChat("Character ID: " .. tostring(self.connection.lastCharacterId))
+        end
+        if self.connection.lastSetActiveAt then
+            local ago = math.floor((os.time() * 1000 - self.connection.lastSetActiveAt) / 1000)
+            self:printChat("Last set-active: " .. tostring(ago) .. "s ago", COLORS.GREEN)
+        else
+            self:printChat("Last set-active: (none)", COLORS.YELLOW)
+        end
     end
     
     -- WebSocket status
@@ -534,6 +545,58 @@ function M:showStatus()
         end
     else
         self:printChat("WebSocket: Not available", COLORS.RED)
+    end
+    
+    -- BUG 1 FIX: Show notes/tags pending counts
+    self:printChat("─── LOCAL METADATA ───", COLORS.CYAN)
+    local app = _G.FFXIFriendListApp
+    if app and app.features then
+        -- Notes state
+        if app.features.notes then
+            local notesState = app.features.notes:getState()
+            self:printChat(string.format("Notes: %d stored, %d pending drafts", 
+                notesState.noteCount or 0, notesState.pendingCount or 0))
+        end
+        
+        -- Tags state
+        if app.features.tags then
+            local tagsState = app.features.tags:getState()
+            self:printChat(string.format("Tags: %d tags, %d pending drafts", 
+                tagsState.tagCount or 0, tagsState.pendingCount or 0))
+        end
+        
+        -- BUG 3 FIX: Show friend presence snapshot info
+        if app.features.friends and app.features.friends.friendList then
+            local allFriends = app.features.friends.friendList:getFriends()
+            local onlineCount = 0
+            local awayCount = 0
+            local hasAwayField = true
+            
+            for _, friend in ipairs(allFriends) do
+                local status = app.features.friends.friendList:getFriendStatus(friend.name)
+                if status then
+                    if status.isOnline then
+                        onlineCount = onlineCount + 1
+                    end
+                    if status.isAway then
+                        awayCount = awayCount + 1
+                    end
+                    -- Check if isAway field exists (for diagnostics)
+                    if status.isAway == nil then
+                        hasAwayField = false
+                    end
+                end
+            end
+            
+            self:printChat(string.format("Friends: %d total, %d online, %d away", 
+                #allFriends, onlineCount, awayCount))
+            
+            if hasAwayField then
+                self:printChat("Away status: Available in snapshot", COLORS.GREEN)
+            else
+                self:printChat("Away status: Missing from snapshot (BUG 3)", COLORS.RED)
+            end
+        end
     end
     
     self:printChat("═══════════════════════════════════════", COLORS.CYAN)

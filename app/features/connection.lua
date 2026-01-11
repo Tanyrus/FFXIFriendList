@@ -170,24 +170,40 @@ function M.Connection:tick(dtSeconds)
         return
     end
     
-    if self:isConnected() or self.autoConnectInProgress or self.autoConnectAttempted then
-        return
-    end
-    
     local characterName = getCharacterName()
     if characterName == "" then
         return
     end
     
+    -- BUG 2 FIX: Detect character change even when connected
     if characterName ~= self.lastCharacterName then
+        local previousCharacter = self.lastCharacterName
         self.lastCharacterName = characterName
-        if self.autoConnectAttempted then
+        
+        if self:isConnected() then
+            -- Character changed while connected - trigger re-auth to update active character
+            if self.logger and self.logger.info then
+                self.logger.info(string.format("[Connection] Character changed from %s to %s while connected, triggering re-auth",
+                    tostring(previousCharacter), characterName))
+            end
+            -- Reset connection state to trigger re-auth
+            self.autoConnectAttempted = false
+            self.autoConnectInProgress = false
+            self.state = M.ConnectionState.Disconnected
+            -- Trigger immediate re-connect with new character
+            self:autoConnect(characterName)
+            return
+        elseif self.autoConnectAttempted then
             self.autoConnectAttempted = false
             self.autoConnectInProgress = false
             if self.logger and self.logger.info then
                 self.logger.info("[Connection] Character changed, resetting auto-connect")
             end
         end
+    end
+    
+    if self:isConnected() or self.autoConnectInProgress or self.autoConnectAttempted then
+        return
     end
     
     self:autoConnect(characterName)
@@ -553,6 +569,74 @@ function M.Connection:handleAuthResponse(success, response, characterName, fallb
         end
     end
     
+    -- BUG 2 FIX: Extract character ID and set as active character
+    -- This ensures friends see the correct character after switching
+    local characterId = nil
+    if data.character and data.character.id then
+        characterId = data.character.id
+    end
+    
+    -- Store the character ID for later use
+    self.lastCharacterId = characterId
+    self.lastSetActiveAt = nil
+    
+    -- If we have a character ID, call set-active to ensure this is the active character
+    if characterId and apiKey and apiKey ~= "" then
+        self:setActiveCharacter(characterId, characterName, apiKey)
+    else
+        -- No character ID available, proceed with connection
+        self:completeConnection(characterName)
+    end
+end
+
+-- BUG 2 FIX: Set the active character on the server
+function M.Connection:setActiveCharacter(characterId, characterName, apiKey)
+    if not self.net then
+        self:completeConnection(characterName)
+        return
+    end
+    
+    local baseUrl = self:getBaseUrl()
+    baseUrl = baseUrl:gsub("/+$", "")
+    
+    local url = baseUrl .. Endpoints.AUTH.SET_ACTIVE
+    local requestBody = RequestEncoder.encodeSetActiveCharacter(characterId)
+    
+    local addonVersion = addon and addon.version or "0.9.9"
+    local headers = {
+        ["Content-Type"] = "application/json",
+        ["User-Agent"] = "FFXIFriendList/" .. addonVersion,
+        ["Authorization"] = "Bearer " .. apiKey
+    }
+    
+    if self.logger and self.logger.debug then
+        self.logger.debug("[Connection] Setting active character: " .. tostring(characterId))
+    end
+    
+    self.net.request({
+        url = url,
+        method = "POST",
+        headers = headers,
+        body = requestBody,
+        callback = function(success, response)
+            if success then
+                self.lastSetActiveAt = os.time() * 1000
+                if self.logger and self.logger.debug then
+                    self.logger.debug("[Connection] Set active character succeeded")
+                end
+            else
+                if self.logger and self.logger.warn then
+                    self.logger.warn("[Connection] Set active character failed: " .. tostring(response))
+                end
+            end
+            -- Complete connection regardless of set-active result
+            self:completeConnection(characterName)
+        end
+    })
+end
+
+-- Complete the connection process after auth and set-active
+function M.Connection:completeConnection(characterName)
     self:setConnected()
     if self.logger and self.logger.echo then
         self.logger.echo("Connected to server as " .. characterName)

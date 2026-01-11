@@ -14,7 +14,11 @@ local TOOLTIP_CONSTANTS = {
 local NATION_ICON_NAMES = {
     [0] = "nation_sandoria",
     [1] = "nation_bastok",
-    [2] = "nation_windurst"
+    [2] = "nation_windurst",
+    -- String keys for server-side string values
+    ["San d'Oria"] = "nation_sandoria",
+    ["Bastok"] = "nation_bastok",
+    ["Windurst"] = "nation_windurst"
 }
 
 local function getValueOrAnon(val)

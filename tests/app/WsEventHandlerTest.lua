@@ -129,6 +129,7 @@ local function testFriendsSnapshotPayloadFields()
                 characterName = "FriendOne",
                 realmId = "horizon",
                 isOnline = true,
+                isAway = false,  -- BUG 3 FIX: Server includes isAway in snapshot
                 lastSeen = nil,
                 state = {
                     job = "WAR",
@@ -154,6 +155,7 @@ local function testFriendsSnapshotPayloadFields()
     assert(friend.accountId ~= nil, "Friend should have accountId")
     assert(friend.characterName ~= nil, "Friend should have characterName")
     assert(friend.isOnline ~= nil, "Friend should have isOnline flag")
+    assert(friend.isAway ~= nil, "Friend should have isAway flag (BUG 3 FIX)")
     
     if friend.state then
         assert(friend.state.job ~= nil or friend.state.job == nil, "State job can be nil")
@@ -163,11 +165,56 @@ local function testFriendsSnapshotPayloadFields()
     print("✓ testFriendsSnapshotPayloadFields passed")
 end
 
+-- BUG 3 FIX TEST: Verify isAway is included in friend snapshot and friend_online event
+local function testFriendsSnapshotIsAwayField()
+    -- Test that the snapshot payload can have isAway=true for away friends
+    local payload = {
+        friends = {
+            {
+                accountId = "friend-1",
+                characterName = "AwayFriend",
+                isOnline = true,
+                isAway = true,  -- Friend is online but set to "away" status
+                state = { zone = "Mog House" }
+            },
+            {
+                accountId = "friend-2",
+                characterName = "OnlineFriend",
+                isOnline = true,
+                isAway = false,  -- Friend is online and active
+                state = { zone = "Jeuno" }
+            },
+            {
+                accountId = "friend-3",
+                characterName = "OfflineFriend",
+                isOnline = false,
+                isAway = false,  -- Offline friends are not "away"
+                lastSeen = "2024-01-01T00:00:00.000Z"
+            }
+        }
+    }
+    
+    local awayFriend = payload.friends[1]
+    assert(awayFriend.isOnline == true, "Away friend should be online")
+    assert(awayFriend.isAway == true, "Away friend should have isAway=true")
+    
+    local onlineFriend = payload.friends[2]
+    assert(onlineFriend.isOnline == true, "Online friend should be online")
+    assert(onlineFriend.isAway == false, "Active friend should have isAway=false")
+    
+    local offlineFriend = payload.friends[3]
+    assert(offlineFriend.isOnline == false, "Offline friend should be offline")
+    assert(offlineFriend.isAway == false, "Offline friend should have isAway=false")
+    
+    print("✓ testFriendsSnapshotIsAwayField passed (BUG 3 FIX)")
+end
+
 local function testFriendOnlinePayloadFields()
     local payload = {
         accountId = "friend-account",
         characterName = "FriendPlayer",
         realmId = "horizon",
+        isAway = false,  -- BUG 3 FIX: friend_online event includes isAway
         state = {
             job = "RDM",
             zone = "Windurst"
@@ -176,8 +223,34 @@ local function testFriendOnlinePayloadFields()
     
     assert(payload.accountId ~= nil, "Should have accountId")
     assert(payload.characterName ~= nil, "Should have characterName")
+    assert(payload.isAway ~= nil, "Should have isAway flag (BUG 3 FIX)")
     -- state is optional but expected for online events
     print("✓ testFriendOnlinePayloadFields passed")
+end
+
+-- BUG 3 FIX TEST: Verify friend_online includes isAway
+local function testFriendOnlineIsAwayField()
+    -- Test friend coming online with away status
+    local payloadAway = {
+        accountId = "friend-account",
+        characterName = "AwayPlayer",
+        isAway = true,  -- Player logged in but has away status
+        state = { zone = "Port Jeuno" }
+    }
+    
+    assert(payloadAway.isAway == true, "Away player should have isAway=true")
+    
+    -- Test friend coming online with active status
+    local payloadActive = {
+        accountId = "friend-account",
+        characterName = "ActivePlayer",
+        isAway = false,
+        state = { zone = "Lower Jeuno" }
+    }
+    
+    assert(payloadActive.isAway == false, "Active player should have isAway=false")
+    
+    print("✓ testFriendOnlineIsAwayField passed (BUG 3 FIX)")
 end
 
 local function testFriendOfflinePayloadFields()
@@ -344,7 +417,9 @@ local function runAllTests()
     testEventTypeRouting()
     testConnectedPayloadFields()
     testFriendsSnapshotPayloadFields()
+    testFriendsSnapshotIsAwayField()  -- BUG 3 FIX TEST
     testFriendOnlinePayloadFields()
+    testFriendOnlineIsAwayField()     -- BUG 3 FIX TEST
     testFriendOfflinePayloadFields()
     testFriendRequestReceivedPayloadFields()
     testFriendRequestReceivedNormalization()

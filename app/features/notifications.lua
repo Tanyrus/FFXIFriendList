@@ -135,6 +135,9 @@ function M.Notifications:push(type, payload)
     local message = payload.message or ""
     local dedupeKey = payload.dedupeKey
     
+    -- Clean up dismissed/completed toasts before checking for duplicates
+    self:cleanup()
+    
     if dedupeKey then
         for _, toast in ipairs(self.queue) do
             if toast.dedupeKey == dedupeKey and not toast.dismissed then
@@ -148,6 +151,15 @@ function M.Notifications:push(type, payload)
     
     local toast = M.Toast.new(type, title, message, getTime(self), payload.duration)
     toast.dedupeKey = dedupeKey
+    
+    -- Copy additional payload fields for display (e.g., isOnline for status icon)
+    if payload.isOnline ~= nil then
+        toast.isOnline = payload.isOnline
+    end
+    if payload.characterName then
+        toast.characterName = payload.characterName
+    end
+    
     table.insert(self.queue, toast)
     
     if self.deps and self.deps.logger and self.deps.logger.debug then
@@ -178,6 +190,17 @@ function M.Notifications:showTestNotification()
     if self.deps and self.deps.logger and self.deps.logger.info then
         self.deps.logger.info("[Notifications] Test notification triggered")
     end
+end
+
+-- Remove dismissed/completed toasts from the queue to prevent unbounded growth
+function M.Notifications:cleanup()
+    local newQueue = {}
+    for _, toast in ipairs(self.queue) do
+        if not toast.dismissed then
+            table.insert(newQueue, toast)
+        end
+    end
+    self.queue = newQueue
 end
 
 function M.Notifications:drain()

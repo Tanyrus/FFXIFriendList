@@ -469,28 +469,25 @@ end
 -- Encode PresenceUpdate request (for /api/presence/update endpoint)
 -- Body: { job?, subJob?, jobLevel?, subJobLevel?, zone?, nation?, rank?, isAnonymous? }
 -- Server expects:
---   job: max 8 chars (e.g., "WHM", "WHM/BLM")
+--   job: string (e.g., "WHM", "SMN") - main job only
+--   subJob: string (e.g., "BLM", "WHM") - sub job only  
+--   jobLevel: number (1-99)
+--   subJobLevel: number (0-49)
 --   nation: string (e.g., "San d'Oria", "Bastok", "Windurst")
 --   rank: number (1-10)
 function M.encodePresenceUpdate(presence)
     local body = {}
     
-    -- Job: truncate to 8 chars max (just abbreviation, no levels)
-    -- Input might be "WHM 75/BLM 37", we need just "WHM" or "WHM/BLM"
+    -- Job: extract just the main job abbreviation (e.g., "WHM" from "WHM 75/BLM 37")
+    -- Server expects separate fields: job, subJob, jobLevel, subJobLevel
     if presence.job and presence.job ~= "" then
         local jobAbbr = presence.job:match("^(%u+)") or ""
-        local subJobAbbr = presence.job:match("/(%u+)") or ""
-        if subJobAbbr ~= "" then
-            body.job = jobAbbr .. "/" .. subJobAbbr
-        else
+        if jobAbbr ~= "" then
             body.job = jobAbbr
-        end
-        -- Ensure max 8 chars
-        if #body.job > 8 then
-            body.job = body.job:sub(1, 8)
         end
     end
     
+    -- SubJob, jobLevel, subJobLevel are now passed as separate fields from queryPlayerPresence
     if presence.subJob then body.subJob = presence.subJob end
     if presence.jobLevel then body.jobLevel = presence.jobLevel end
     if presence.subJobLevel then body.subJobLevel = presence.subJobLevel end

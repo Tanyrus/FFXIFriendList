@@ -67,6 +67,8 @@ function App.create(deps)
         preferences = app.features.preferences,
         notifications = app.features.notifications,
         connection = app.features.connection,
+        tags = app.features.tags,
+        notes = app.features.notes,
         time = deps.time
     })
     

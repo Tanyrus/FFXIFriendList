@@ -248,7 +248,7 @@ function M.RenderNameCell(friend, index, state, callbacks, sectionTag)
     local isPending = friend.isPending or false
     local uniqueId = (sectionTag or "main") .. "_" .. index
     
-    if not icons.RenderStatusIcon(isOnline, isPending, 12, isAway) then
+    if not icons.RenderStatusIcon(isOnline, isPending, 16, isAway) then
         local color = isPending and {1.0, 0.8, 0.0, 1.0} or 
                      isAway and {1.0, 0.7, 0.2, 1.0} or
                      isOnline and {0.0, 1.0, 0.0, 1.0} or 
@@ -366,24 +366,34 @@ function M.RenderNationRankCell(friend)
     local nation = presence.nation
     local rank = presence.rank
     local isOnline = friend.isOnline or false
-    if type(rank) ~= "string" then rank = "" end
+    -- Convert rank to string if it's a number (server sends numeric rank)
+    if type(rank) == "number" then
+        rank = tostring(rank)
+    elseif type(rank) ~= "string" then
+        rank = ""
+    end
     
     local rankNum = rank:match("%d+") or ""
     local anonColor = {0.4, 0.65, 0.85, 1.0}  -- Dark sky blue
     local anonColorDim = {0.3, 0.45, 0.6, 1.0}  -- Dimmed for offline
     
-    if nation == nil or (rankNum == "") then
+    -- Nation icons map supports both numeric (legacy) and string keys
+    local nationIcons = {
+        [0] = "nation_sandoria",
+        [1] = "nation_bastok",
+        [2] = "nation_windurst",
+        ["San d'Oria"] = "nation_sandoria",
+        ["Bastok"] = "nation_bastok",
+        ["Windurst"] = "nation_windurst"
+    }
+    
+    if nation == nil or nation == -1 or (rankNum == "") then
         if isOnline then
             imgui.TextColored(anonColor, "Anon")
         else
             imgui.TextColored(anonColorDim, "Anon")
         end
     else
-        local nationIcons = {
-            [0] = "nation_sandoria",
-            [1] = "nation_bastok",
-            [2] = "nation_windurst"
-        }
         local nationIcon = nationIcons[nation]
         
         if nationIcon and rankNum ~= "" then

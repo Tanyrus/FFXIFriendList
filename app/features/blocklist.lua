@@ -193,8 +193,9 @@ function M.Blocklist:handleBlockResponse(success, response, characterName, callb
     
     log(self, "info", "[Blocklist] Blocked " .. tostring(characterName))
     
-    -- HTTP response is confirmation only
-    -- WS blocked event is authoritative
+    -- Refresh blocklist to get updated list from server
+    -- (WS blocked event only goes to the blocked person, not the blocker)
+    self:refresh()
     
     if callback then
         callback(true, {
@@ -248,8 +249,9 @@ function M.Blocklist:handleUnblockResponse(success, response, accountId, callbac
     
     log(self, "info", "[Blocklist] Unblocked accountId " .. tostring(accountId))
     
-    -- HTTP response is confirmation only
-    -- WS unblocked event is authoritative
+    -- Refresh blocklist to get updated list from server
+    -- (WS unblocked event only goes to the unblocked person, not the unblocker)
+    self:refresh()
     
     if callback then
         callback(true, {

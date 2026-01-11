@@ -237,10 +237,13 @@ function M.WsEventHandler:_handleFriendRequestReceived(payload)
     local friends = self.deps.friends
     if not friends then return end
     
-    -- Add to incoming requests
+    -- Normalize to UI-expected format: { id, name, accountId, createdAt }
+    -- UI expects 'name' and 'accountId' for display and block button
     local request = {
         id = payload.requestId,
-        fromAccountId = payload.fromAccountId,
+        name = payload.fromCharacterName,      -- UI displays this
+        accountId = payload.fromAccountId,     -- UI uses for block
+        fromAccountId = payload.fromAccountId, -- Keep for compatibility
         fromCharacterName = payload.fromCharacterName,
         createdAt = payload.createdAt
     }

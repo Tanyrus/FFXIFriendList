@@ -12,7 +12,8 @@ local Notes = require("app.features.notes")
 local AltVisibility = require("app.features.altvisibility")
 local Tags = require("app.features.Tags")
 local Blocklist = require("app.features.blocklist")
-local WsClient = require("platform.services.WsClient")
+local WsClientAsync = require("platform.services.WsClientAsync")
+local WsConnectionManager = require("platform.services.WsConnectionManager")
 local WsEventHandler = require("app.features.wsEventHandler")
 
 local App = {}
@@ -47,8 +48,18 @@ function App.create(deps)
     app.features.tags = Tags.Tags.new(deps)
     app.features.blocklist = Blocklist.Blocklist.new(deps)
     
-    -- Initialize WebSocket client and event handler
-    app.features.wsClient = WsClient.WsClient.new(deps)
+    -- Initialize non-blocking WebSocket client
+    app.features.wsClient = WsClientAsync.WsClientAsync.new(deps)
+    
+    -- Initialize connection manager with backoff (wraps wsClient)
+    app.features.wsConnectionManager = WsConnectionManager.WsConnectionManager.new({
+        logger = deps.logger,
+        wsClient = app.features.wsClient,
+        connection = app.features.connection,
+        time = deps.time
+    })
+    
+    -- Initialize event handler
     app.features.wsEventHandler = WsEventHandler.WsEventHandler.new({
         logger = deps.logger,
         friends = app.features.friends,
@@ -191,9 +202,19 @@ function App.tick(app, dtSeconds)
         app.features.serverlist:tick(dtSeconds)
     end
     
-    -- Tick WebSocket client for reconnection handling
-    if app.features.wsClient and app.features.wsClient.tick then
-        app.features.wsClient:tick(dtSeconds)
+    -- Tick WebSocket connection manager (non-blocking backoff/retry)
+    if app.features.wsConnectionManager then
+        app.features.wsConnectionManager:tick()
+    end
+    
+    -- Tick WebSocket client connect steps (non-blocking step machine)
+    if app.features.wsClient and app.features.wsClient.tickConnect then
+        app.features.wsClient:tickConnect()
+    end
+    
+    -- Tick WebSocket client messages (non-blocking message processing)
+    if app.features.wsClient and app.features.wsClient.tickMessages then
+        app.features.wsClient:tickMessages()
     end
 end
 
@@ -217,12 +238,12 @@ function App._triggerStartupRefresh(app)
         app.deps.logger.info(string.format("[App] [%d] Triggering startup refresh (parallel)", timeMs))
     end
     
-    -- Connect WebSocket for real-time updates (WS is now primary for state updates)
-    if app.features.wsClient and app.features.wsClient.connect then
+    -- Request WebSocket connection via connection manager (non-blocking)
+    if app.features.wsConnectionManager then
         if app.deps.logger and app.deps.logger.debug then
-            app.deps.logger.debug(string.format("[App] [%d] Startup: Connecting WebSocket", timeMs))
+            app.deps.logger.debug(string.format("[App] [%d] Startup: Requesting WebSocket connection", timeMs))
         end
-        app.features.wsClient:connect()
+        app.features.wsConnectionManager:requestConnect()
     end
     
     -- Fire all requests in parallel (they're independent)
@@ -357,6 +378,26 @@ function App.getState(app)
             app.deps.logger.error("[App] Missing tags feature or getState() method")
         end
         app._missingFeatureLogged.tags = true
+    end
+    
+    -- Add WebSocket connection manager status for UI
+    if app.features.wsConnectionManager then
+        local statusText, statusDetail = app.features.wsConnectionManager:getStatus()
+        local retryInfo = app.features.wsConnectionManager:getRetryInfo()
+        state.wsConnection = {
+            state = app.features.wsConnectionManager:getState(),
+            isConnected = app.features.wsConnectionManager:isConnected(),
+            statusText = statusText,
+            statusDetail = statusDetail,
+            retryInfo = retryInfo
+        }
+    else
+        state.wsConnection = {
+            state = "UNAVAILABLE",
+            isConnected = false,
+            statusText = "Unavailable",
+            statusDetail = ""
+        }
     end
     
     return state

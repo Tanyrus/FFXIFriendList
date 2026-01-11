@@ -12,6 +12,9 @@ local state = {
     incomingRequests = {},
     outgoingRequests = {},
     connectionState = "uninitialized",
+    wsConnectionState = "DISCONNECTED",
+    wsStatusText = "Disconnected",
+    wsStatusDetail = "",
     friendsState = "idle",  -- Track friends sync state: idle, syncing, error
     lastError = nil,
     lastUpdatedAt = nil
@@ -67,6 +70,13 @@ function M.Update()
     else
         state.connectionState = "uninitialized"
     end
+    
+    -- Update WebSocket connection state for real-time status
+    if appState.wsConnection then
+        state.wsConnectionState = appState.wsConnection.state or "DISCONNECTED"
+        state.wsStatusText = appState.wsConnection.statusText or "Disconnected"
+        state.wsStatusDetail = appState.wsConnection.statusDetail or ""
+    end
 end
 
 -- Get friends list
@@ -112,6 +122,16 @@ end
 -- Check if connected
 function M.IsConnected()
     return state.connectionState == "connected"
+end
+
+-- Get WebSocket connection status for UI display
+function M.GetWsStatus()
+    return state.wsStatusText, state.wsStatusDetail
+end
+
+-- Check if WebSocket is connected
+function M.IsWsConnected()
+    return state.wsConnectionState == "CONNECTED"
 end
 
 -- Get blocked players list

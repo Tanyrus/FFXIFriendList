@@ -57,7 +57,9 @@ end
 function M.Blocklist:findByName(name)
     local lowerName = string.lower(name or "")
     for _, entry in ipairs(self.blocked) do
-        if string.lower(entry.displayName or "") == lowerName then
+        -- Server returns characterName, UI may expect displayName
+        local entryName = entry.displayName or entry.characterName or ""
+        if string.lower(entryName) == lowerName then
             return entry
         end
     end

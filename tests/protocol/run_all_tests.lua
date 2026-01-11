@@ -11,7 +11,8 @@ local tests = {
     require("tests.protocol.ProtocolVersionTest"),
     require("tests.protocol.EnvelopeTest"),
     require("tests.protocol.DecoderTest"),
-    require("tests.protocol.RequestEncoderTest")
+    require("tests.protocol.RequestEncoderTest"),
+    require("tests.protocol.WsEnvelopeTest")
 }
 
 local passed = 0

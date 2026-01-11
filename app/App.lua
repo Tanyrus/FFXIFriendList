@@ -12,6 +12,9 @@ local Notes = require("app.features.notes")
 local AltVisibility = require("app.features.altvisibility")
 local Tags = require("app.features.Tags")
 local Blocklist = require("app.features.blocklist")
+local WsClientAsync = require("platform.services.WsClientAsync")
+local WsConnectionManager = require("platform.services.WsConnectionManager")
+local WsEventHandler = require("app.features.wsEventHandler")
 
 local App = {}
 
@@ -44,6 +47,53 @@ function App.create(deps)
     app.features.altVisibility = AltVisibility.AltVisibility.new(deps)
     app.features.tags = Tags.Tags.new(deps)
     app.features.blocklist = Blocklist.Blocklist.new(deps)
+    
+    -- Initialize non-blocking WebSocket client
+    app.features.wsClient = WsClientAsync.WsClientAsync.new(deps)
+    
+    -- Initialize connection manager with backoff (wraps wsClient)
+    app.features.wsConnectionManager = WsConnectionManager.WsConnectionManager.new({
+        logger = deps.logger,
+        wsClient = app.features.wsClient,
+        connection = app.features.connection,
+        time = deps.time
+    })
+    
+    -- Initialize event handler
+    app.features.wsEventHandler = WsEventHandler.WsEventHandler.new({
+        logger = deps.logger,
+        friends = app.features.friends,
+        blocklist = app.features.blocklist,
+        preferences = app.features.preferences,
+        notifications = app.features.notifications,
+        connection = app.features.connection,
+        time = deps.time
+    })
+    
+    -- Register WS event handler with the event router
+    if app.features.wsClient and app.features.wsClient.eventRouter then
+        -- Create a single handler that routes to wsEventHandler
+        local handler = function(payload, eventType, seq, timestamp)
+            if app.features.wsEventHandler then
+                app.features.wsEventHandler:handleEvent(payload, eventType, seq, timestamp)
+            end
+        end
+        
+        -- Register handlers for all WS event types (from friendlist-server/src/types/events.ts)
+        local eventTypes = {
+            "connected", "friends_snapshot", "friend_online", "friend_offline",
+            "friend_state_changed", "friend_added", "friend_removed",
+            "friend_request_received", "friend_request_accepted", "friend_request_declined",
+            "blocked", "unblocked", "preferences_updated", "error"
+        }
+        for _, eventType in ipairs(eventTypes) do
+            app.features.wsClient.eventRouter:registerHandler(eventType, handler)
+        end
+        
+        if deps.logger and deps.logger.debug then
+            deps.logger.debug("[App] Registered " .. #eventTypes .. " WS event handlers")
+        end
+    end
     
     return app
 end
@@ -151,10 +201,26 @@ function App.tick(app, dtSeconds)
     if app.features.serverlist and app.features.serverlist.tick then
         app.features.serverlist:tick(dtSeconds)
     end
+    
+    -- Tick WebSocket connection manager (non-blocking backoff/retry)
+    if app.features.wsConnectionManager then
+        app.features.wsConnectionManager:tick()
+    end
+    
+    -- Tick WebSocket client connect steps (non-blocking step machine)
+    if app.features.wsClient and app.features.wsClient.tickConnect then
+        app.features.wsClient:tickConnect()
+    end
+    
+    -- Tick WebSocket client messages (non-blocking message processing)
+    if app.features.wsClient and app.features.wsClient.tickMessages then
+        app.features.wsClient:tickMessages()
+    end
 end
 
 -- Trigger startup refresh after auto-connect completes
 -- Fires all requests in parallel for maximum speed
+-- Also establishes WebSocket connection for real-time updates
 function App._triggerStartupRefresh(app)
     if not app.features.connection or not app.features.connection:isConnected() then
         return
@@ -172,8 +238,16 @@ function App._triggerStartupRefresh(app)
         app.deps.logger.info(string.format("[App] [%d] Triggering startup refresh (parallel)", timeMs))
     end
     
+    -- Request WebSocket connection via connection manager (non-blocking)
+    if app.features.wsConnectionManager then
+        if app.deps.logger and app.deps.logger.debug then
+            app.deps.logger.debug(string.format("[App] [%d] Startup: Requesting WebSocket connection", timeMs))
+        end
+        app.features.wsConnectionManager:requestConnect()
+    end
+    
     -- Fire all requests in parallel (they're independent)
-    -- 1. Send heartbeat (primary "I'm online" signal)
+    -- 1. Send heartbeat (safety signal only - NOT for friend status)
     if app.features.friends and app.features.friends.sendHeartbeat then
         if app.deps.logger and app.deps.logger.debug then
             app.deps.logger.debug(string.format("[App] [%d] Startup: Firing heartbeat", timeMs))
@@ -181,7 +255,7 @@ function App._triggerStartupRefresh(app)
         app.features.friends:sendHeartbeat()
     end
     
-    -- 2. Refresh friend list (full sync) - parallel with other requests
+    -- 2. Refresh friend list (bootstrap - WS will provide updates after)
     if app.features.friends and app.features.friends.refresh then
         if app.deps.logger and app.deps.logger.debug then
             app.deps.logger.debug(string.format("[App] [%d] Startup: Firing friend list refresh", timeMs))
@@ -197,7 +271,7 @@ function App._triggerStartupRefresh(app)
         app.features.preferences:refresh()
     end
     
-    -- 4. Refresh friend requests - parallel with other requests
+    -- 4. Refresh friend requests (bootstrap - WS will provide updates after)
     if app.features.friends and app.features.friends.refreshFriendRequests then
         if app.deps.logger and app.deps.logger.debug then
             app.deps.logger.debug(string.format("[App] [%d] Startup: Firing friend requests refresh", timeMs))
@@ -306,6 +380,26 @@ function App.getState(app)
         app._missingFeatureLogged.tags = true
     end
     
+    -- Add WebSocket connection manager status for UI
+    if app.features.wsConnectionManager then
+        local statusText, statusDetail = app.features.wsConnectionManager:getStatus()
+        local retryInfo = app.features.wsConnectionManager:getRetryInfo()
+        state.wsConnection = {
+            state = app.features.wsConnectionManager:getState(),
+            isConnected = app.features.wsConnectionManager:isConnected(),
+            statusText = statusText,
+            statusDetail = statusDetail,
+            retryInfo = retryInfo
+        }
+    else
+        state.wsConnection = {
+            state = "UNAVAILABLE",
+            isConnected = false,
+            statusText = "Unavailable",
+            statusDetail = ""
+        }
+    end
+    
     return state
 end
 
@@ -318,6 +412,11 @@ function App.release(app)
     
     if app.deps.logger and app.deps.logger.info then
         app.deps.logger.info("[App] Releasing")
+    end
+    
+    -- Disconnect WebSocket cleanly
+    if app.features.wsClient and app.features.wsClient.disconnect then
+        app.features.wsClient:disconnect()
     end
     
     -- Save persisted state via deps.storage

@@ -15,6 +15,7 @@ local tests = {
     require("tests.app.FriendsNotificationsTest"),
     require("tests.app.NotesTest"),
     require("tests.app.BlocklistTest"),
+    require("tests.app.WsEventHandlerTest"),
     -- TODO: Add more tests:
     -- require("tests.app.ServerListTest"),
     -- require("tests.app.PreferencesTest"),

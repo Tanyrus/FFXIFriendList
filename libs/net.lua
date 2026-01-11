@@ -152,7 +152,8 @@ function M.request(options)
                 end
             end
             
-            req.callback(success, response, errorStr)
+            -- Pass status as 4th argument for callers that need it (e.g., diagnostics)
+            req.callback(success, response, errorStr, status)
         end
         
         requestQueue[requestId] = nil

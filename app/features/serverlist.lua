@@ -1,16 +1,11 @@
-local RequestEncoder = require("protocol.Encoding.RequestEncoder")
-local Envelope = require("protocol.Envelope")
-local DecodeRouter = require("protocol.DecodeRouter")
-local MessageTypes = require("protocol.MessageTypes")
 local ServerListCore = require("core.serverlistcore")
 local Endpoints = require("protocol.Endpoints")
+local ServerConfig = require("core.ServerConfig")
 
 local M = {}
 
 M.ServerList = {}
 M.ServerList.__index = M.ServerList
-
-local DEFAULT_SERVER_URL = "https://api.horizonfriendlist.com"
 
 function M.ServerList.new(deps)
     local self = setmetatable({}, M.ServerList)
@@ -28,7 +23,7 @@ function M.ServerList.new(deps)
             self.selected = ServerListCore.ServerInfo.new(
                 serverSel.savedServerId,
                 serverSel.savedServerId,
-                serverSel.savedServerBaseUrl or DEFAULT_SERVER_URL,
+                serverSel.savedServerBaseUrl or ServerConfig.DEFAULT_SERVER_URL,
                 serverSel.savedServerId,
                 false
             )
@@ -66,7 +61,7 @@ function M.ServerList:refresh()
     self.state = "loading"
     self.lastError = nil
     
-    local url = DEFAULT_SERVER_URL .. Endpoints.SERVERS
+    local url = ServerConfig.DEFAULT_SERVER_URL .. Endpoints.SERVERS
     
     local requestId = self.deps.net.request({
         url = url,
@@ -108,19 +103,27 @@ function M.ServerList:handleRefreshResponse(success, response)
         return
     end
     
+    -- Unwrap the response envelope (new server format: { success, data: { servers }, timestamp })
+    local serverData = data
+    if data and data.success and data.data then
+        serverData = data.data
+    end
+    
     local result = { servers = {} }
-    if data and data.servers and type(data.servers) == "table" then
-        result.servers = data.servers
+    if serverData and serverData.servers and type(serverData.servers) == "table" then
+        result.servers = serverData.servers
     end
     
     self.servers = {}
     if result.servers then
-        for _, serverData in ipairs(result.servers) do
+        for _, srvData in ipairs(result.servers) do
+            -- New server format doesn't include baseUrl/realmId per server
+            -- All servers use the same API endpoint, realmId = server id
             local server = ServerListCore.ServerInfo.new(
-                serverData.id,
-                serverData.name,
-                serverData.baseUrl,
-                serverData.realmId,
+                srvData.id,
+                srvData.name,
+                srvData.baseUrl or ServerConfig.DEFAULT_SERVER_URL,  -- Use default if not provided
+                srvData.realmId or srvData.id,  -- Use id as realmId if not provided
                 true
             )
             table.insert(self.servers, server)

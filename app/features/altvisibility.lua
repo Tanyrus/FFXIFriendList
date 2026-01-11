@@ -1,8 +1,5 @@
-local RequestEncoder = require("protocol.Encoding.RequestEncoder")
-local Envelope = require("protocol.Envelope")
-local DecodeRouter = require("protocol.DecodeRouter")
-local MessageTypes = require("protocol.MessageTypes")
-local ProtocolVersion = require("protocol.ProtocolVersion")
+-- NOTE: Alt visibility feature may not be supported by the new server
+-- This file uses legacy endpoints that may need to be updated or removed
 local Endpoints = require("protocol.Endpoints")
 
 local M = {}
@@ -28,6 +25,7 @@ function M.AltVisibility.new(deps)
     self.lastUpdateTime = 0
     self.filterText = ""
     self.pendingRefresh = false
+    self.hasAttemptedRefresh = false  -- Prevents infinite refresh on empty data
     
     return self
 end
@@ -46,7 +44,8 @@ function M.AltVisibility:getState()
         isLoading = self.isLoading,
         lastError = self.lastError,
         lastUpdateTime = self.lastUpdateTime,
-        pendingRefresh = self.pendingRefresh
+        pendingRefresh = self.pendingRefresh,
+        hasAttemptedRefresh = self.hasAttemptedRefresh
     }
 end
 
@@ -262,6 +261,7 @@ function M.AltVisibility:refresh()
     end
     
     self.pendingRefresh = false
+    self.hasAttemptedRefresh = true  -- Mark that we've attempted a refresh
     
     local characterName = connection:getCharacterName()
     local apiKey = connection:getApiKey(characterName)
@@ -277,13 +277,13 @@ function M.AltVisibility:refresh()
     local serverUrl = connection:getBaseUrl()
     local url = serverUrl .. Endpoints.FRIENDS.VISIBILITY
     
+    -- Use new auth format: Authorization: Bearer
     local addonVersion = addon and addon.version or "0.9.9"
     local headers = {
         ["Content-Type"] = "application/json",
-        ["X-API-Key"] = apiKey,
-        ["characterName"] = characterName,
-        ["User-Agent"] = "FFXIFriendList/" .. addonVersion,
-        ["X-Protocol-Version"] = ProtocolVersion.PROTOCOL_VERSION
+        ["Authorization"] = "Bearer " .. apiKey,
+        ["X-Character-Name"] = characterName,
+        ["User-Agent"] = "FFXIFriendList/" .. addonVersion
     }
     
     local selfRef = self
@@ -319,11 +319,13 @@ function M.AltVisibility:refresh()
             end
             
             if result.success == false then
-                selfRef:setError(result.error or "Server error")
+                selfRef:setError(result.error and result.error.message or "Server error")
                 return
             end
             
-            selfRef:updateFromResult(result.friends, result.characters)
+            -- Handle response envelope: { success: true, data: { friends, characters } }
+            local data = result.data or result
+            selfRef:updateFromResult(data.friends, data.characters)
             selfRef:setLastUpdateTime(getTime(selfRef))
             
             if selfRef.deps.logger then
@@ -362,13 +364,13 @@ function M.AltVisibility:toggleVisibility(friendAccountId, friendName, character
     
     local serverUrl = connection:getBaseUrl()
     
+    -- Use new auth format: Authorization: Bearer
     local addonVersion = addon and addon.version or "0.9.9"
     local headers = {
         ["Content-Type"] = "application/json",
-        ["X-API-Key"] = apiKey,
-        ["characterName"] = characterName,
-        ["User-Agent"] = "FFXIFriendList/" .. addonVersion,
-        ["X-Protocol-Version"] = ProtocolVersion.PROTOCOL_VERSION
+        ["Authorization"] = "Bearer " .. apiKey,
+        ["X-Character-Name"] = characterName,
+        ["User-Agent"] = "FFXIFriendList/" .. addonVersion
     }
     
     local currentCharacterId = nil

@@ -2,8 +2,15 @@ local imgui = require('imgui')
 
 local M = {}
 
+-- State for character list section
+M.state = {
+    charactersExpanded = false
+}
+
 function M.Render(state, dataModule, callbacks)
     M.RenderWelcomeSection()
+    imgui.Spacing()
+    M.RenderAccountInfoSection()
     imgui.Spacing()
     M.RenderCommandsSection()
     imgui.Spacing()
@@ -19,6 +26,66 @@ function M.RenderWelcomeSection()
     imgui.Spacing()
     imgui.TextWrapped("This addon lets you manage a cross-server friend list for Final Fantasy XI. " ..
         "Stay connected with friends across different private servers, see when they're online, and send messages.")
+end
+
+function M.RenderAccountInfoSection()
+    if imgui.CollapsingHeader("Your Characters") then
+        imgui.Indent()
+        
+        local app = _G.FFXIFriendListApp
+        local characters = {}
+        local currentCharName = nil
+        
+        -- Get current character name from connection
+        if app and app.features and app.features.connection then
+            currentCharName = app.features.connection:getCharacterName()
+        end
+        
+        -- Try to get characters from altVisibility first (it has them after visibility fetch)
+        if app and app.features and app.features.altVisibility then
+            characters = app.features.altVisibility:getCharacters() or {}
+        end
+        
+        if #characters == 0 then
+            -- Show current character at minimum
+            if currentCharName and currentCharName ~= "" then
+                local displayName = currentCharName:sub(1, 1):upper() .. currentCharName:sub(2):lower()
+                imgui.TextColored({0.0, 1.0, 0.0, 1.0}, "* " .. displayName)
+                imgui.SameLine()
+                imgui.TextDisabled("(current)")
+            else
+                imgui.TextDisabled("Not connected")
+            end
+            imgui.Spacing()
+            imgui.TextDisabled("Open the Privacy tab's \"Alt Online Visibility\" section to load all your characters.")
+        else
+            -- Show all characters
+            for _, charInfo in ipairs(characters) do
+                local charName = charInfo.characterName or "Unknown"
+                local displayName = charName:sub(1, 1):upper() .. charName:sub(2):lower()
+                
+                local isCurrent = currentCharName and charName:lower() == currentCharName:lower()
+                local isActive = charInfo.isActive
+                
+                if isCurrent then
+                    imgui.TextColored({0.0, 1.0, 0.0, 1.0}, "* " .. displayName)
+                    imgui.SameLine()
+                    imgui.TextDisabled("(current)")
+                elseif isActive then
+                    imgui.TextColored({0.7, 0.9, 1.0, 1.0}, "  " .. displayName)
+                    imgui.SameLine()
+                    imgui.TextDisabled("(active)")
+                else
+                    imgui.Text("  " .. displayName)
+                end
+            end
+            
+            imgui.Spacing()
+            imgui.TextDisabled("Characters linked to your account.")
+        end
+        
+        imgui.Unindent()
+    end
 end
 
 function M.RenderCommandsSection()

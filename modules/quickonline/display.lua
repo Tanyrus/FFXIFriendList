@@ -10,6 +10,8 @@ local scaling = require('scaling')
 local InputHelper = require('ui.helpers.InputHelper')
 local HoverTooltip = require('ui.widgets.HoverTooltip')
 local FontManager = require('app.ui.FontManager')
+local UIConst = require('constants.ui')
+local Colors = require('constants.colors')
 
 local FriendContextMenu = require('modules.friendlist.components.FriendContextMenu')
 local FriendDetailsPopup = require('modules.friendlist.components.FriendDetailsPopup')
@@ -253,12 +255,12 @@ function M.DrawWindow(settings, dataModule)
     local themePushed = false
     local overlayStylePushed = false
     if overlayEnabled then
-        imgui.PushStyleColor(ImGuiCol_WindowBg, {0.0, 0.0, 0.0, 0.0})
-        imgui.PushStyleColor(ImGuiCol_ChildBg, {0.0, 0.0, 0.0, 0.0})
+        imgui.PushStyleColor(ImGuiCol_WindowBg, Colors.TRANSPARENT)
+        imgui.PushStyleColor(ImGuiCol_ChildBg, Colors.TRANSPARENT)
         if not disableInteraction and not tooltipBgEnabled then
-            imgui.PushStyleColor(ImGuiCol_PopupBg, {0.0, 0.0, 0.0, 0.0})
+            imgui.PushStyleColor(ImGuiCol_PopupBg, Colors.TRANSPARENT)
         end
-        imgui.PushStyleColor(ImGuiCol_Border, {0.0, 0.0, 0.0, 0.0})
+        imgui.PushStyleColor(ImGuiCol_Border, Colors.TRANSPARENT)
         overlayStylePushed = true
     elseif app and app.features and app.features.themes then
         local themesFeature = app.features.themes
@@ -333,7 +335,7 @@ function M.DrawWindow(settings, dataModule)
             end
             imgui.BeginChild("##quick_online_body", {0, 0}, false, childFlags)
             if overlayEnabled then
-                imgui.PushStyleColor(ImGuiCol_ChildBg, {0.0, 0.0, 0.0, 0.0})
+                imgui.PushStyleColor(ImGuiCol_ChildBg, Colors.TRANSPARENT)
             end
             M.RenderFriendsTable(dataModule, overlayEnabled, disableInteraction, tooltipBgEnabled)
             if overlayEnabled then
@@ -409,9 +411,9 @@ function M.RenderTopBar(dataModule)
     imgui.SameLine(0, s(8))
     
     if not isConnected then
-        imgui.PushStyleColor(ImGuiCol_Button, {0.3, 0.3, 0.3, 1.0})
-        imgui.PushStyleColor(ImGuiCol_ButtonHovered, {0.3, 0.3, 0.3, 1.0})
-        imgui.PushStyleColor(ImGuiCol_ButtonActive, {0.3, 0.3, 0.3, 1.0})
+        imgui.PushStyleColor(ImGuiCol_Button, Colors.BUTTON.DISABLED)
+        imgui.PushStyleColor(ImGuiCol_ButtonHovered, Colors.BUTTON.DISABLED)
+        imgui.PushStyleColor(ImGuiCol_ButtonActive, Colors.BUTTON.DISABLED)
     end
     
     if imgui.Button("Refresh") then

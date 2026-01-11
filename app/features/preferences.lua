@@ -1,8 +1,5 @@
 local Models = require("core.models")
-local RequestEncoder = require("protocol.Encoding.RequestEncoder")
 local Envelope = require("protocol.Envelope")
-local DecodeRouter = require("protocol.DecodeRouter")
-local MessageTypes = require("protocol.MessageTypes")
 local Endpoints = require("protocol.Endpoints")
 local UIConstants = require("core.UIConstants")
 local Settings = require("libs.settings")
@@ -201,6 +198,7 @@ function M.Preferences:syncToServer(onComplete)
         return false
     end
     
+    -- Use new server endpoint: PATCH /api/preferences
     local url = self.deps.connection:getBaseUrl() .. Endpoints.PREFERENCES
     
     local characterName = ""
@@ -212,16 +210,12 @@ function M.Preferences:syncToServer(onComplete)
     
     local headers = self.deps.connection:getHeaders(characterName)
     
-    local json = require("protocol.Json")
-    local body = json.encode({
-        preferences = {
-            shareFriendsAcrossAlts = self.prefs.shareFriendsAcrossAlts
-        },
-        privacy = {
-            presenceStatus = self.prefs.presenceStatus,
-            shareLocation = self.prefs.shareLocation,
-            shareCharacterData = self.prefs.shareJobWhenAnonymous
-        }
+    -- New server expects: { presenceStatus?, shareLocation?, shareJobWhenAnonymous? }
+    local RequestEncoder = require("protocol.Encoding.RequestEncoder")
+    local body = RequestEncoder.encodeUpdatePreferences({
+        presenceStatus = self.prefs.presenceStatus,
+        shareLocation = self.prefs.shareLocation,
+        shareJobWhenAnonymous = self.prefs.shareJobWhenAnonymous
     })
     
     local selfRef = self
@@ -234,15 +228,16 @@ function M.Preferences:syncToServer(onComplete)
         callback = function(success, response)
             local syncSuccess = false
             if success then
-                local ok, envelope = Envelope.decode(response)
-                if ok and envelope.success then
+                -- Use new envelope format: { success, data, timestamp }
+                local ok, result = Envelope.decode(response)
+                if ok then
                     if selfRef.deps.logger and selfRef.deps.logger.debug then
-                        selfRef.deps.logger.debug("[Preferences] Privacy settings synced to server")
+                        selfRef.deps.logger.debug("[Preferences] Settings synced to server")
                     end
                     syncSuccess = true
                 else
                     if selfRef.deps.logger and selfRef.deps.logger.debug then
-                        selfRef.deps.logger.debug("[Preferences] Server sync not available (local settings saved)")
+                        selfRef.deps.logger.debug("[Preferences] Server sync failed (local settings saved)")
                     end
                 end
             else
@@ -269,6 +264,7 @@ function M.Preferences:refresh()
         return false
     end
     
+    -- Use new server endpoint: GET /api/preferences
     local url = self.deps.connection:getBaseUrl() .. Endpoints.PREFERENCES
     
     local characterName = ""
@@ -304,47 +300,31 @@ function M.Preferences:refresh()
             end
             
             if success then
-                local ok, envelope = Envelope.decode(response)
-                if ok and envelope.success then
-                    local decodeOk, result = DecodeRouter.decode(envelope)
-                    if decodeOk then
-                        local serverPrefs = result.preferences or {}
-                        if serverPrefs.shareFriendsAcrossAlts ~= nil then
-                            self.prefs.shareFriendsAcrossAlts = serverPrefs.shareFriendsAcrossAlts
-                        end
-                        if serverPrefs.useServerNotes ~= nil then
-                            self.prefs.useServerNotes = serverPrefs.useServerNotes
-                        end
-                        
-                        local serverPrivacy = result.privacy or {}
-                        if serverPrivacy.presenceStatus ~= nil then
-                            self.prefs.presenceStatus = serverPrivacy.presenceStatus
-                            self.prefs.showOnlineStatus = serverPrivacy.presenceStatus ~= "invisible"
-                        elseif serverPrivacy.shareOnlineStatus ~= nil then
-                            self.prefs.showOnlineStatus = serverPrivacy.shareOnlineStatus
-                            self.prefs.presenceStatus = serverPrivacy.shareOnlineStatus and "online" or "invisible"
-                        end
-                        if serverPrivacy.shareLocation ~= nil then
-                            self.prefs.shareLocation = serverPrivacy.shareLocation
-                        end
-                        if serverPrivacy.shareCharacterData ~= nil then
-                            self.prefs.shareJobWhenAnonymous = serverPrivacy.shareCharacterData
-                        end
-                        
-                        self:save()
-                        
-                        if self.deps.logger and self.deps.logger.debug then
-                            self.deps.logger.debug(string.format("[Preferences] [%d] Refresh complete: server preferences applied", callbackTimeMs))
-                        end
-                    else
-                        if self.deps.logger and self.deps.logger.warn then
-                            self.deps.logger.warn(string.format("[Preferences] [%d] Refresh: Failed to decode preferences", callbackTimeMs))
-                        end
+                -- Use new envelope format: { success, data, timestamp }
+                local ok, result = Envelope.decode(response)
+                if ok then
+                    -- New server returns PreferencesData directly in data
+                    local data = result.data or {}
+                    
+                    if data.presenceStatus ~= nil then
+                        self.prefs.presenceStatus = data.presenceStatus
+                        self.prefs.showOnlineStatus = data.presenceStatus ~= "invisible"
+                    end
+                    if data.shareLocation ~= nil then
+                        self.prefs.shareLocation = data.shareLocation
+                    end
+                    if data.shareJobWhenAnonymous ~= nil then
+                        self.prefs.shareJobWhenAnonymous = data.shareJobWhenAnonymous
+                    end
+                    
+                    self:save()
+                    
+                    if self.deps.logger and self.deps.logger.debug then
+                        self.deps.logger.debug(string.format("[Preferences] [%d] Refresh complete", callbackTimeMs))
                     end
                 else
                     if self.deps.logger and self.deps.logger.warn then
-                        local errorMsg = envelope and envelope.error or "Unknown error"
-                        self.deps.logger.warn(string.format("[Preferences] [%d] Refresh: Server error: %s", callbackTimeMs, tostring(errorMsg)))
+                        self.deps.logger.warn(string.format("[Preferences] [%d] Refresh: Failed to decode", callbackTimeMs))
                     end
                 end
             else

@@ -38,6 +38,7 @@ require('imgui')
 -- config module removed - using libs.settings directly
 local moduleRegistry = require('core.moduleregistry')
 local settings = require('libs.settings')
+local ServerConfig = require('core.ServerConfig')
 
 -- Expose moduleRegistry globally for window close policy
 _G.moduleRegistry = moduleRegistry
@@ -61,6 +62,9 @@ local closeInputHandler = require('ui.input.close_input')
 
 -- Load sound player service
 local SoundPlayer = require('platform.services.SoundPlayer')
+
+-- Load diagnostics runner
+local DiagnosticsRunner = require('app.diagnostics.DiagnosticsRunner')
 
 -- Simple services (no platform dependencies)
 local SessionManager = {}
@@ -87,6 +91,9 @@ gAdjustedSettings = nil
 local app = nil
 local initialized = false
 local installPath = nil
+
+-- Diagnostics runner
+local diagRunner = nil
 
 -- Update timing (for network polling - now per-frame for faster response)
 local lastUpdateTime = 0
@@ -121,13 +128,13 @@ ashita.events.register('load', 'ffxifriendlist_load', function()
     if not gConfig.data then
         gConfig.data = {}
     end
-    if not gConfig.data.apiKeys then
-        gConfig.data.apiKeys = {}
+    if not gConfig.data.apiKey then
+        gConfig.data.apiKey = ""
     end
     if not gConfig.data.serverSelection then
         gConfig.data.serverSelection = {
             savedServerId = "",
-            savedServerBaseUrl = "https://api.horizonfriendlist.com",
+            savedServerBaseUrl = ServerConfig.DEFAULT_SERVER_URL,
             detectedServerShownOnce = false
         }
     end
@@ -199,6 +206,20 @@ ashita.events.register('load', 'ffxifriendlist_load', function()
         
         -- Set global app instance for modules to access
         _G.FFXIFriendListApp = app
+        
+        -- Create diagnostics runner
+        diagRunner = DiagnosticsRunner.new({
+            logger = deps.logger,
+            net = netClient,
+            connection = app.features.connection,
+            wsClient = app.features.wsClient
+        })
+        
+        -- Enable diagnostics if debugMode is set in preferences
+        local debugModeEnabled = gConfig and gConfig.data and gConfig.data.preferences and gConfig.data.preferences.debugMode
+        if debugModeEnabled then
+            diagRunner:setEnabled(true)
+        end
     end
     
     -- Initialize handlers
@@ -424,10 +445,12 @@ ashita.events.register('packet_in', 'ffxifriendlist_packet', function(e)
     return false
 end)
 
+local Assets = require('constants.assets')
+
 local function M_playSoundTest(soundType)
     local sounds = {
-        online = "online.wav",
-        request = "friend-request.wav"
+        online = Assets.SOUNDS.FRIEND_ONLINE,
+        request = Assets.SOUNDS.FRIEND_REQUEST
     }
     
     if soundType == "all" then
@@ -593,7 +616,40 @@ ashita.events.register('command', 'ffxifriendlist_command', function(e)
                 print("  /fl block <name> - Block a player from sending friend requests")
                 print("  /fl unblock <name> - Unblock a player")
                 print("  /fl blocked - List all blocked players")
+                print("  /fl diag <cmd> - Run diagnostics (requires DebugMode=true)")
                 print("  /befriend <name> [tag] - Send friend request with optional tag")
+                return
+            end
+            
+            if subcmd == "diag" then
+                if diagRunner then
+                    -- Collect remaining args
+                    local diagArgs = {}
+                    for i = 3, #command_args do
+                        table.insert(diagArgs, command_args[i])
+                    end
+                    diagRunner:handleCommand(diagArgs)
+                else
+                    print("[FFXIFriendList] Diagnostics not available")
+                end
+                return
+            end
+            
+            if subcmd == "debug" then
+                -- Toggle debug mode which enables diagnostics
+                if gConfig and gConfig.data and gConfig.data.preferences then
+                    gConfig.data.preferences.debugMode = not gConfig.data.preferences.debugMode
+                    local enabled = gConfig.data.preferences.debugMode
+                    if diagRunner then
+                        diagRunner:setEnabled(enabled)
+                    end
+                    print("[FFXIFriendList] Debug mode " .. (enabled and "ENABLED" or "DISABLED"))
+                    -- Save the setting
+                    local settings = require("libs.settings")
+                    if settings and settings.save then
+                        settings.save()
+                    end
+                end
                 return
             end
             

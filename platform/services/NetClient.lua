@@ -2,6 +2,7 @@
 
 local HttpTypes = require("platform.HttpTypes")
 local HttpHeaders = require("protocol.Encoding.HttpHeaders")
+local ServerConfig = require("core.ServerConfig")
 
 local M = {}
 M.NetClient = {}
@@ -10,7 +11,7 @@ M.NetClient.__index = M.NetClient
 function M.NetClient.new(ashitaCore)
     local self = setmetatable({}, M.NetClient)
     self.ashitaCore = ashitaCore
-    self.baseUrl = "https://api.horizonfriendlist.com"
+    self.baseUrl = ServerConfig.DEFAULT_SERVER_URL
     self.realmId = ""
     self.sessionId = ""
     self.pendingRequests = {}

@@ -10,6 +10,9 @@ local state = {
     initialized = false,
     friends = {},  -- All friends (online and offline)
     connectionState = "uninitialized",
+    wsConnectionState = "DISCONNECTED",
+    wsStatusText = "Disconnected",
+    wsStatusDetail = "",
     lastError = nil,
     lastUpdatedAt = nil
 }
@@ -59,6 +62,13 @@ function M.Update()
         state.connectionState = "uninitialized"
     end
     
+    -- Update WebSocket connection state (for real-time status display)
+    if appState.wsConnection then
+        state.wsConnectionState = appState.wsConnection.state or "DISCONNECTED"
+        state.wsStatusText = appState.wsConnection.statusText or "Disconnected"
+        state.wsStatusDetail = appState.wsConnection.statusDetail or ""
+    end
+    
     -- Update error and timestamp
     if appState.friends then
         state.lastError = appState.friends.lastError
@@ -94,6 +104,16 @@ end
 -- Get last updated timestamp
 function M.GetLastUpdatedAt()
     return state.lastUpdatedAt
+end
+
+-- Get WebSocket connection status for UI display
+function M.GetWsStatus()
+    return state.wsStatusText, state.wsStatusDetail
+end
+
+-- Check if WebSocket is connected
+function M.IsWsConnected()
+    return state.wsConnectionState == "CONNECTED"
 end
 
 -- Cleanup

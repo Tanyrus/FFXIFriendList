@@ -392,7 +392,7 @@ function M.RenderAltVisibilitySection(state, dataModule, callbacks)
             
             if visState.pendingRefresh then
                 altVis:checkPendingRefresh()
-            elseif #altVis:getRows() == 0 and not visState.isLoading and not visState.lastError then
+            elseif #altVis:getRows() == 0 and not visState.isLoading and not visState.lastError and not visState.hasAttemptedRefresh then
                 if callbacks.onRefreshAltVisibility then
                     callbacks.onRefreshAltVisibility()
                 end
@@ -487,7 +487,7 @@ function M.RenderAltVisibilityTable(state, callbacks)
     local allRows = altVis:getRows()
     
     if #allRows == 0 then
-        if visState.lastUpdateTime == 0 and not visState.isLoading then
+        if not visState.hasAttemptedRefresh and not visState.isLoading then
             imgui.Text("Loading visibility data...")
             if callbacks.onRefreshAltVisibility then
                 callbacks.onRefreshAltVisibility()
@@ -495,7 +495,9 @@ function M.RenderAltVisibilityTable(state, callbacks)
         elseif visState.isLoading then
             imgui.Text("Loading visibility data...")
         else
-            imgui.Text("No friends found")
+            imgui.TextColored({0.6, 0.8, 1.0, 1.0}, "No friends to configure visibility for.")
+            imgui.TextDisabled("Add friends first, then manage which of your characters can see them here.")
+            imgui.Spacing()
             if imgui.Button("Refresh") then
                 if callbacks.onRefreshAltVisibility then
                     callbacks.onRefreshAltVisibility()

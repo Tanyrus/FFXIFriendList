@@ -6,11 +6,13 @@
 local imgui = require('imgui')
 local ThemeHelper = require('libs.themehelper')
 local FontManager = require('app.ui.FontManager')
+local UIConst = require('constants.ui')
+local Colors = require('constants.colors')
 
 local M = {}
 
--- Window ID (stable internal ID with ## pattern)
-local WINDOW_ID = "##serverselection_main"
+-- Window ID from centralized constants
+local WINDOW_ID = UIConst.WINDOW_IDS.SERVER_SELECTION
 
 -- Module state
 local state = {
@@ -126,8 +128,8 @@ function M.DrawWindow(settings, dataModule)
         ImGuiWindowFlags_AlwaysAutoResize
     )
     
-    -- Set size and center on screen
-    imgui.SetNextWindowSize({350, 0}, ImGuiCond_FirstUseEver)
+    -- Set size and center on screen (use centralized window sizes)
+    imgui.SetNextWindowSize(UIConst.WINDOW_SIZES.SERVER_SELECTION, ImGuiCond_FirstUseEver)
     
     -- Apply theme styles
     local themePushed = false
@@ -314,10 +316,10 @@ function M.DrawWindow(settings, dataModule)
         end
     else
         -- Render disabled button (grayed out, non-clickable)
-        imgui.PushStyleColor(ImGuiCol_Button, {0.3, 0.3, 0.3, 1.0})
-        imgui.PushStyleColor(ImGuiCol_ButtonHovered, {0.3, 0.3, 0.3, 1.0})
-        imgui.PushStyleColor(ImGuiCol_ButtonActive, {0.3, 0.3, 0.3, 1.0})
-        imgui.PushStyleColor(ImGuiCol_Text, {0.5, 0.5, 0.5, 1.0})
+        imgui.PushStyleColor(ImGuiCol_Button, Colors.BUTTON.DISABLED)
+        imgui.PushStyleColor(ImGuiCol_ButtonHovered, Colors.BUTTON.DISABLED)
+        imgui.PushStyleColor(ImGuiCol_ButtonActive, Colors.BUTTON.DISABLED)
+        imgui.PushStyleColor(ImGuiCol_Text, Colors.BUTTON.DISABLED_TEXT)
         imgui.Button("Save")
         imgui.PopStyleColor(4)
     end

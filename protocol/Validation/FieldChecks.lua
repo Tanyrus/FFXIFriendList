@@ -1,11 +1,13 @@
 -- FieldChecks.lua
 -- Field-level validation helpers (presence/type/range)
 
+local Limits = require("constants.limits")
+
 local M = {}
 
--- Constants
-M.MAX_FRIEND_LIST_SIZE = 1000
-M.MAX_CHARACTER_NAME_LENGTH = 16
+-- Constants (re-exported from centralized limits)
+M.MAX_FRIEND_LIST_SIZE = Limits.MAX_FRIEND_LIST_SIZE
+M.MAX_CHARACTER_NAME_LENGTH = Limits.CHARACTER_NAME_MAX
 
 -- Check if character name is valid
 function M.validateCharacterName(name)

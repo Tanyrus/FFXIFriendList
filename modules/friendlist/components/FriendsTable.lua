@@ -166,6 +166,7 @@ function M.Render(state, dataModule, callbacks)
     if state.columnVisible.nationRank then table.insert(visibleColumns, "Nation/Rank") end
     if state.columnVisible.lastSeen then table.insert(visibleColumns, "Last Seen") end
     if state.columnVisible.addedAs then table.insert(visibleColumns, "Added As") end
+    if state.columnVisible.realm then table.insert(visibleColumns, "Realm") end
     
     if imgui.BeginTable("##friends_table", #visibleColumns, ImGuiTableFlags_Borders) then
         for _, colName in ipairs(visibleColumns) do
@@ -182,6 +183,8 @@ function M.Render(state, dataModule, callbacks)
                 imgui.TableSetupColumn("Last Seen", flags, 120.0)
             elseif colName == "Added As" then
                 imgui.TableSetupColumn("Added As", flags, 100.0)
+            elseif colName == "Realm" then
+                imgui.TableSetupColumn("Realm", flags, 80.0)
             end
         end
         imgui.TableHeadersRow()
@@ -221,6 +224,12 @@ function M.Render(state, dataModule, callbacks)
                 if callbacks.onSaveState then callbacks.onSaveState() end
             end
             
+            local realmVisible = {state.columnVisible.realm}
+            if imgui.Checkbox("Realm##ctx_col_realm", realmVisible) then
+                state.columnVisible.realm = realmVisible[1]
+                if callbacks.onSaveState then callbacks.onSaveState() end
+            end
+            
             imgui.EndPopup()
         end
         
@@ -242,6 +251,8 @@ function M.Render(state, dataModule, callbacks)
                     M.RenderLastSeenCell(friend)
                 elseif colName == "Added As" then
                     M.RenderAddedAsCell(friend)
+                elseif colName == "Realm" then
+                    M.RenderRealmCell(friend)
                 end
             end
         end
@@ -455,12 +466,35 @@ function M.RenderAddedAsCell(friend)
     end
 end
 
+function M.RenderRealmCell(friend)
+    local realmId = friend.realmId or ""
+    local isOnline = friend.isOnline or false
+    
+    -- Try to get friendly realm name from ServerProfiles
+    local displayRealm = realmId
+    local ServerProfiles = require('core.ServerProfiles')
+    if ServerProfiles and ServerProfiles.isLoaded() then
+        local profile = ServerProfiles.findById(realmId)
+        if profile and profile.name then
+            displayRealm = profile.name
+        end
+    end
+    
+    if displayRealm == "" then
+        imgui.TextDisabled("-")
+    elseif isOnline then
+        imgui.Text(displayRealm)
+    else
+        imgui.TextDisabled(displayRealm)
+    end
+end
+
 function M.RenderGroupTable(friends, state, callbacks, sectionTag)
     if not friends or #friends == 0 then
         return
     end
     
-    local columnOrder = state.columnOrder or {"Name", "Job", "Zone", "Nation/Rank", "Last Seen", "Added As"}
+    local columnOrder = state.columnOrder or {"Name", "Job", "Zone", "Nation/Rank", "Last Seen", "Added As", "Realm"}
     local columnWidths = state.columnWidths or {}
     
     local columnVisibilityMap = {
@@ -469,7 +503,8 @@ function M.RenderGroupTable(friends, state, callbacks, sectionTag)
         Zone = state.columnVisible and state.columnVisible.zone,
         ["Nation/Rank"] = state.columnVisible and state.columnVisible.nationRank,
         ["Last Seen"] = state.columnVisible and state.columnVisible.lastSeen,
-        ["Added As"] = state.columnVisible and state.columnVisible.addedAs
+        ["Added As"] = state.columnVisible and state.columnVisible.addedAs,
+        Realm = state.columnVisible and state.columnVisible.realm
     }
     
     local visibleColumns = {}
@@ -504,6 +539,8 @@ function M.RenderGroupTable(friends, state, callbacks, sectionTag)
                     M.RenderLastSeenCell(friend)
                 elseif colName == "Added As" then
                     M.RenderAddedAsCell(friend)
+                elseif colName == "Realm" then
+                    M.RenderRealmCell(friend)
                 end
             end
         end

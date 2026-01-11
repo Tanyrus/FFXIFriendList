@@ -468,6 +468,104 @@ function M.Friends:addFriend(name)
     return requestId ~= nil
 end
 
+-- Add friend with explicit realm ID (for cross-server friend requests)
+function M.Friends:addFriendWithRealm(name, realmId)
+    if not self.deps.net or not self.deps.connection then
+        return false
+    end
+    
+    if not self.deps.connection:isConnected() then
+        return false
+    end
+    
+    if not realmId or realmId == "" then
+        -- Fall back to regular addFriend if no realm specified
+        return self:addFriend(name)
+    end
+
+    local normalizedName = string.lower((tostring(name or ""):match("^%s*(.-)%s*$") or ""))
+    
+    -- Use new server endpoint: POST /api/friends/request with explicit realmId
+    local requestBody = RequestEncoder.encodeNewSendFriendRequest(normalizedName, realmId)
+    local url = self.deps.connection:getBaseUrl() .. Endpoints.FRIENDS.SEND_REQUEST
+    
+    local headers = self.deps.connection:getHeaders(self:_getCharacterName())
+    
+    -- Optimistic add to outgoing requests
+    local tempRequest = {
+        id = "pending_" .. normalizedName .. "_" .. realmId .. "_" .. os.time(),
+        name = normalizedName,
+        status = "PENDING",
+        createdAt = os.time() * 1000
+    }
+    table.insert(self.outgoingRequests, tempRequest)
+    
+    local requestId = self.deps.net.request({
+        url = url,
+        method = "POST",
+        headers = headers,
+        body = requestBody,
+        callback = function(success, response)
+            -- Remove optimistic request on any response
+            for i, req in ipairs(self.outgoingRequests) do
+                if req.id == tempRequest.id then
+                    table.remove(self.outgoingRequests, i)
+                    break
+                end
+            end
+            
+            if not success then
+                -- Try to parse error from response
+                local errorMsg = "Failed to send cross-server friend request"
+                local ok, envelope = Envelope.decode(response)
+                if ok == false and envelope == Envelope.DecodeError.ServerError then
+                    local _, _, serverMsg = Envelope.decode(response)
+                    if serverMsg then
+                        errorMsg = serverMsg
+                    end
+                elseif type(response) == "string" then
+                    local decoded = Envelope.decode(response)
+                    if not decoded then
+                        local Json = require("protocol.Json")
+                        local jsonOk, jsonData = Json.decode(response)
+                        if jsonOk and jsonData.error and jsonData.error.message then
+                            errorMsg = jsonData.error.message
+                        end
+                    end
+                end
+                
+                if self.deps.logger and self.deps.logger.warn then
+                    self.deps.logger.warn("[Friends] Cross-server request failed: " .. errorMsg)
+                end
+                if self.deps.logger and self.deps.logger.echo then
+                    self.deps.logger.echo("Cross-server friend request failed: " .. errorMsg)
+                end
+            else
+                -- Success - parse response for real request ID and add to outgoing
+                local ok, envelope = Envelope.decode(response)
+                if ok and envelope.data then
+                    local realRequestId = envelope.data.requestId
+                    if realRequestId then
+                        local realRequest = {
+                            id = realRequestId,
+                            name = normalizedName,
+                            accountId = nil,
+                            createdAt = os.date("!%Y-%m-%dT%H:%M:%SZ")
+                        }
+                        table.insert(self.outgoingRequests, realRequest)
+                    end
+                end
+                
+                if self.deps.logger and self.deps.logger.echo then
+                    self.deps.logger.echo("Cross-server friend request sent to " .. name .. " on " .. realmId)
+                end
+            end
+        end
+    })
+    
+    return requestId ~= nil
+end
+
 function M.Friends:removeFriend(name)
     if not self.deps.net or not self.deps.connection then
         return false

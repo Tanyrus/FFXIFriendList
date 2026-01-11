@@ -482,6 +482,224 @@ function M:testWebSocket(callback)
 end
 
 --[[
+* Show server detection diagnostics
+]]--
+function M:showServerDetectionStatus()
+    local app = _G.FFXIFriendListApp
+    if not app or not app.deps or not app.deps.realmDetector then
+        self:printChat("RealmDetector: Not available", COLORS.YELLOW)
+        return
+    end
+    
+    local realmDetector = app.deps.realmDetector
+    
+    -- Get diagnostics from realm detector
+    if realmDetector.getDiagnostics then
+        local diag = realmDetector:getDiagnostics()
+        
+        -- Detection method
+        local methodDisplay = diag.detectionMethod or "none"
+        local methodColor = COLORS.WHITE
+        if methodDisplay == "ashita_config" then
+            methodDisplay = "Ashita Config (API)"
+            methodColor = COLORS.GREEN
+        elseif methodDisplay == "log_file" then
+            methodDisplay = "Log File (Fallback)"
+            methodColor = COLORS.YELLOW
+        elseif methodDisplay == "manual" then
+            methodDisplay = "Manual Override"
+            methodColor = COLORS.CYAN
+        elseif methodDisplay == "none" then
+            methodDisplay = "None (Failed)"
+            methodColor = COLORS.RED
+        end
+        
+        self:printChat("Detection Method: " .. methodDisplay, methodColor)
+        
+        -- Success/failure
+        if diag.success then
+            self:printChat("Detection: SUCCESS", COLORS.GREEN)
+        else
+            self:printChat("Detection: FAILED - " .. (diag.error or "Unknown error"), COLORS.RED)
+        end
+        
+        -- Server info
+        if diag.serverName then
+            self:printChat("Detected Server: " .. diag.serverName .. " (" .. (diag.serverProfile or "?") .. ")")
+        end
+        
+        if diag.rawHost then
+            self:printChat("Raw Host: " .. diag.rawHost)
+        end
+        
+        if diag.bootProfile then
+            self:printChat("Boot Profile: " .. diag.bootProfile)
+        end
+        
+        if diag.matchedPattern then
+            self:printChat("Matched Pattern: " .. diag.matchedPattern)
+        end
+        
+        if diag.apiBaseUrl then
+            self:printChat("API Base URL: " .. diag.apiBaseUrl)
+        end
+        
+        if diag.manualOverride then
+            self:printChat("Manual Override: " .. diag.manualOverride, COLORS.CYAN)
+        end
+        
+        if diag.cached then
+            self:printChat("Result: Cached", COLORS.YELLOW)
+        end
+        
+        if diag.lastDetectionTime and diag.lastDetectionTime > 0 then
+            local ago = math.floor((os.time() * 1000 - diag.lastDetectionTime) / 1000)
+            self:printChat("Last Detection: " .. ago .. "s ago")
+        end
+        
+        -- Show profile fetcher state
+        if app.deps.profileFetcher and app.deps.profileFetcher.getDiagnostics then
+            local fetcherDiag = app.deps.profileFetcher:getDiagnostics()
+            local stateColor = COLORS.WHITE
+            if fetcherDiag.state == "success" then
+                stateColor = COLORS.GREEN
+            elseif fetcherDiag.state == "failed" then
+                stateColor = COLORS.RED
+            elseif fetcherDiag.state == "fetching" then
+                stateColor = COLORS.YELLOW
+            end
+            self:printChat("Fetcher State: " .. fetcherDiag.state, stateColor)
+            if fetcherDiag.lastError then
+                self:printChat("Fetcher Error: " .. fetcherDiag.lastError, COLORS.RED)
+            end
+        end
+        
+        -- Show server profiles source
+        local ServerProfiles = require("core.ServerProfiles")
+        if ServerProfiles.isLoaded and ServerProfiles.isLoaded() then
+            local profileCount = ServerProfiles.getCount()
+            self:printChat("Profile Source: API (" .. profileCount .. " servers)", COLORS.GREEN)
+        else
+            local loadError = ServerProfiles.getLoadError and ServerProfiles.getLoadError()
+            if loadError then
+                self:printChat("Profile Source: FAILED - " .. loadError, COLORS.RED)
+            else
+                self:printChat("Profile Source: Loading...", COLORS.YELLOW)
+            end
+            self:printChat("Try: /fl diag refetch   then   /fl diag redetect", COLORS.CYAN)
+        end
+        
+        -- Show debug info if available
+        if diag.debug then
+            self:printChat("─── DEBUG INFO ───", COLORS.YELLOW)
+            if diag.debug.bootCommand then
+                -- Boot command can be multiple API attempts separated by |
+                -- Split and show each on a separate line
+                local bootCmd = diag.debug.bootCommand
+                if bootCmd:find("|") then
+                    self:printChat("Config API Attempts:", COLORS.WHITE)
+                    for attempt in bootCmd:gmatch("([^|]+)") do
+                        attempt = attempt:match("^%s*(.-)%s*$")  -- trim
+                        if #attempt > 0 then
+                            self:printChat("  " .. attempt, COLORS.WHITE)
+                        end
+                    end
+                else
+                    if #bootCmd > 100 then
+                        bootCmd = string.sub(bootCmd, 1, 100) .. "..."
+                    end
+                    self:printChat("Boot Command: " .. bootCmd, COLORS.WHITE)
+                end
+            end
+            if diag.debug.profilesLoaded ~= nil then
+                local loadedStr = diag.debug.profilesLoaded and "Yes" or "No"
+                self:printChat("Profiles Loaded: " .. loadedStr .. " (" .. tostring(diag.debug.profileCount or 0) .. " profiles)", COLORS.WHITE)
+            end
+            if diag.debug.profileLoadError then
+                self:printChat("Profile Load Error: " .. diag.debug.profileLoadError, COLORS.RED)
+            end
+        end
+    else
+        -- Fallback for old RealmDetector
+        local realmId = realmDetector:getRealmId()
+        self:printChat("Realm ID: " .. tostring(realmId))
+    end
+end
+
+--[[
+* Force server re-detection (clears cache and re-detects)
+]]--
+function M:forceRedetect()
+    local app = _G.FFXIFriendListApp
+    if not app or not app.deps then
+        self:printChat("App not available", COLORS.RED)
+        return
+    end
+    
+    local ServerProfiles = require("core.ServerProfiles")
+    if not ServerProfiles.isLoaded() then
+        self:printChat("Cannot re-detect: Server profiles not loaded yet", COLORS.RED)
+        self:printChat("Try: /fl diag refetch first, then retry", COLORS.YELLOW)
+        return
+    end
+    
+    self:printChat("Forcing server re-detection...", COLORS.CYAN)
+    
+    -- Use the retry function if available
+    if app.deps.retryServerDetection then
+        local success = app.deps.retryServerDetection()
+        if success then
+            self:printChat("Server detection successful!", COLORS.GREEN)
+        else
+            self:printChat("Server detection failed. Run /fl diag server for details.", COLORS.RED)
+        end
+    elseif app.deps.realmDetector then
+        app.deps.realmDetector:clearCache()
+        local result = app.deps.realmDetector:getDetectionResult()
+        if result and result.success then
+            self:printChat("Detected: " .. (result.profile and result.profile.name or "?"), COLORS.GREEN)
+        else
+            self:printChat("Detection failed: " .. (result and result.error or "Unknown error"), COLORS.RED)
+        end
+    else
+        self:printChat("RealmDetector not available", COLORS.RED)
+    end
+end
+
+--[[
+* Re-fetch server profiles from API
+]]--
+function M:refetchProfiles()
+    local app = _G.FFXIFriendListApp
+    if not app or not app.deps then
+        self:printChat("App not available", COLORS.RED)
+        return
+    end
+    
+    local profileFetcher = app.deps.profileFetcher
+    if not profileFetcher then
+        self:printChat("ProfileFetcher not available", COLORS.RED)
+        return
+    end
+    
+    self:printChat("Fetching server profiles from API...", COLORS.CYAN)
+    
+    local ServerProfiles = require("core.ServerProfiles")
+    local self_ = self
+    
+    profileFetcher:fetch(function(success, profiles, err)
+        if success then
+            ServerProfiles.setProfiles(profiles)
+            self_:printChat("Profiles loaded: " .. #profiles .. " servers", COLORS.GREEN)
+            self_:printChat("Run /fl diag redetect to detect your server", COLORS.CYAN)
+        else
+            ServerProfiles.setLoadError(err)
+            self_:printChat("Profile fetch failed: " .. tostring(err), COLORS.RED)
+        end
+    end)
+end
+
+--[[
 * Show current connection status
 ]]--
 function M:showStatus()
@@ -489,11 +707,15 @@ function M:showStatus()
     self:printChat("CONNECTION STATUS", COLORS.CYAN)
     self:printChat("═══════════════════════════════════════", COLORS.CYAN)
     
+    -- Server Detection Status
+    self:printChat("─── SERVER DETECTION ───", COLORS.CYAN)
+    self:showServerDetectionStatus()
+    
     -- Server URL
     if self.connection and self.connection.getServerUrl then
-        self:printChat("Server: " .. tostring(self.connection:getServerUrl()))
+        self:printChat("Server URL: " .. tostring(self.connection:getServerUrl()))
     else
-        self:printChat("Server: (unknown)")
+        self:printChat("Server URL: (unknown)")
     end
     
     -- Auth status
@@ -756,7 +978,11 @@ function M:showHelp()
     self:printChat("═══════════════════════════════════════", COLORS.CYAN)
     self:printChat("/fl diag help          - Show this help")
     self:printChat("/fl diag status        - Show connection/UI status")
-    self:printChat("  ↳ Includes: Theme, Overlay, LastSeen, Nation data")
+    self:printChat("  ↳ Includes: Server detection, Theme, Overlay, LastSeen")
+    self:printChat("/fl diag server        - Show server detection details")
+    self:printChat("  ↳ Includes: Detection method, Host, Boot profile")
+    self:printChat("/fl diag redetect      - Force server re-detection")
+    self:printChat("/fl diag refetch       - Re-fetch server profiles from API")
     self:printChat("/fl diag http all      - Test all HTTP endpoints")
     self:printChat("/fl diag http auth     - Test auth endpoints")
     self:printChat("/fl diag http friends  - Test friends endpoints")
@@ -859,6 +1085,16 @@ function M:handleCommand(args)
         self:showHelp()
     elseif cmd == "status" then
         self:showStatus()
+    elseif cmd == "server" then
+        self:printChat("═══════════════════════════════════════", COLORS.CYAN)
+        self:printChat("SERVER DETECTION DIAGNOSTICS", COLORS.CYAN)
+        self:printChat("═══════════════════════════════════════", COLORS.CYAN)
+        self:showServerDetectionStatus()
+        self:printChat("═══════════════════════════════════════", COLORS.CYAN)
+    elseif cmd == "redetect" then
+        self:forceRedetect()
+    elseif cmd == "refetch" then
+        self:refetchProfiles()
     elseif cmd == "probe" then
         self:runProbe()
     elseif cmd == "ws" then

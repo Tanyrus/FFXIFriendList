@@ -6,7 +6,7 @@
 
 addon.name = 'FFXIFriendList'
 addon.author = 'Tanyrus'
-addon.version = '0.9.9'
+addon.version = '0.9.95'
 addon.desc = 'Friend list addon for FFXI'
 
 -- Set up package.path (absolute requires only)
@@ -66,20 +66,19 @@ local SoundPlayer = require('platform.services.SoundPlayer')
 -- Load diagnostics runner
 local DiagnosticsRunner = require('app.diagnostics.DiagnosticsRunner')
 
+-- Load realm detector service (auto-detects server from Ashita config)
+local RealmDetectorModule = require('platform.services.RealmDetector')
+
+-- Load server profile fetcher (fetches server list from API)
+local ServerProfileFetcher = require('platform.services.ServerProfileFetcher')
+local ServerProfiles = require('core.ServerProfiles')
+
 -- Simple services (no platform dependencies)
 local SessionManager = {}
 SessionManager.new = function()
     local self = { sessionId = "" }
     function self:getSessionId() return self.sessionId end
     function self:setSessionId(id) self.sessionId = id end
-    return self
-end
-
-local RealmDetector = {}
-RealmDetector.new = function(ashitaCore)
-    local self = { ashitaCore = ashitaCore, realmId = "notARealServer" }
-    function self:getRealmId() return self.realmId end
-    function self:setRealmId(id) self.realmId = id end
     return self
 end
 
@@ -160,14 +159,78 @@ ashita.events.register('load', 'ffxifriendlist_load', function()
     
     -- Initialize simple services
     local sessionManager = SessionManager.new()
-    local realmDetector = RealmDetector.new(ashitaCore)
+    
+    -- Create logger early so RealmDetector can use it
+    local logger = {
+        debug = function(msg) return nil end,  -- Silent by default
+        info = function(msg) return nil end,   -- Silent by default
+        error = function(msg) 
+            print("[FFXIFriendList ERROR] " .. tostring(msg))
+            return nil
+        end,
+        warn = function(msg) return nil end,   -- Silent by default
+        echo = function(msg) return nil end    -- Silent by default
+    }
+    
+    -- Initialize realm detector (auto-detects server from Ashita config)
+    local realmDetector = RealmDetectorModule.RealmDetector.new(AshitaCore, logger)
+    
+    -- Helper to save detected server to config AND notify the app
+    local function saveDetectedServer(serverId, serverName)
+        if gConfig and gConfig.data and gConfig.data.serverSelection then
+            gConfig.data.serverSelection.savedServerId = serverId
+            gConfig.data.serverSelection.savedServerBaseUrl = ServerConfig.DEFAULT_SERVER_URL
+            local settings = require('libs.settings')
+            if settings and settings.save then
+                settings.save()
+            end
+            print("[FFXIFriendList] Detected server: " .. serverName .. " (" .. serverId .. ")")
+            
+            -- Also notify the ServerList feature if app is already created
+            if app and app.features and app.features.serverlist then
+                local ServerListCore = require("core.serverlistcore")
+                app.features.serverlist.selected = ServerListCore.ServerInfo.new(
+                    serverId,
+                    serverId,
+                    ServerConfig.DEFAULT_SERVER_URL,
+                    serverId,
+                    false
+                )
+            end
+        end
+    end
+    
+    -- Fetch server profiles from API (async, required for server detection)
+    -- If fetch fails, auto-detection will not work
+    local profileFetcher = ServerProfileFetcher.ServerProfileFetcher.new(net.request, logger)
+    
+    -- Helper function to perform detection after profiles are loaded
+    local function performServerDetection()
+        realmDetector:clearCache()
+        local newResult = realmDetector:getDetectionResult()
+        
+        if newResult and newResult.success and newResult.profile then
+            saveDetectedServer(newResult.profile.id, newResult.profile.name)
+            return true
+        else
+            return false
+        end
+    end
+    
+    -- Start the profile fetch
+    profileFetcher:fetch(function(success, profiles, err)
+        if success then
+            ServerProfiles.setProfiles(profiles)
+            -- Re-detect with updated profiles
+            performServerDetection()
+        else
+            ServerProfiles.setLoadError(err)
+        end
+    end)
     
     -- Set up session
     local sessionId = generateSessionId()
     sessionManager:setSessionId(sessionId)
-    
-    -- Set up realm
-    local realmId = realmDetector:getRealmId()
     
     -- Create storage (uses persistence.lua)
     local storage = storageLib.create(installPath, createDirectory)
@@ -175,22 +238,15 @@ ashita.events.register('load', 'ffxifriendlist_load', function()
     -- Create network wrapper (uses libs/net.lua)
     local netClient = netWrapper.create(sessionManager, realmDetector, nil)
     
-    -- Build deps table (logging disabled for production - enable for debugging)
+    -- Build deps table
     local deps = {
-        logger = {
-            debug = function(msg) return nil end,  -- Silent
-            info = function(msg) return nil end,   -- Silent
-            error = function(msg) 
-                print("[FFXIFriendList ERROR] " .. tostring(msg))
-                return nil
-            end,
-            warn = function(msg) return nil end,   -- Silent
-            echo = function(msg) return nil end    -- Silent
-        },
+        logger = logger,
         net = netClient,
         storage = storage,
         session = sessionManager,
         realmDetector = realmDetector,
+        profileFetcher = profileFetcher,
+        retryServerDetection = performServerDetection,
         time = function() return os.time() * 1000 end
     }
     

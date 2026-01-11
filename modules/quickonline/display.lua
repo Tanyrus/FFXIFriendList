@@ -160,14 +160,9 @@ function M.DrawWindow(settings, dataModule)
         needsServerSelection = not app.features.serverlist:isServerSelected()
     end
     
-    -- If server selection needed, only show server selection window (not main window)
+    -- If server not detected, show error message instead of selection window
     if needsServerSelection then
-        if not state.serverSelectionOpened then
-            state.serverSelectionOpened = true
-            state.serverWindowNeedsCenter = true
-            state.serverListRefreshTriggered = false
-        end
-        M.RenderServerSelectionWindow()
+        M.RenderServerNotDetectedWindow()
         return
     end
     
@@ -857,7 +852,62 @@ function M.SaveWindowState()
     end
 end
 
--- Render server selection window (separate from main window)
+-- Simple error window when server auto-detection fails
+function M.RenderServerNotDetectedWindow()
+    local screenWidth = scaling.window.w
+    local screenHeight = scaling.window.h
+    
+    local windowFlags = bit.bor(
+        ImGuiWindowFlags_NoCollapse,
+        ImGuiWindowFlags_NoScrollbar,
+        ImGuiWindowFlags_AlwaysAutoResize
+    )
+    
+    -- Center on screen
+    local windowWidth = 400
+    local windowHeight = 200
+    local posX = (screenWidth - windowWidth) / 2
+    local posY = (screenHeight - windowHeight) / 2
+    imgui.SetNextWindowPos({posX, posY}, ImGuiCond_FirstUseEver)
+    imgui.SetNextWindowSize({windowWidth, 0}, ImGuiCond_FirstUseEver)
+    
+    -- Apply theme
+    local themePushed = M.ApplyTheme()
+    
+    local windowOpenTable = {true}
+    if not imgui.Begin("Server Not Detected##qo_servernotdetected", windowOpenTable, windowFlags) then
+        imgui.End()
+        M.PopTheme(themePushed)
+        return
+    end
+    
+    local ServerProfiles = require("core.ServerProfiles")
+    local loadError = ServerProfiles.getLoadError and ServerProfiles.getLoadError()
+    
+    imgui.TextColored({1.0, 0.3, 0.3, 1.0}, "Server Detection Failed")
+    imgui.Separator()
+    imgui.Spacing()
+    
+    if loadError then
+        imgui.TextWrapped("Could not fetch server list: " .. tostring(loadError))
+    else
+        imgui.TextWrapped("Your FFXI server could not be auto-detected.")
+    end
+    
+    imgui.Spacing()
+    imgui.TextWrapped("This addon currently supports: Horizon, Eden")
+    imgui.Spacing()
+    imgui.Separator()
+    imgui.Spacing()
+    
+    imgui.TextColored({0.5, 0.8, 1.0, 1.0}, "Need your server added?")
+    imgui.TextWrapped("Contact Tanyrus on Discord to request support for your server.")
+    
+    imgui.End()
+    M.PopTheme(themePushed)
+end
+
+-- DEPRECATED: Server selection window replaced by auto-detection only
 function M.RenderServerSelectionWindow()
     local serverSelectionData = require('modules.serverselection.data')
     

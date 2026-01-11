@@ -98,6 +98,14 @@ function M.RenderFriendViewSettingsSection(state, callbacks)
     if imgui.IsItemHovered() then
         imgui.SetTooltip("Show the Added As column (the character name used when adding this friend).")
     end
+    
+    if imgui.Checkbox("Show Realm", {state.columnVisible.realm}) then
+        state.columnVisible.realm = not state.columnVisible.realm
+        if callbacks.onSaveState then callbacks.onSaveState() end
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("Show the Realm column (the server/realm the friend is on).")
+    end
 end
 
 function M.RenderHoverTooltipSettings(state, callbacks)

@@ -96,17 +96,21 @@ local state = {
         zone = false,
         nationRank = false,
         lastSeen = false,
-        addedAs = false
+        addedAs = false,
+        realm = false
     },
-    columnOrder = {"Name", "Job", "Zone", "Nation/Rank", "Last Seen", "Added As"},
+    columnOrder = {"Name", "Job", "Zone", "Nation/Rank", "Last Seen", "Added As", "Realm"},
     columnWidths = {
         Name = 120.0,
         Job = 100.0,
         Zone = 120.0,
         ["Nation/Rank"] = 80.0,
         ["Last Seen"] = 120.0,
-        ["Added As"] = 100.0
+        ["Added As"] = 100.0,
+        Realm = 80.0
     },
+    crossServerFriendsEnabled = false,
+    crossServerFriendsExpanded = false,
     draggingColumn = nil,
     hoveredColumn = nil,
     tagManagerExpanded = false,
@@ -189,6 +193,20 @@ function M.Initialize(settings)
             state.columnOrder = {}
             for i, col in ipairs(settings.columnOrder) do
                 state.columnOrder[i] = col
+            end
+            -- Ensure any new columns (added in later versions) are appended to the order
+            local defaultColumnOrder = {"Name", "Job", "Zone", "Nation/Rank", "Last Seen", "Added As", "Realm"}
+            for _, defaultCol in ipairs(defaultColumnOrder) do
+                local found = false
+                for _, savedCol in ipairs(state.columnOrder) do
+                    if savedCol == defaultCol then
+                        found = true
+                        break
+                    end
+                end
+                if not found then
+                    table.insert(state.columnOrder, defaultCol)
+                end
             end
         end
         if settings.columnWidths and type(settings.columnWidths) == "table" then
@@ -319,14 +337,9 @@ function M.DrawWindow(settings, dataModule)
         needsServerSelection = not app.features.serverlist:isServerSelected()
     end
     
-    -- If server selection needed, only show server selection window (not main window)
+    -- If server not detected, show error message instead of selection window
     if needsServerSelection then
-        if not state.serverSelectionPopupOpened then
-            state.serverSelectionPopupOpened = true
-            state.serverWindowNeedsCenter = true
-            state.serverListRefreshTriggered = false
-        end
-        M.RenderServerSelectionWindow()
+        M.RenderServerNotDetectedWindow()
         return
     end
     
@@ -519,6 +532,8 @@ function M.RenderGeneralTab(dataModule, callbacks)
     -- General settings (Menu Detection, Friend View, Hover Tooltip, Group by Status, Compact Friend List)
     PrivacyTab.RenderMenuDetectionSection(state, callbacks)
     imgui.Spacing()
+    M.RenderCrossServerFriendsSection(callbacks)
+    imgui.Spacing()
     PrivacyTab.RenderFriendViewSettingsSection(state, callbacks)
     imgui.Spacing()
     PrivacyTab.RenderHoverTooltipSettings(state, callbacks)
@@ -530,6 +545,40 @@ function M.RenderGeneralTab(dataModule, callbacks)
     M.RenderWindowBehaviorSection(callbacks)
     imgui.Spacing()
     M.RenderWindowLockSection(callbacks)
+end
+
+function M.RenderCrossServerFriendsSection(callbacks)
+    local headerLabel = "Cross-Server Friends"
+    local isOpen = imgui.CollapsingHeader(headerLabel, state.crossServerFriendsExpanded and ImGuiTreeNodeFlags_DefaultOpen or 0)
+    
+    if isOpen ~= state.crossServerFriendsExpanded then
+        state.crossServerFriendsExpanded = isOpen
+        if callbacks.onSaveState then callbacks.onSaveState() end
+    end
+    
+    if not isOpen then return end
+    
+    local crossServerEnabled = gConfig and gConfig.crossServerFriendsEnabled or false
+    local checked = {crossServerEnabled}
+    
+    if imgui.Checkbox("Enable Cross-Server Friend Adding", checked) then
+        if gConfig then
+            gConfig.crossServerFriendsEnabled = checked[1]
+            local settings = require('libs.settings')
+            if settings and settings.save then
+                settings.save()
+            end
+        end
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("When enabled, shows a realm selector when adding friends.\nThis allows you to add friends from other servers/realms.")
+    end
+    
+    imgui.Indent()
+    imgui.TextDisabled("When enabled, a 'Realm' dropdown appears in the Add Friend section.")
+    imgui.TextDisabled("Leave it on '(Current)' to add friends from your current server,")
+    imgui.TextDisabled("or select a different realm to add cross-server friends.")
+    imgui.Unindent()
 end
 
 function M.RenderWindowBehaviorSection(callbacks)
@@ -812,7 +861,7 @@ function M.RenderTagsTab()
 end
 
 function M.RenderFriendsTab(dataModule, callbacks)
-    AddFriendSection.Render(state, dataModule, callbacks.onAddFriend)
+    AddFriendSection.Render(state, dataModule, callbacks.onAddFriend, callbacks.onAddFriendWithRealm)
     
     imgui.Dummy({0, 6})
     
@@ -914,7 +963,8 @@ function M.RenderTaggedFriendSections(dataModule, callbacks)
         Zone = state.columnVisible and state.columnVisible.zone,
         ["Nation/Rank"] = state.columnVisible and state.columnVisible.nationRank,
         ["Last Seen"] = state.columnVisible and state.columnVisible.lastSeen,
-        ["Added As"] = state.columnVisible and state.columnVisible.addedAs
+        ["Added As"] = state.columnVisible and state.columnVisible.addedAs,
+        Realm = state.columnVisible and state.columnVisible.realm
     }
     
     local visibleColumns = {}
@@ -1000,6 +1050,12 @@ function M.RenderTaggedFriendSections(dataModule, callbacks)
             local addedAsVisible = {state.columnVisible.addedAs}
             if imgui.Checkbox("Added As##ctx_col_addedas", addedAsVisible) then
                 state.columnVisible.addedAs = addedAsVisible[1]
+                if callbacks.onSaveState then callbacks.onSaveState() end
+            end
+            
+            local realmVisible = {state.columnVisible.realm}
+            if imgui.Checkbox("Realm##ctx_col_realm", realmVisible) then
+                state.columnVisible.realm = realmVisible[1]
                 if callbacks.onSaveState then callbacks.onSaveState() end
             end
             
@@ -1135,6 +1191,64 @@ function M.RenderAboutPopup()
     end
 end
 
+-- Simple error window when server auto-detection fails
+function M.RenderServerNotDetectedWindow()
+    local screenWidth = scaling.window.w
+    local screenHeight = scaling.window.h
+    
+    -- Window flags
+    local windowFlags = bit.bor(
+        ImGuiWindowFlags_NoCollapse,
+        ImGuiWindowFlags_NoScrollbar,
+        ImGuiWindowFlags_AlwaysAutoResize
+    )
+    
+    -- Center on screen
+    local windowWidth = 400
+    local windowHeight = 200
+    local posX = (screenWidth - windowWidth) / 2
+    local posY = (screenHeight - windowHeight) / 2
+    imgui.SetNextWindowPos({posX, posY}, ImGuiCond_FirstUseEver)
+    imgui.SetNextWindowSize({windowWidth, 0}, ImGuiCond_FirstUseEver)
+    
+    -- Apply theme
+    local themePushed = M.ApplyTheme()
+    
+    local windowOpenTable = {true}
+    if not imgui.Begin("Server Not Detected##servernotdetected", windowOpenTable, windowFlags) then
+        imgui.End()
+        M.PopTheme(themePushed)
+        return
+    end
+    
+    -- Check ServerProfiles for error info
+    local ServerProfiles = require("core.ServerProfiles")
+    local loadError = ServerProfiles.getLoadError and ServerProfiles.getLoadError()
+    
+    imgui.TextColored({1.0, 0.3, 0.3, 1.0}, "Server Detection Failed")
+    imgui.Separator()
+    imgui.Spacing()
+    
+    if loadError then
+        imgui.TextWrapped("Could not fetch server list: " .. tostring(loadError))
+    else
+        imgui.TextWrapped("Your FFXI server could not be auto-detected.")
+    end
+    
+    imgui.Spacing()
+    imgui.TextWrapped("This addon currently supports: Horizon, Eden")
+    imgui.Spacing()
+    imgui.Separator()
+    imgui.Spacing()
+    
+    imgui.TextColored({0.5, 0.8, 1.0, 1.0}, "Need your server added?")
+    imgui.TextWrapped("Contact Tanyrus on Discord to request support for your server.")
+    
+    imgui.End()
+    M.PopTheme(themePushed)
+end
+
+-- DEPRECATED: Server selection window replaced by auto-detection only
 function M.RenderServerSelectionWindow()
     -- Use the serverselection data module for draft selection
     local serverSelectionData = require('modules.serverselection.data')
@@ -1325,6 +1439,12 @@ function M.GetCallbacks(dataModule)
         onAddFriend = function(name, note)
             if app and app.features and app.features.friends then
                 app.features.friends:addFriend(name, note)
+            end
+        end,
+        
+        onAddFriendWithRealm = function(name, realmId, note)
+            if app and app.features and app.features.friends then
+                app.features.friends:addFriendWithRealm(name, realmId, note)
             end
         end,
         

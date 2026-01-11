@@ -1,11 +1,13 @@
 local M = {}
 
 local function toLower(s)
-    return string.lower(s or "")
+    if type(s) ~= "string" then return "" end
+    return string.lower(s)
 end
 
 local function normalizeName(name)
-    return string.lower(name or "")
+    if type(name) ~= "string" then return "" end
+    return string.lower(name)
 end
 
 M.Friend = {}
@@ -13,8 +15,8 @@ M.Friend.__index = M.Friend
 
 function M.Friend.new(name, friendedAs)
     local self = setmetatable({}, M.Friend)
-    self.name = name or ""
-    self.friendedAs = friendedAs or ""
+    self.name = type(name) == "string" and name or ""
+    self.friendedAs = type(friendedAs) == "string" and friendedAs or ""
     self.linkedCharacters = {}
     return self
 end
@@ -156,6 +158,7 @@ function M.FriendList:addFriend(friend)
     newFriend.zone = friend.zone
     newFriend.nation = friend.nation
     newFriend.rank = friend.rank
+    newFriend.realmId = friend.realmId
     
     table.insert(self.friends, newFriend)
     return true

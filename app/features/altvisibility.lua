@@ -278,7 +278,7 @@ function M.AltVisibility:refresh()
     local url = serverUrl .. Endpoints.FRIENDS.VISIBILITY
     
     -- Use new auth format: Authorization: Bearer
-    local addonVersion = addon and addon.version or "0.9.9"
+    local addonVersion = addon and addon.version or "0.9.95"
     local headers = {
         ["Content-Type"] = "application/json",
         ["Authorization"] = "Bearer " .. apiKey,
@@ -365,7 +365,7 @@ function M.AltVisibility:toggleVisibility(friendAccountId, friendName, character
     local serverUrl = connection:getBaseUrl()
     
     -- Use new auth format: Authorization: Bearer
-    local addonVersion = addon and addon.version or "0.9.9"
+    local addonVersion = addon and addon.version or "0.9.95"
     local headers = {
         ["Content-Type"] = "application/json",
         ["Authorization"] = "Bearer " .. apiKey,

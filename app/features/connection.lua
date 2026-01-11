@@ -366,7 +366,7 @@ end
 -- Optional: X-Character-Name, X-Realm-Id (for endpoints requiring character context)
 function M.Connection:getHeaders(characterName)
     characterName = characterName or ""
-    local addonVersion = addon and addon.version or "0.9.9"
+    local addonVersion = addon and addon.version or "0.9.95"
     
     local headers = {
         ["Content-Type"] = "application/json",
@@ -464,7 +464,7 @@ function M.Connection:autoConnect(characterName)
             requestBody = RequestEncoder.encodeRegister(normalizedName, realmId)
         end
         
-        local addonVersion = addon and addon.version or "0.9.9"
+        local addonVersion = addon and addon.version or "0.9.95"
         local headers = {
             ["Content-Type"] = "application/json",
             ["User-Agent"] = "FFXIFriendList/" .. addonVersion,
@@ -602,7 +602,7 @@ function M.Connection:setActiveCharacter(characterId, characterName, apiKey)
     local url = baseUrl .. Endpoints.AUTH.SET_ACTIVE
     local requestBody = RequestEncoder.encodeSetActiveCharacter(characterId)
     
-    local addonVersion = addon and addon.version or "0.9.9"
+    local addonVersion = addon and addon.version or "0.9.95"
     local headers = {
         ["Content-Type"] = "application/json",
         ["User-Agent"] = "FFXIFriendList/" .. addonVersion,

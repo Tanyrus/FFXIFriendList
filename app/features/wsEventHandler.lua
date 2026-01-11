@@ -545,12 +545,16 @@ function M.WsEventHandler:_addFriendFromPayload(friendData)
         return
     end
     
-    local friend = FriendList.Friend.new(displayName, displayName)
+    -- Use addedAsCharacterName from server if available, otherwise fallback to friend's name
+    local friendedAs = friendData.addedAsCharacterName or displayName
+    local friend = FriendList.Friend.new(displayName, friendedAs)
     friend.friendAccountId = friendData.accountId
     friend.isOnline = friendData.isOnline == true
     friend.isAway = friendData.isAway == true  -- BUG 3 FIX: Read isAway from payload
     -- Normalize lastSeen to numeric timestamp (handles ISO8601 from server)
     friend.lastSeenAt = utils.normalizeLastSeen(friendData.lastSeen)
+    -- Store realm ID for cross-server friend display
+    friend.realmId = friendData.realmId or nil
     
     if friendData.state then
         friend.job = formatJobFromState(friendData.state)

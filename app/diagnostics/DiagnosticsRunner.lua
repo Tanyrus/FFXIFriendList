@@ -868,6 +868,73 @@ function M:showStatus()
             self:printChat("Character visibility feature: Not available", COLORS.YELLOW)
         end
         
+        -- Visibility Matrix status
+        self:printChat("─── VISIBILITY MATRIX (Per-Friend Per-Character Control) ───", COLORS.CYAN)
+        if app.modules and app.modules.visibilityMatrix then
+            local matrixModule = app.modules.visibilityMatrix
+            if matrixModule.data and matrixModule.data.GetSnapshot then
+                local snapshot = matrixModule.data.GetSnapshot()
+                if snapshot then
+                    local totalCells = 0
+                    local hiddenCells = 0
+                    
+                    -- Count entries
+                    if snapshot.entries then
+                        for _, entry in ipairs(snapshot.entries) do
+                            totalCells = totalCells + 1
+                            if not entry.shareVisibility then
+                                hiddenCells = hiddenCells + 1
+                            end
+                        end
+                    end
+                    
+                    local friendCount = #(snapshot.friends or {})
+                    local charCount = #(snapshot.characters or {})
+                    
+                    self:printChat(string.format("Matrix size: %d friends × %d characters", friendCount, charCount))
+                    self:printChat(string.format("Entries: %d total, %d hidden (appear offline), %d visible (real status)", 
+                        totalCells, hiddenCells, totalCells - hiddenCells))
+                    
+                    -- Sample visibility
+                    if snapshot.entries and #snapshot.entries > 0 then
+                        local sampleEntry = snapshot.entries[1]
+                        local friendName = "Unknown"
+                        for _, f in ipairs(snapshot.friends or {}) do
+                            if f.accountId == sampleEntry.viewerAccountId then
+                                friendName = f.displayName or f.friendedAsName or "Unknown"
+                                break
+                            end
+                        end
+                        local charName = "Unknown"
+                        for _, c in ipairs(snapshot.characters or {}) do
+                            if c.characterId == sampleEntry.ownerCharacterId then
+                                charName = c.characterName or "Unknown"
+                                break
+                            end
+                        end
+                        local visStr = sampleEntry.shareVisibility and "VISIBLE" or "HIDDEN"
+                        self:printChat(string.format("Sample: %s can%s see character %s", 
+                            friendName, sampleEntry.shareVisibility and "" or "NOT", charName), COLORS.GRAY)
+                    end
+                    
+                    -- Last fetch
+                    if matrixModule.data.GetLastFetch then
+                        local lastFetch = matrixModule.data.GetLastFetch()
+                        if lastFetch and lastFetch > 0 then
+                            local ago = math.floor((os.time() * 1000 - lastFetch) / 1000)
+                            self:printChat(string.format("Last matrix fetch: %ds ago", ago))
+                        end
+                    end
+                else
+                    self:printChat("Matrix snapshot: Not loaded yet", COLORS.YELLOW)
+                end
+            else
+                self:printChat("Visibility matrix data module: Not available", COLORS.YELLOW)
+            end
+        else
+            self:printChat("Visibility matrix module: Not available", COLORS.YELLOW)
+        end
+        
         -- UI/UX FIXES DIAGNOSTICS
         self:printChat("─── UI/UX FIX STATUS ───", COLORS.CYAN)
         

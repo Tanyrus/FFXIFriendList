@@ -39,7 +39,6 @@ local state = {
     hoverTooltipSettingsExpanded = false,
     privacyControlsExpanded = false,
     blockedPlayersExpanded = false,
-    altVisibilityExpanded = false,
     notificationsSettingsExpanded = true,
     controlsSettingsExpanded = true,
     themeSettingsExpanded = true,
@@ -96,18 +95,16 @@ local state = {
         zone = false,
         nationRank = false,
         lastSeen = false,
-        addedAs = false,
-        realm = false
+        addedAs = false
     },
-    columnOrder = {"Name", "Job", "Zone", "Nation/Rank", "Last Seen", "Added As", "Realm"},
+    columnOrder = {"Name", "Job", "Zone", "Nation/Rank", "Last Seen", "Added As"},
     columnWidths = {
         Name = 120.0,
         Job = 100.0,
         Zone = 120.0,
         ["Nation/Rank"] = 80.0,
         ["Last Seen"] = 120.0,
-        ["Added As"] = 100.0,
-        Realm = 80.0
+        ["Added As"] = 100.0
     },
     crossServerFriendsEnabled = false,
     crossServerFriendsExpanded = false,
@@ -815,12 +812,12 @@ function M.RenderCompactFriendListSettings(callbacks)
 end
 
 function M.RenderPrivacyTab(dataModule, callbacks)
-    -- Privacy settings (Privacy Controls, Blocked Players, Alt Visibility)
+    -- Privacy settings (Privacy Controls, Blocked Players)
     PrivacyTab.RenderPrivacyControlsSection(state, callbacks)
     imgui.Spacing()
     PrivacyTab.RenderBlockedPlayersSection(state, dataModule, callbacks)
-    imgui.Spacing()
-    PrivacyTab.RenderAltVisibilitySection(state, dataModule, callbacks)
+    -- Old per-character visibility replaced by visibility matrix
+    -- PrivacyTab.RenderAltVisibilitySection(state, dataModule, callbacks)
 end
 
 function M.RenderTagsTab()
@@ -933,8 +930,7 @@ function M.RenderTaggedFriendSections(dataModule, callbacks)
         Zone = state.columnVisible and state.columnVisible.zone,
         ["Nation/Rank"] = state.columnVisible and state.columnVisible.nationRank,
         ["Last Seen"] = state.columnVisible and state.columnVisible.lastSeen,
-        ["Added As"] = state.columnVisible and state.columnVisible.addedAs,
-        Realm = state.columnVisible and state.columnVisible.realm
+        ["Added As"] = state.columnVisible and state.columnVisible.addedAs
     }
     
     local visibleColumns = {}
@@ -1024,12 +1020,6 @@ function M.RenderTaggedFriendSections(dataModule, callbacks)
             end
             
             local realmVisible = {state.columnVisible.realm}
-            if imgui.Checkbox("Realm##ctx_col_realm", realmVisible) then
-                state.columnVisible.realm = realmVisible[1]
-                if callbacks.onSaveState then callbacks.onSaveState() end
-            end
-            
-            imgui.Spacing()
             imgui.Separator()
             imgui.Text("Column Widths:")
             imgui.Separator()

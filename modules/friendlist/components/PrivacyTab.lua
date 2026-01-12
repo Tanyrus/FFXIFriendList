@@ -15,7 +15,18 @@ function M.Render(state, dataModule, callbacks)
     imgui.Spacing()
     M.RenderBlockedPlayersSection(state, dataModule, callbacks)
     imgui.Spacing()
-    M.RenderAltVisibilitySection(state, dataModule, callbacks)
+    
+    -- Wrap visibility matrix in pcall to prevent errors from breaking the main window
+    local ok, err = pcall(function()
+        M.RenderVisibilityMatrixSection(state, callbacks)
+    end)
+    if not ok then
+        imgui.TextColored({1, 0, 0, 1}, 'Error in visibility matrix:')
+        imgui.TextWrapped(tostring(err))
+    end
+    
+    -- Old per-character visibility replaced by visibility matrix
+    -- M.RenderAltVisibilitySection(state, dataModule, callbacks)
 end
 
 function M.RenderMenuDetectionSection(state, callbacks)
@@ -99,13 +110,7 @@ function M.RenderFriendViewSettingsSection(state, callbacks)
         imgui.SetTooltip("Show the Added As column (the character name used when adding this friend).")
     end
     
-    if imgui.Checkbox("Show Realm", {state.columnVisible.realm}) then
-        state.columnVisible.realm = not state.columnVisible.realm
-        if callbacks.onSaveState then callbacks.onSaveState() end
-    end
-    if imgui.IsItemHovered() then
-        imgui.SetTooltip("Show the Realm column (the server/realm the friend is on).")
-    end
+
 end
 
 function M.RenderHoverTooltipSettings(state, callbacks)
@@ -175,11 +180,7 @@ function M.RenderHoverTooltipSettings(state, callbacks)
         end
         imgui.SameLine()
         
-        local showRealm = {mainHover.showRealm}
-        if imgui.Checkbox("Realm##main_hover", showRealm) then
-            mainHover.showRealm = showRealm[1]
-            changed = true
-        end
+
         
         if changed and app.features.preferences then
             app.features.preferences:save()
@@ -230,11 +231,7 @@ function M.RenderHoverTooltipSettings(state, callbacks)
         end
         imgui.SameLine()
         
-        local showRealm = {quickHover.showRealm}
-        if imgui.Checkbox("Realm##quick_hover", showRealm) then
-            quickHover.showRealm = showRealm[1]
-            changed = true
-        end
+
         
         if changed and app.features.preferences then
             app.features.preferences:save()
@@ -465,287 +462,6 @@ function M.RenderBlockedPlayersSection(state, dataModule, callbacks)
         end
         
         imgui.EndChild()
-    end
-end
-
-function M.RenderAltVisibilitySection(state, dataModule, callbacks)
-    local headerLabel = "Per-Character Visibility"
-    local isOpen = imgui.CollapsingHeader(headerLabel, state.altVisibilityExpanded and ImGuiTreeNodeFlags_DefaultOpen or 0)
-    
-    if isOpen ~= state.altVisibilityExpanded then
-        state.altVisibilityExpanded = isOpen
-        if callbacks.onSaveState then callbacks.onSaveState() end
-    end
-    
-    -- Fetch data if section is open and we don't have characters yet
-    if isOpen then
-        local app = _G.FFXIFriendListApp
-        if app and app.features and app.features.characterVisibility then
-            local charVis = app.features.characterVisibility
-            local characters = charVis:getCharacters()
-            if #characters == 0 and not charVis:getState().isLoading then
-                charVis:fetch()
-            end
-        end
-        M.RenderPerCharacterVisibility()
-    end
-end
-
-function M.RenderPerCharacterVisibility()
-    local app = _G.FFXIFriendListApp
-    if not app or not app.features or not app.features.characterVisibility then
-        imgui.TextDisabled("Character Visibility feature not available")
-        return
-    end
-    
-    if not app.features.friends then
-        imgui.TextDisabled("Friends feature not available")
-        return
-    end
-    
-    local charVis = app.features.characterVisibility
-    local charVisState = charVis:getState()
-    
-    imgui.TextWrapped("Control which friends can see each of your characters online. Uncheck a character to hide it from specific friends.")
-    imgui.Spacing()
-    imgui.Separator()
-    imgui.Spacing()
-    
-    -- Loading indicator
-    if charVisState.isLoading then
-        imgui.Text("Loading characters...")
-        return
-    end
-    
-    -- Error message
-    if charVisState.lastError then
-        imgui.TextColored({1.0, 0.3, 0.3, 1.0}, "Error: " .. charVisState.lastError)
-        imgui.Spacing()
-    end
-    
-    local characters = charVis:getCharacters()
-    
-    if #characters == 0 then
-        imgui.TextDisabled("No characters found.")
-        return
-    end
-    
-    -- Get friends list
-    local friendsFeature = app.features.friends
-    local friends = friendsFeature:getFriends()
-    
-    if not friends or #friends == 0 then
-        imgui.TextColored({0.6, 0.8, 1.0, 1.0}, "No friends to configure visibility for.")
-        imgui.TextDisabled("Add friends first, then manage their visibility here.")
-        return
-    end
-    
-    -- Build visibility matrix table: Friends (rows) x Characters (columns)
-    local numColumns = 1 + #characters  -- Friend name + one column per character
-    local tableFlags = bit.bor(
-        ImGuiTableFlags_Borders,
-        ImGuiTableFlags_RowBg,
-        ImGuiTableFlags_ScrollY
-    )
-    
-    if imgui.BeginTable("CharacterVisibilityTablePrivacy", numColumns, tableFlags, {0, 300}) then
-        -- Setup columns
-        imgui.TableSetupColumn("Friend", ImGuiTableColumnFlags_WidthFixed, 150)
-        for _, char in ipairs(characters) do
-            local charName = char.characterName or "Unknown"
-            if #charName > 0 then
-                charName = string.upper(string.sub(charName, 1, 1)) .. string.sub(charName, 2)
-            end
-            imgui.TableSetupColumn(charName, ImGuiTableColumnFlags_WidthFixed, 80)
-        end
-        
-        imgui.TableHeadersRow()
-        
-        -- Render friend rows
-        for friendIdx, friend in ipairs(friends) do
-            imgui.TableNextRow()
-            
-            -- Friend name column
-            imgui.TableNextColumn()
-            local displayName = friend.name or "Unknown"
-            if #displayName > 0 then
-                displayName = string.upper(string.sub(displayName, 1, 1)) .. string.sub(displayName, 2)
-            end
-            imgui.Text(displayName)
-            
-            -- Character visibility checkboxes
-            for charIdx, char in ipairs(characters) do
-                imgui.TableNextColumn()
-                
-                local checkboxId = "##charvis_friend_" .. tostring(friendIdx) .. "_char_" .. tostring(charIdx)
-                -- For now, all characters are visible to all friends (default true)
-                local checkboxState = {true}
-                if imgui.Checkbox(checkboxId, checkboxState) then
-                    -- TODO: Implement per-friend visibility toggle
-                    -- charVis:setFriendCharacterVisibility(friend.accountId, char.characterId, checkboxState[1])
-                end
-            end
-        end
-        
-        imgui.EndTable()
-    end
-end
-
-
-function M.RenderAltVisibilityTable(state, callbacks)
-    local app = _G.FFXIFriendListApp
-    if not app or not app.features or not app.features.altVisibility then
-        imgui.Text("Alt visibility feature not available")
-        return
-    end
-    
-    local altVis = app.features.altVisibility
-    local visState = altVis:getState()
-    
-    if visState.isLoading then
-        if visState.pendingRefresh then
-            imgui.Text("Waiting for connection...")
-        else
-            imgui.Text("Loading...")
-        end
-        return
-    end
-    
-    if visState.lastError then
-        imgui.TextColored({1.0, 0.0, 0.0, 1.0}, "Error: " .. tostring(visState.lastError))
-        if imgui.Button("Retry") then
-            if callbacks.onRefreshAltVisibility then
-                callbacks.onRefreshAltVisibility()
-            end
-        end
-        return
-    end
-    
-    local characters = altVis:getCharacters()
-    local filterText = state.altVisibilityFilterText and state.altVisibilityFilterText[1] or ""
-    local rows = altVis:getFilteredRows(filterText)
-    local allRows = altVis:getRows()
-    
-    if #allRows == 0 then
-        if not visState.hasAttemptedRefresh and not visState.isLoading then
-            imgui.Text("Loading visibility data...")
-            if callbacks.onRefreshAltVisibility then
-                callbacks.onRefreshAltVisibility()
-            end
-        elseif visState.isLoading then
-            imgui.Text("Loading visibility data...")
-        else
-            imgui.TextColored({0.6, 0.8, 1.0, 1.0}, "No friends to configure visibility for.")
-            imgui.TextDisabled("Add friends first, then manage which of your characters can see them here.")
-            imgui.Spacing()
-            if imgui.Button("Refresh") then
-                if callbacks.onRefreshAltVisibility then
-                    callbacks.onRefreshAltVisibility()
-                end
-            end
-        end
-        return
-    end
-    
-    if #characters == 0 then
-        imgui.Text("No characters found")
-        return
-    end
-    
-    if #rows == 0 then
-        imgui.Text("No friends match filter")
-        return
-    end
-    
-    imgui.TextDisabled("Note: A '-' means visibility is inherited from the character that added the friend.")
-    imgui.Spacing()
-    
-    local numColumns = 1 + #characters
-    local tableFlags = bit.bor(
-        ImGuiTableFlags_Borders,
-        ImGuiTableFlags_RowBg,
-        ImGuiTableFlags_ScrollY
-    )
-    
-    if imgui.BeginTable("##alt_visibility_table", numColumns, tableFlags, {0, 200}) then
-        imgui.TableSetupColumn("Friend", ImGuiTableColumnFlags_WidthFixed, 150)
-        for _, charInfo in ipairs(characters) do
-            local charName = charInfo.characterName or "Unknown"
-            if #charName > 0 then
-                charName = string.upper(string.sub(charName, 1, 1)) .. string.sub(charName, 2)
-            end
-            imgui.TableSetupColumn(charName, ImGuiTableColumnFlags_WidthFixed, 100)
-        end
-        
-        imgui.TableHeadersRow()
-        
-        for _, row in ipairs(rows) do
-            imgui.TableNextRow()
-            
-            imgui.TableNextColumn()
-            local displayName = row.friendedAsName or ""
-            if #displayName > 0 then
-                displayName = string.upper(string.sub(displayName, 1, 1)) .. string.sub(displayName, 2)
-            end
-            imgui.Text(displayName)
-            
-            for i, charVis in ipairs(row.characterVisibility) do
-                imgui.TableNextColumn()
-                
-                local shouldShow = altVis:shouldShowCheckbox(row, charVis)
-                
-                if shouldShow then
-                    local isChecked = altVis:isCheckboxChecked(charVis)
-                    local isEnabled = altVis:isCheckboxEnabled(charVis)
-                    local checkboxId = "##vis_" .. tostring(row.friendAccountId) .. "_" .. tostring(charVis.characterId)
-                    
-                    if not isEnabled then
-                        imgui.PushStyleColor(ImGuiCol_CheckMark, {0.5, 0.5, 0.5, 1.0})
-                        imgui.PushStyleColor(ImGuiCol_FrameBg, {0.2, 0.2, 0.2, 1.0})
-                    end
-                    
-                    local checked = {isChecked}
-                    if imgui.Checkbox(checkboxId, checked) then
-                        if isEnabled then
-                            altVis:toggleVisibility(
-                                row.friendAccountId,
-                                row.friendedAsName,
-                                charVis.characterId,
-                                checked[1]
-                            )
-                        end
-                    end
-                    
-                    if not isEnabled then
-                        imgui.PopStyleColor(2)
-                        
-                        if charVis.visibilityState == "PendingRequest" then
-                            if imgui.IsItemHovered() then
-                                imgui.SetTooltip("Visibility request pending")
-                            end
-                        elseif charVis.isBusy then
-                            if imgui.IsItemHovered() then
-                                imgui.SetTooltip("Updating...")
-                            end
-                        end
-                    end
-                else
-                    imgui.TextDisabled("-")
-                    if imgui.IsItemHovered() then
-                        imgui.SetTooltip("Added from this character")
-                    end
-                end
-            end
-        end
-        
-        imgui.EndTable()
-    end
-    
-    imgui.Spacing()
-    if imgui.Button("Refresh") then
-        if callbacks.onRefreshAltVisibility then
-            callbacks.onRefreshAltVisibility()
-        end
     end
 end
 

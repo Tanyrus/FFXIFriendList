@@ -18,6 +18,16 @@ function M.Friend.new(name, friendedAs)
     self.name = type(name) == "string" and name or ""
     self.friendedAs = type(friendedAs) == "string" and friendedAs or ""
     self.linkedCharacters = {}
+    -- Initialize presence fields to prevent 'function' type errors
+    self.job = ""
+    self.zone = ""
+    self.nation = nil
+    self.rank = nil
+    self.isOnline = false
+    self.isAway = false
+    self.lastSeenAt = 0
+    self.friendAccountId = nil
+    self.realmId = nil
     return self
 end
 

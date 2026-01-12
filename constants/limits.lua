@@ -48,6 +48,6 @@ M.MAX_RING_BUFFER_SIZE = 32
 -- Reconnection Limits
 --------------------------------------------------------------------------------
 
-M.MAX_RECONNECT_ATTEMPTS = 10
+M.MAX_RECONNECT_ATTEMPTS = 30
 
 return M

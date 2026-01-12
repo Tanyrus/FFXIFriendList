@@ -226,7 +226,6 @@ function M.CharacterVisibility:_updateFromServer(serverCharacters)
         table.insert(self.characters, {
             characterId = char.characterId,
             characterName = char.characterName,
-            realmId = char.realmId,
             shareVisibility = char.shareVisibility
         })
     end

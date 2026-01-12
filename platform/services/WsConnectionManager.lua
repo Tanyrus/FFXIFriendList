@@ -203,10 +203,7 @@ function M.WsConnectionManager:_attemptConnect()
     self.attemptCount = self.attemptCount + 1
     
     self:_updateStatus()
-    self:_logThrottled("info", string.format(
-        "[WsConnectionManager] Connect attempt %d/%d",
-        self.attemptCount, self.config.maxAttempts
-    ))
+    self:_logThrottled("info", "[WsConnectionManager] Connect attempt " .. self.attemptCount)
     
     -- Start async connect (WsClient must implement connectAsync)
     local success, err = self.wsClient:connectAsync({

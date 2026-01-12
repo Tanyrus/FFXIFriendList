@@ -161,11 +161,10 @@ function M.RenderContent(dataModule)
         ImGuiTableFlags_SizingStretchProp
     )
     
-    if guiManager:BeginTable("CharacterVisibilityTable", 3, tableFlags) then
+    if guiManager:BeginTable("CharacterVisibilityTable", 2, tableFlags) then
         -- Headers
-        guiManager:TableSetupColumn("Character", ImGuiTableColumnFlags_None, 0.4)
-        guiManager:TableSetupColumn("Realm", ImGuiTableColumnFlags_None, 0.3)
-        guiManager:TableSetupColumn("Visible", ImGuiTableColumnFlags_None, 0.3)
+        guiManager:TableSetupColumn("Character", ImGuiTableColumnFlags_None, 0.6)
+        guiManager:TableSetupColumn("Visible", ImGuiTableColumnFlags_None, 0.4)
         guiManager:TableHeadersRow()
         
         -- Rows
@@ -175,10 +174,6 @@ function M.RenderContent(dataModule)
             -- Character name column
             guiManager:TableNextColumn()
             guiManager:Text(char.characterName or "Unknown")
-            
-            -- Realm column
-            guiManager:TableNextColumn()
-            guiManager:Text(char.realmId or "")
             
             -- Visibility toggle column
             guiManager:TableNextColumn()

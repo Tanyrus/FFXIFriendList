@@ -207,24 +207,7 @@ function M.Render(friend, state, callbacks)
             imgui.Text("Last Seen: " .. lastSeenText)
         end
         
-        -- Realm - show server/realm the friend is on
-        local realmId = friend.realmId or ""
-        local displayRealm = realmId
-        
-        -- Try to get friendly realm name from ServerProfiles
-        local ServerProfiles = require('core.ServerProfiles')
-        if ServerProfiles and ServerProfiles.isLoaded() then
-            local profile = ServerProfiles.findById(realmId)
-            if profile and profile.name then
-                displayRealm = profile.name
-            end
-        end
-        
-        if displayRealm and displayRealm ~= "" then
-            imgui.Text("Realm: " .. displayRealm)
-        else
-            imgui.Text("Realm: Unknown")
-        end
+
         
         imgui.Separator()
         

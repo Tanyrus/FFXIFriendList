@@ -276,7 +276,7 @@ function M.AltVisibility:refresh()
     self:clearError()
     
     local serverUrl = connection:getBaseUrl()
-    local url = serverUrl .. Endpoints.FRIENDS.VISIBILITY
+    local url = serverUrl .. Endpoints.FRIENDS.CHARACTER_AND_FRIENDS
     
     -- Use new auth format: Authorization: Bearer
     local addonVersion = addon and addon.version or "0.9.95"

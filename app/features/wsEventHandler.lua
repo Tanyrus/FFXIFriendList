@@ -568,6 +568,12 @@ function M.WsEventHandler:_addFriendFromPayload(friendData)
     -- Store realm ID for cross-server friend display
     friend.realmId = friendData.realmId or nil
     
+    -- Initialize job fields even if state is nil
+    friend.job = ""
+    friend.zone = ""
+    friend.nation = nil
+    friend.rank = nil
+    
     if friendData.state then
         friend.job = formatJobFromState(friendData.state)
         friend.zone = friendData.state.zone or ""
@@ -623,6 +629,13 @@ function M.WsEventHandler:_addFriendFromPayload(friendData)
     status.isOnline = friend.isOnline
     status.isAway = friend.isAway  -- BUG 3 FIX: Copy isAway from friend to status
     status.lastSeenAt = friend.lastSeenAt
+    
+    -- Initialize status fields even if state is nil
+    status.job = ""
+    status.zone = ""
+    status.nation = nil
+    status.rank = nil
+    
     if friendData.state then
         status.job = formatJobFromState(friendData.state)
         status.zone = friendData.state.zone or ""

@@ -34,7 +34,7 @@ M.FRIENDS = {
     SEND_REQUEST = "/api/friends/request",
     REQUESTS_PENDING = "/api/friends/requests/pending",
     REQUESTS_OUTGOING = "/api/friends/requests/outgoing",
-    VISIBILITY = "/api/friends/visibility"  -- Alt visibility settings (not yet implemented on server)
+    CHARACTER_AND_FRIENDS = "/api/friends/character-and-friends"
 }
 
 -- Friend request actions (dynamic paths)
@@ -90,5 +90,12 @@ M.CHARACTERS = {
 function M.characterVisibilityUpdate(characterId)
     return "/api/characters/" .. tostring(characterId) .. "/visibility"
 end
+
+-- Visibility Matrix endpoints (Per-Friend Per-Character Visibility)
+M.VISIBILITY_MATRIX = {
+    GET = "/api/visibility-matrix",
+    UPDATE_BATCH = "/api/visibility-matrix",
+    UPDATE_CELL = "/api/visibility-matrix/cell"
+}
 
 return M

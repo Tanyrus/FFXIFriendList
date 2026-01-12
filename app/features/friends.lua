@@ -114,6 +114,7 @@ function M.Friends:getState()
             friendAccountId = friend.friendAccountId,
             sharesOnlineStatus = status and status.showOnlineStatus ~= false or true,
             lastSeenAt = status and status.lastSeenAt or 0,
+            realmId = friend.realmId,
             presence = {
                 job = status and status.job or "",
                 zone = status and status.zone or "",
@@ -298,6 +299,8 @@ function M.Friends:handleRefreshResponse(success, response)
         friend.isOnline = friendData.isOnline == true
         -- Normalize lastSeen to numeric timestamp (handles ISO8601 from server)
         friend.lastSeenAt = utils.normalizeLastSeen(friendData.lastSeen)
+        -- Store realm ID for cross-server friend display
+        friend.realmId = friendData.realmId or nil
         
         -- State contains job, zone, nation, rank info
         local state = friendData.state or {}

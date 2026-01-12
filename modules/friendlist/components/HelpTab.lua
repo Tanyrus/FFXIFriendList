@@ -4,7 +4,9 @@ local M = {}
 
 -- State for character list section
 M.state = {
-    charactersExpanded = false
+    charactersExpanded = false,
+    hasFetched = false,
+    lastFetchedForCharacter = nil
 }
 
 function M.Render(state, dataModule, callbacks)
@@ -29,7 +31,9 @@ function M.RenderWelcomeSection()
 end
 
 function M.RenderAccountInfoSection()
-    if imgui.CollapsingHeader("Your Characters") then
+    local isExpanded = imgui.CollapsingHeader("Your Characters")
+    
+    if isExpanded then
         imgui.Indent()
         
         local app = _G.FFXIFriendListApp
@@ -44,9 +48,23 @@ function M.RenderAccountInfoSection()
         -- Try to get characters from altVisibility first (it has them after visibility fetch)
         if app and app.features and app.features.altVisibility then
             characters = app.features.altVisibility:getCharacters() or {}
+            
+            -- Auto-refresh if we haven't fetched yet, or if logged into a different character
+            local shouldRefresh = not M.state.hasFetched or 
+                (currentCharName and M.state.lastFetchedForCharacter ~= currentCharName:lower())
+            local isLoading = app.features.altVisibility.isLoading
+            
+            if shouldRefresh and not isLoading then
+                M.state.hasFetched = true
+                M.state.lastFetchedForCharacter = currentCharName and currentCharName:lower() or nil
+                app.features.altVisibility:refresh()
+            end
         end
         
         if #characters == 0 then
+            -- Check if loading
+            local isLoading = app and app.features and app.features.altVisibility and app.features.altVisibility.isLoading
+            
             -- Show current character at minimum
             if currentCharName and currentCharName ~= "" then
                 local displayName = currentCharName:sub(1, 1):upper() .. currentCharName:sub(2):lower()
@@ -57,7 +75,12 @@ function M.RenderAccountInfoSection()
                 imgui.TextDisabled("Not connected")
             end
             imgui.Spacing()
-            imgui.TextDisabled("Open the Privacy tab's \"Alt Online Visibility\" section to load all your characters.")
+            
+            if isLoading then
+                imgui.TextDisabled("Loading characters...")
+            else
+                imgui.TextDisabled("No other characters found.")
+            end
         else
             -- Show all characters
             for _, charInfo in ipairs(characters) do

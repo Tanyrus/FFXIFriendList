@@ -104,7 +104,6 @@ function M.ServerDetector:detect(forceRefresh)
     if result.success then
         self.lastResult = result
         self.lastDetectionTime = now
-        self:_log("info", "Detected server via Ashita config: " .. result.profile.name)
         return result
     end
     
@@ -115,7 +114,6 @@ function M.ServerDetector:detect(forceRefresh)
     if logOk and logResult and logResult.success then
         self.lastResult = logResult
         self.lastDetectionTime = now
-        self:_log("info", "Detected server via log file: " .. logResult.profile.name)
         return logResult
     end
     

@@ -173,6 +173,13 @@ function M.RenderHoverTooltipSettings(state, callbacks)
             mainHover.showFriendedAs = showFriendedAs[1]
             changed = true
         end
+        imgui.SameLine()
+        
+        local showRealm = {mainHover.showRealm}
+        if imgui.Checkbox("Realm##main_hover", showRealm) then
+            mainHover.showRealm = showRealm[1]
+            changed = true
+        end
         
         if changed and app.features.preferences then
             app.features.preferences:save()
@@ -219,6 +226,13 @@ function M.RenderHoverTooltipSettings(state, callbacks)
         local showFriendedAs = {quickHover.showFriendedAs}
         if imgui.Checkbox("Added As##quick_hover", showFriendedAs) then
             quickHover.showFriendedAs = showFriendedAs[1]
+            changed = true
+        end
+        imgui.SameLine()
+        
+        local showRealm = {quickHover.showRealm}
+        if imgui.Checkbox("Realm##quick_hover", showRealm) then
+            quickHover.showRealm = showRealm[1]
             changed = true
         end
         

@@ -110,6 +110,28 @@ function M.Render(friend, settings, forceAll)
         end
     end
     
+    if showAll or (settings and settings.showRealm) then
+        local realmId = friend.realmId or ""
+        local displayRealm = realmId
+        
+        -- Try to get friendly realm name from ServerProfiles
+        local ServerProfiles = require('core.ServerProfiles')
+        if ServerProfiles and ServerProfiles.isLoaded() then
+            local profile = ServerProfiles.findById(realmId)
+            if profile and profile.name then
+                displayRealm = profile.name
+            end
+        end
+        
+        imgui.TextDisabled("Realm:")
+        imgui.SameLine(TOOLTIP_CONSTANTS.LABEL_WIDTH)
+        if displayRealm and displayRealm ~= "" then
+            imgui.Text(displayRealm)
+        else
+            imgui.Text(TOOLTIP_CONSTANTS.VALUE_UNKNOWN)
+        end
+    end
+    
     local app = _G.FFXIFriendListApp
     local tagsFeature = app and app.features and app.features.tags
     if tagsFeature then

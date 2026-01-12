@@ -184,7 +184,6 @@ ashita.events.register('load', 'ffxifriendlist_load', function()
             if settings and settings.save then
                 settings.save()
             end
-            print("[FFXIFriendList] Detected server: " .. serverName .. " (" .. serverId .. ")")
             
             -- Also notify the ServerList feature if app is already created
             if app and app.features and app.features.serverlist then

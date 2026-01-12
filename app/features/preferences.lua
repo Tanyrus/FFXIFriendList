@@ -62,11 +62,13 @@ function M.Preferences:load()
     self.prefs.mainHoverTooltip.showNationRank = getVal(prefs.mainHoverShowNationRank, true)
     self.prefs.mainHoverTooltip.showLastSeen = getVal(prefs.mainHoverShowLastSeen, false)
     self.prefs.mainHoverTooltip.showFriendedAs = getVal(prefs.mainHoverShowFriendedAs, true)
+    self.prefs.mainHoverTooltip.showRealm = getVal(prefs.mainHoverShowRealm, false)
     self.prefs.quickOnlineHoverTooltip.showJob = getVal(prefs.quickHoverShowJob, true)
     self.prefs.quickOnlineHoverTooltip.showZone = getVal(prefs.quickHoverShowZone, true)
     self.prefs.quickOnlineHoverTooltip.showNationRank = getVal(prefs.quickHoverShowNationRank, true)
     self.prefs.quickOnlineHoverTooltip.showLastSeen = getVal(prefs.quickHoverShowLastSeen, false)
     self.prefs.quickOnlineHoverTooltip.showFriendedAs = getVal(prefs.quickHoverShowFriendedAs, true)
+    self.prefs.quickOnlineHoverTooltip.showRealm = getVal(prefs.quickHoverShowRealm, false)
     self.prefs.debugMode = getVal(prefs.debugMode, false)
     self.prefs.shareJobWhenAnonymous = getVal(prefs.shareJobWhenAnonymous, false)
     self.prefs.showOnlineStatus = getVal(prefs.showOnlineStatus, true)
@@ -119,11 +121,13 @@ function M.Preferences:save()
         mainHoverShowNationRank = self.prefs.mainHoverTooltip.showNationRank,
         mainHoverShowLastSeen = self.prefs.mainHoverTooltip.showLastSeen,
         mainHoverShowFriendedAs = self.prefs.mainHoverTooltip.showFriendedAs,
+        mainHoverShowRealm = self.prefs.mainHoverTooltip.showRealm,
         quickHoverShowJob = self.prefs.quickOnlineHoverTooltip.showJob,
         quickHoverShowZone = self.prefs.quickOnlineHoverTooltip.showZone,
         quickHoverShowNationRank = self.prefs.quickOnlineHoverTooltip.showNationRank,
         quickHoverShowLastSeen = self.prefs.quickOnlineHoverTooltip.showLastSeen,
         quickHoverShowFriendedAs = self.prefs.quickOnlineHoverTooltip.showFriendedAs,
+        quickHoverShowRealm = self.prefs.quickOnlineHoverTooltip.showRealm,
         debugMode = self.prefs.debugMode,
         shareJobWhenAnonymous = self.prefs.shareJobWhenAnonymous,
         showOnlineStatus = self.prefs.showOnlineStatus,

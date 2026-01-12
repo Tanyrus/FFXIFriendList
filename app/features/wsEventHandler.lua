@@ -189,6 +189,18 @@ function M.WsEventHandler:_handleFriendOnline(payload)
     local characterName = payload.characterName
     local state = payload.state
     local isAway = payload.isAway or false
+    local realmId = payload.realmId
+    
+    -- Update realmId on the Friend object (not just FriendStatus)
+    local allFriends = friends.friendList:getFriends()
+    for _, friend in ipairs(allFriends) do
+        if friend.friendAccountId == accountId then
+            if realmId then
+                friend.realmId = realmId
+            end
+            break
+        end
+    end
     
     -- Update friend status
     local status = FriendList.FriendStatus.new()

@@ -325,6 +325,15 @@ ashita.events.register('load', 'ffxifriendlist_load', function()
         hasSetHidden = true
     })
     
+    -- Character Visibility module
+    local characterVisibilityModule = require('modules.charactervisibility')
+    local _ = moduleRegistry.Register('characterVisibility', {
+        module = characterVisibilityModule,
+        settingsKey = 'characterVisibilitySettings',
+        configKey = 'showCharacterVisibility',
+        hasSetHidden = true
+    })
+    
     -- ServerSelection module - DISABLED: Now handled by friendlist and quickonline modules
     -- local serverSelectionModule = require('modules.serverselection')
     -- local _ = moduleRegistry.Register('serverSelection', {

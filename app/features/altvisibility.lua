@@ -134,6 +134,7 @@ function M.AltVisibility:updateFromResult(friends, characters)
             friendAccountId = friendEntry.friendAccountId,
             friendedAsName = friendEntry.friendedAsName or "",
             displayName = friendEntry.displayName or friendEntry.friendedAsName or "",
+            realmId = friendEntry.realmId or "",
             addedByCharacterId = friendEntry.addedByCharacterId,
             characterVisibility = {}
         }
@@ -420,9 +421,11 @@ function M.AltVisibility:toggleVisibility(friendAccountId, friendName, character
     end
     
     if useNewEndpoint then
+        -- Update visibility for a different character (new model)
         local url = serverUrl .. Endpoints.FRIENDS.VISIBILITY
         local body = {
-            friendName = friendName,
+            characterName = friendName,
+            realmId = self:getRealmForFriend(friendAccountId) or "",
             forCharacterId = characterId,
             desiredVisible = desiredVisible
         }
@@ -436,6 +439,7 @@ function M.AltVisibility:toggleVisibility(friendAccountId, friendName, character
             callback = handleResponse
         })
     elseif desiredVisible then
+        -- Request visibility from a different character (old model, rare)
         local url = serverUrl .. Endpoints.FRIENDS.SEND_REQUEST
         local body = {
             toUserId = friendName
@@ -450,15 +454,35 @@ function M.AltVisibility:toggleVisibility(friendAccountId, friendName, character
             callback = handleResponse
         })
     else
-        local url = serverUrl .. Endpoints.friendVisibilityDelete(friendName)
+        -- Remove visibility - use POST endpoint with desiredVisible=false
+        -- This works whether it's current character or alt
+        local url = serverUrl .. Endpoints.FRIENDS.VISIBILITY
+        local body = {
+            characterName = friendName,
+            realmId = self:getRealmForFriend(friendAccountId) or "",
+            forCharacterId = characterId,
+            desiredVisible = false
+        }
+        local bodyStr = json.encode(body)
         
         self.deps.net.request({
-            method = "DELETE",
+            method = "POST",
             url = url,
             headers = headers,
+            body = bodyStr,
             callback = handleResponse
         })
     end
+end
+
+-- Get realm ID for a friend by account ID
+function M.AltVisibility:getRealmForFriend(friendAccountId)
+    for _, row in ipairs(self.rows) do
+        if row.friendAccountId == friendAccountId then
+            return row.realmId
+        end
+    end
+    return nil
 end
 
 return M

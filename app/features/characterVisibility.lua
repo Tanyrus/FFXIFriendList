@@ -4,6 +4,7 @@
 
 local Endpoints = require("protocol.Endpoints")
 local Envelope = require("protocol.Envelope")
+local Json = require("protocol.Json")
 
 local M = {}
 
@@ -154,13 +155,14 @@ function M.CharacterVisibility:setVisibility(characterId, shareVisibility)
     self:_setLocalVisibility(characterId, shareVisibility)
     
     local url = Endpoints.characterVisibilityUpdate(characterId)
+    local bodyJson = Json.encode({
+        shareVisibility = shareVisibility
+    })
     
     net.request({
         method = "PATCH",
         url = url,
-        body = {
-            shareVisibility = shareVisibility
-        },
+        body = bodyJson,
         callback = function(success, response)
             self.isLoading = false
             self.lastUpdateTime = getTime(self)

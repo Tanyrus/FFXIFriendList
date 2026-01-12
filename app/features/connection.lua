@@ -100,6 +100,7 @@ function M.Connection.new(deps)
     self.session = deps.session
     self.prefsStore = deps.storage
     self.realmDetector = deps.realmDetector
+    self._timeMs = deps.time or function() return os.clock() * 1000 end
     
     self.state = M.ConnectionState.Disconnected
     self.apiKey = ""  -- Single API key for the account
@@ -113,6 +114,10 @@ function M.Connection.new(deps)
     self.autoConnectAttempted = false
     self.autoConnectInProgress = false
     self.lastCharacterName = ""
+    self.retryAttemptCount = 0
+    self.nextAutoConnectAt = nil
+    self.backoffBaseMs = 2000
+    self.backoffMaxMs = 60000
     
     -- Load API key (single key model)
     if _G.gConfig and _G.gConfig.data and _G.gConfig.data.apiKey and _G.gConfig.data.apiKey ~= "" then
@@ -202,10 +207,25 @@ function M.Connection:tick(dtSeconds)
         end
     end
     
+    -- If previously failed, schedule retry with backoff
+    if (self.state == M.ConnectionState.Failed or self.state == M.ConnectionState.Disconnected) then
+        if self.autoConnectInProgress then
+            return
+        end
+        -- If a retry is scheduled and not yet due, wait
+        if self.nextAutoConnectAt and self._timeMs() < self.nextAutoConnectAt then
+            return
+        end
+        -- Ready to retry
+        self.autoConnectAttempted = false
+        self:autoConnect(characterName)
+        return
+    end
+
     if self:isConnected() or self.autoConnectInProgress or self.autoConnectAttempted then
         return
     end
-    
+
     self:autoConnect(characterName)
 end
 
@@ -525,6 +545,19 @@ function M.Connection:handleAuthResponse(success, response, characterName, fallb
     if not success then
         self:setFailed()
         self.lastError = response or "Network error"
+        -- Schedule retry with exponential backoff + jitter
+        local attempt = math.max(1, self.retryAttemptCount + 1)
+        local delay = self.backoffBaseMs * (2 ^ (attempt - 1))
+        delay = math.min(delay, self.backoffMaxMs)
+        local jitterRange = math.floor(delay * 0.2)
+        local jitter = (math.random(0, jitterRange * 2) - jitterRange)
+        delay = math.max(250, delay + jitter)
+        self.nextAutoConnectAt = self._timeMs() + delay
+        self.retryAttemptCount = attempt
+        self.autoConnectAttempted = false
+        if self.logger and self.logger.warn then
+            self.logger.warn(string.format("[Connection] Auth failed; retry in %.1fs (attempt %d)", delay / 1000, attempt))
+        end
         if self.logger and self.logger.echo then
             self.logger.echo("Connection failed: " .. tostring(self.lastError))
         elseif self.logger and self.logger.error then
@@ -579,6 +612,9 @@ function M.Connection:handleAuthResponse(success, response, characterName, fallb
     -- Store the character ID for later use
     self.lastCharacterId = characterId
     self.lastSetActiveAt = nil
+    -- Reset backoff on success
+    self.retryAttemptCount = 0
+    self.nextAutoConnectAt = nil
     
     -- If we have a character ID, call set-active to ensure this is the active character
     if characterId and apiKey and apiKey ~= "" then
@@ -659,6 +695,10 @@ function M.Connection:completeConnection(characterName)
         if App and App._triggerStartupRefresh then
             App._triggerStartupRefresh(app)
             app._startupRefreshCompleted = true
+            -- Ensure WS connection requested (in case we came online later)
+            if app.features and app.features.wsConnectionManager then
+                app.features.wsConnectionManager:requestConnect()
+            end
         end
     end
 end

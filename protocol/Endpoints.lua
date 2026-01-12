@@ -56,6 +56,11 @@ function M.friendRemove(accountId)
     return "/api/friends/" .. tostring(accountId)
 end
 
+-- Remove friend visibility only (dynamic path by characterName)
+function M.friendVisibilityDelete(characterName)
+    return "/api/friends/" .. tostring(characterName) .. "/visibility"
+end
+
 -- Block endpoints
 M.BLOCK = {
     LIST = "/api/block",

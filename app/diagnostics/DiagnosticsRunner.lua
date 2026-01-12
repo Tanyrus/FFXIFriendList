@@ -821,16 +821,16 @@ function M:showStatus()
         end
         
         -- Per-Character Visibility status
-        self:printChat("─── CHARACTER VISIBILITY ───", COLORS.CYAN)
+        self:printChat("─── CHARACTER VISIBILITY (Per-Character Visibility Model) ───", COLORS.CYAN)
         if app.features.characterVisibility then
             local visState = app.features.characterVisibility:getState()
             
-            -- Active character visibility
+            -- Active character visibility explanation
             local activeCharVis = app.features.characterVisibility:getActiveCharacterVisibility()
             if activeCharVis then
-                self:printChat("Active character: VISIBLE to friends", COLORS.GREEN)
+                self:printChat("Active character: VISIBLE (real status shown to friends)", COLORS.GREEN)
             else
-                self:printChat("Active character: HIDDEN (appears offline)", COLORS.YELLOW)
+                self:printChat("Active character: HIDDEN (appears OFFLINE to friends regardless of actual status)", COLORS.YELLOW)
             end
             
             -- Character count
@@ -844,7 +844,11 @@ function M:showStatus()
                     hiddenCount = hiddenCount + 1
                 end
             end
-            self:printChat(string.format("Characters: %d visible, %d hidden", visibleCount, hiddenCount))
+            self:printChat(string.format("Characters: %d visible (real status), %d hidden (appear offline)", visibleCount, hiddenCount))
+            
+            -- Explain the model
+            self:printChat("Model: When shareVisibility=false, character appears OFFLINE to others.", COLORS.GRAY)
+            self:printChat("        When shareVisibility=true, character's real status is visible.", COLORS.GRAY)
             
             -- Last update info
             if visState.lastUpdateTime and visState.lastUpdateTime > 0 then

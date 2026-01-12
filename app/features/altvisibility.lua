@@ -278,14 +278,8 @@ function M.AltVisibility:refresh()
     local serverUrl = connection:getBaseUrl()
     local url = serverUrl .. Endpoints.FRIENDS.CHARACTER_AND_FRIENDS
     
-    -- Use new auth format: Authorization: Bearer
-    local addonVersion = addon and addon.version or "0.9.95"
-    local headers = {
-        ["Content-Type"] = "application/json",
-        ["Authorization"] = "Bearer " .. apiKey,
-        ["X-Character-Name"] = characterName,
-        ["User-Agent"] = "FFXIFriendList/" .. addonVersion
-    }
+    -- Use shared header builder so realm ID is included (needed for character context)
+    local headers = connection:getHeaders(characterName)
     
     local selfRef = self
     

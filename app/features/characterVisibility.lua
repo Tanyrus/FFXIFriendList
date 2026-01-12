@@ -96,11 +96,20 @@ function M.CharacterVisibility:fetch()
     self.isLoading = true
     self.lastError = nil
     
-    local url = Endpoints.CHARACTERS.VISIBILITY
+    -- Build URL with base URL from verified connection
+    local url = connection:getBaseUrl() .. Endpoints.CHARACTERS.VISIBILITY
+    
+    -- Get headers from connection feature (includes Content-Type and auth headers)
+    local characterName = ""
+    if connection.getCharacterName then
+        characterName = connection:getCharacterName()
+    end
+    local headers = connection:getHeaders(characterName)
     
     net.request({
         method = "GET",
         url = url,
+        headers = headers,
         callback = function(success, response)
             self.isLoading = false
             self.lastFetchTime = getTime(self)
@@ -111,14 +120,14 @@ function M.CharacterVisibility:fetch()
                 return
             end
             
-            local envelope = Envelope.parse(response)
-            if not envelope.success then
-                self.lastError = envelope.error or "Failed to parse response"
+            local ok, result = Envelope.decode(response)
+            if not ok then
+                self.lastError = result or "Failed to parse response"
                 self:_logError(self.lastError)
                 return
             end
             
-            local data = envelope.data
+            local data = result.data
             if data and data.characters then
                 self:_updateFromServer(data.characters)
             end
@@ -154,14 +163,23 @@ function M.CharacterVisibility:setVisibility(characterId, shareVisibility)
     -- Optimistic update
     self:_setLocalVisibility(characterId, shareVisibility)
     
-    local url = Endpoints.characterVisibilityUpdate(characterId)
+    -- Build URL with base URL from verified connection
+    local url = connection:getBaseUrl() .. Endpoints.characterVisibilityUpdate(characterId)
     local bodyJson = Json.encode({
         shareVisibility = shareVisibility
     })
     
+    -- Get headers from connection feature (includes Content-Type and auth headers)
+    local characterName = ""
+    if connection.getCharacterName then
+        characterName = connection:getCharacterName()
+    end
+    local headers = connection:getHeaders(characterName)
+    
     net.request({
         method = "PATCH",
         url = url,
+        headers = headers,
         body = bodyJson,
         callback = function(success, response)
             self.isLoading = false
@@ -175,16 +193,16 @@ function M.CharacterVisibility:setVisibility(characterId, shareVisibility)
                 return
             end
             
-            local envelope = Envelope.parse(response)
-            if not envelope.success then
+            local ok, result = Envelope.decode(response)
+            if not ok then
                 -- Revert optimistic update
                 self:_setLocalVisibility(characterId, not shareVisibility)
-                self.lastError = envelope.error or "Failed to parse response"
+                self.lastError = result or "Failed to parse response"
                 self:_logError(self.lastError)
                 return
             end
             
-            local data = envelope.data
+            local data = result.data
             if data and data.characters then
                 self:_updateFromServer(data.characters)
             end

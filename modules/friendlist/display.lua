@@ -548,37 +548,7 @@ function M.RenderGeneralTab(dataModule, callbacks)
 end
 
 function M.RenderCrossServerFriendsSection(callbacks)
-    local headerLabel = "Cross-Server Friends"
-    local isOpen = imgui.CollapsingHeader(headerLabel, state.crossServerFriendsExpanded and ImGuiTreeNodeFlags_DefaultOpen or 0)
-    
-    if isOpen ~= state.crossServerFriendsExpanded then
-        state.crossServerFriendsExpanded = isOpen
-        if callbacks.onSaveState then callbacks.onSaveState() end
-    end
-    
-    if not isOpen then return end
-    
-    local crossServerEnabled = gConfig and gConfig.crossServerFriendsEnabled or false
-    local checked = {crossServerEnabled}
-    
-    if imgui.Checkbox("Enable Cross-Server Friend Adding", checked) then
-        if gConfig then
-            gConfig.crossServerFriendsEnabled = checked[1]
-            local settings = require('libs.settings')
-            if settings and settings.save then
-                settings.save()
-            end
-        end
-    end
-    if imgui.IsItemHovered() then
-        imgui.SetTooltip("When enabled, shows a realm selector when adding friends.\nThis allows you to add friends from other servers/realms.")
-    end
-    
-    imgui.Indent()
-    imgui.TextDisabled("When enabled, a 'Realm' dropdown appears in the Add Friend section.")
-    imgui.TextDisabled("Leave it on '(Current)' to add friends from your current server,")
-    imgui.TextDisabled("or select a different realm to add cross-server friends.")
-    imgui.Unindent()
+    -- Cross-server friend adding is disabled. Users can only add friends from their current realm.
 end
 
 function M.RenderWindowBehaviorSection(callbacks)

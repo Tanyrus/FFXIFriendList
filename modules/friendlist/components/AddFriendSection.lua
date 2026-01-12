@@ -23,21 +23,8 @@ local function submitAddFriend(state, tagsFeature, onAddFriend, onAddFriendWithR
     local notesFeature = app and app.features and app.features.notes
     local note = state.newFriendNote[1] or ""
     
-    -- Check if cross-server and realm is selected
-    local crossServerEnabled = gConfig and gConfig.crossServerFriendsEnabled
-    local selectedRealmId = nil
-    
-    if crossServerEnabled and addState.selectedRealmIndex[1] > 0 then
-        local profiles = ServerProfiles.getAll()
-        if profiles and profiles[addState.selectedRealmIndex[1]] then
-            selectedRealmId = profiles[addState.selectedRealmIndex[1]].id
-        end
-    end
-    
-    -- Call appropriate function based on whether realm is specified
-    if selectedRealmId and onAddFriendWithRealm then
-        onAddFriendWithRealm(state.newFriendName[1], selectedRealmId, note)
-    elseif onAddFriend then
+    -- Always add friend to current realm only
+    if onAddFriend then
         onAddFriend(state.newFriendName[1], note)
     else
         return
@@ -69,7 +56,6 @@ function M.Render(state, dataModule, onAddFriend, onAddFriendWithRealm)
     local app = _G.FFXIFriendListApp
     local tagsFeature = app and app.features and app.features.tags
     local isConnected = dataModule.IsConnected()
-    local crossServerEnabled = gConfig and gConfig.crossServerFriendsEnabled
     
     -- Track if Enter was pressed in any input field
     local enterPressed = false
@@ -82,31 +68,6 @@ function M.Render(state, dataModule, onAddFriend, onAddFriendWithRealm)
         enterPressed = true
     end
     imgui.PopItemWidth()
-    
-    -- Show realm selector when cross-server friends are enabled
-    if crossServerEnabled and ServerProfiles.isLoaded() then
-        imgui.SameLine()
-        imgui.AlignTextToFramePadding()
-        imgui.Text("Realm:")
-        imgui.SameLine()
-        imgui.PushItemWidth(100)
-        
-        -- Build realm list for combo
-        local profiles = ServerProfiles.getAll()
-        local realmNames = {"(Current)"}
-        for _, profile in ipairs(profiles) do
-            table.insert(realmNames, profile.name or profile.id)
-        end
-        local realmNamesStr = table.concat(realmNames, "\0") .. "\0"
-        
-        if imgui.Combo("##new_friend_realm", addState.selectedRealmIndex, realmNamesStr) then
-            -- Selection changed
-        end
-        imgui.PopItemWidth()
-        if imgui.IsItemHovered() then
-            imgui.SetTooltip("Select a realm to add a friend from a different server.\nLeave as '(Current)' to use your current realm.")
-        end
-    end
     
     imgui.SameLine()
     imgui.AlignTextToFramePadding()

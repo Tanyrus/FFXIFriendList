@@ -469,85 +469,128 @@ function M.RenderBlockedPlayersSection(state, dataModule, callbacks)
 end
 
 function M.RenderAltVisibilitySection(state, dataModule, callbacks)
-    local headerLabel = "Alt Online Visibility"
+    local headerLabel = "Per-Character Visibility"
     local isOpen = imgui.CollapsingHeader(headerLabel, state.altVisibilityExpanded and ImGuiTreeNodeFlags_DefaultOpen or 0)
     
     if isOpen ~= state.altVisibilityExpanded then
         state.altVisibilityExpanded = isOpen
         if callbacks.onSaveState then callbacks.onSaveState() end
-        
-        if isOpen and callbacks.onRefreshAltVisibility then
-            callbacks.onRefreshAltVisibility()
-        end
     end
     
+    -- Fetch data if section is open and we don't have characters yet
     if isOpen then
         local app = _G.FFXIFriendListApp
-        if app and app.features and app.features.altVisibility then
-            local altVis = app.features.altVisibility
-            local visState = altVis:getState()
+        if app and app.features and app.features.characterVisibility then
+            local charVis = app.features.characterVisibility
+            local characters = charVis:getCharacters()
+            if #characters == 0 and not charVis:getState().isLoading then
+                charVis:fetch()
+            end
+        end
+        M.RenderPerCharacterVisibility()
+    end
+end
+
+function M.RenderPerCharacterVisibility()
+    local app = _G.FFXIFriendListApp
+    if not app or not app.features or not app.features.characterVisibility then
+        imgui.TextDisabled("Character Visibility feature not available")
+        return
+    end
+    
+    if not app.features.friends then
+        imgui.TextDisabled("Friends feature not available")
+        return
+    end
+    
+    local charVis = app.features.characterVisibility
+    local charVisState = charVis:getState()
+    
+    imgui.TextWrapped("Control which friends can see each of your characters online. Uncheck a character to hide it from specific friends.")
+    imgui.Spacing()
+    imgui.Separator()
+    imgui.Spacing()
+    
+    -- Loading indicator
+    if charVisState.isLoading then
+        imgui.Text("Loading characters...")
+        return
+    end
+    
+    -- Error message
+    if charVisState.lastError then
+        imgui.TextColored({1.0, 0.3, 0.3, 1.0}, "Error: " .. charVisState.lastError)
+        imgui.Spacing()
+    end
+    
+    local characters = charVis:getCharacters()
+    
+    if #characters == 0 then
+        imgui.TextDisabled("No characters found.")
+        return
+    end
+    
+    -- Get friends list
+    local friendsFeature = app.features.friends
+    local friends = friendsFeature:getFriends()
+    
+    if not friends or #friends == 0 then
+        imgui.TextColored({0.6, 0.8, 1.0, 1.0}, "No friends to configure visibility for.")
+        imgui.TextDisabled("Add friends first, then manage their visibility here.")
+        return
+    end
+    
+    -- Build visibility matrix table: Friends (rows) x Characters (columns)
+    local numColumns = 1 + #characters  -- Friend name + one column per character
+    local tableFlags = bit.bor(
+        ImGuiTableFlags_Borders,
+        ImGuiTableFlags_RowBg,
+        ImGuiTableFlags_ScrollY
+    )
+    
+    if imgui.BeginTable("CharacterVisibilityTablePrivacy", numColumns, tableFlags, {0, 300}) then
+        -- Setup columns
+        imgui.TableSetupColumn("Friend", ImGuiTableColumnFlags_WidthFixed, 150)
+        for _, char in ipairs(characters) do
+            local charName = char.characterName or "Unknown"
+            if #charName > 0 then
+                charName = string.upper(string.sub(charName, 1, 1)) .. string.sub(charName, 2)
+            end
+            imgui.TableSetupColumn(charName, ImGuiTableColumnFlags_WidthFixed, 80)
+        end
+        
+        imgui.TableHeadersRow()
+        
+        -- Render friend rows
+        for friendIdx, friend in ipairs(friends) do
+            imgui.TableNextRow()
             
-            if visState.pendingRefresh then
-                altVis:checkPendingRefresh()
-            elseif #altVis:getRows() == 0 and not visState.isLoading and not visState.lastError and not visState.hasAttemptedRefresh then
-                if callbacks.onRefreshAltVisibility then
-                    callbacks.onRefreshAltVisibility()
+            -- Friend name column
+            imgui.TableNextColumn()
+            local displayName = friend.name or "Unknown"
+            if #displayName > 0 then
+                displayName = string.upper(string.sub(displayName, 1, 1)) .. string.sub(displayName, 2)
+            end
+            imgui.Text(displayName)
+            
+            -- Character visibility checkboxes
+            for charIdx, char in ipairs(characters) do
+                imgui.TableNextColumn()
+                
+                local checkboxId = "##charvis_friend_" .. tostring(friendIdx) .. "_char_" .. tostring(charIdx)
+                -- For now, all characters are visible to all friends (default true)
+                local checkboxState = {true}
+                if imgui.Checkbox(checkboxId, checkboxState) then
+                    -- TODO: Implement per-friend visibility toggle
+                    -- charVis:setFriendCharacterVisibility(friend.accountId, char.characterId, checkboxState[1])
                 end
             end
         end
         
-        M.RenderAltVisibilityContent(state, dataModule, callbacks)
+        imgui.EndTable()
     end
 end
 
-function M.RenderAltVisibilityContent(state, dataModule, callbacks)
-    local app = _G.FFXIFriendListApp
-    local prefs = nil
-    if app and app.features and app.features.preferences then
-        prefs = app.features.preferences:getPrefs()
-    end
-    
-    if not prefs then
-        imgui.Text("Preferences not available")
-        return
-    end
-    
-    local shareFriendsAcrossAlts = {prefs.shareFriendsAcrossAlts ~= false}
-    if imgui.Checkbox("Share Visibility of Alts to all Friends", shareFriendsAcrossAlts) then
-        if app and app.features and app.features.preferences then
-            app.features.preferences:setPref("shareFriendsAcrossAlts", shareFriendsAcrossAlts[1])
-            app.features.preferences:save()
-            app.features.preferences:syncToServer()
-            if callbacks.onRefreshAltVisibility then
-                callbacks.onRefreshAltVisibility()
-            end
-        end
-    end
-    if imgui.IsItemHovered() then
-        imgui.SetTooltip("When enabled, all your alt characters share visibility with all friends.\nWhen disabled, you can set visibility per friend per character\nusing the table below.\n\n[Account-wide: Synced to server for all characters]")
-    end
-    
-    imgui.Spacing()
-    
-    if shareFriendsAcrossAlts[1] then
-        imgui.Text("A table will appear below if you disable sharing to manage visibility per friend per character.")
-    else
-        M.RenderAltVisibilityFilter(state)
-        imgui.Spacing()
-        M.RenderAltVisibilityTable(state, callbacks)
-    end
-end
-
-function M.RenderAltVisibilityFilter(state)
-    if not state.altVisibilityFilterText then
-        state.altVisibilityFilterText = {""}
-    end
-    
-    imgui.Text("Search:")
-    imgui.SameLine()
-    imgui.SetNextItemWidth(200)
-    imgui.InputText("##alt_visibility_filter", state.altVisibilityFilterText, 256)
-end
 
 function M.RenderAltVisibilityTable(state, callbacks)
     local app = _G.FFXIFriendListApp

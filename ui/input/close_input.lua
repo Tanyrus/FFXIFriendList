@@ -38,20 +38,31 @@ local function isGameMenuOpen()
 end
 
 local function isCloseKeyPressed()
-    local closeKeyCode = VK_ESCAPE
     local app = _G.FFXIFriendListApp
     if app and app.features and app.features.preferences then
         local prefs = app.features.preferences:getPrefs()
         if prefs and prefs.customCloseKeyCode then
             local code = tonumber(prefs.customCloseKeyCode)
+            -- If code is 0, "None" is selected - no keyboard close allowed
+            if code == 0 then
+                return false
+            end
+            -- If code is valid, use it
             if code and code > 0 and code < 256 then
-                closeKeyCode = code
+                local success, keyState = pcall(function()
+                    return ffi.C.GetKeyState(code)
+                end)
+                if success and keyState then
+                    return bit.band(keyState, 0x8000) ~= 0
+                end
+                return false
             end
         end
     end
     
+    -- Default to ESC if no preference is set
     local success, keyState = pcall(function()
-        return ffi.C.GetKeyState(closeKeyCode)
+        return ffi.C.GetKeyState(VK_ESCAPE)
     end)
     
     if success and keyState then

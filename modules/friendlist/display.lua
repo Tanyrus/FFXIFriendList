@@ -333,16 +333,30 @@ function M.DrawWindow(settings, dataModule)
     local app = _G.FFXIFriendListApp
     local needsServerSelection = false
     if app and app.features and app.features.serverlist then
-        needsServerSelection = not app.features.serverlist:isServerSelected()
+        -- Only show server not detected if:
+        -- 1. No server is selected AND
+        -- 2. Server detection has already been attempted (not just waiting for servers to load)
+        if not app.features.serverlist:isServerSelected() and app._serverDetectionCompleted then
+            needsServerSelection = true
+        end
     end
     
-    -- If server not detected, show error message instead of selection window
+    -- If server detection is still pending, wait without showing window
+    -- Once detection completes, if no server was found, show error message
     if needsServerSelection then
         M.RenderServerNotDetectedWindow()
         return
     end
     
-    -- Server is configured - render main window normally
+    -- Wait for connection to establish before showing main window
+    -- This ensures auto-connect completes before rendering
+    if app and app.features and app.features.connection then
+        if not app.features.connection:isConnected() then
+            return
+        end
+    end
+    
+    -- Server is connected - render main window normally
     local windowFlags = 0
     local app = _G.FFXIFriendListApp
     local globalLocked = false
@@ -1261,6 +1275,14 @@ function M.RenderServerNotDetectedWindow()
     
     imgui.TextColored({0.5, 0.8, 1.0, 1.0}, "Need your server added?")
     imgui.TextWrapped("Contact Tanyrus on Discord to request support for your server.")
+    imgui.Spacing()
+    
+    if imgui.Button("Join Discord Server", {200, 30}) then
+        os.execute('start https://discord.gg/horizonfriendlist')
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("Click to open Discord (opens in default browser)")
+    end
     
     imgui.End()
     M.PopTheme(themePushed)

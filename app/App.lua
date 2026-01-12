@@ -29,7 +29,8 @@ function App.create(deps)
         features = {},
         initialized = false,
         _missingFeatureLogged = {},  -- Track missing features for logging
-        _startupRefreshCompleted = false  -- Track if startup refresh has run
+        _startupRefreshCompleted = false,  -- Track if startup refresh has run
+        _autoDetectAttempted = false  -- Track if auto-detect has been tried
     }
     
     -- Initialize features with deps (all use new(deps) signature)
@@ -132,11 +133,13 @@ function App.initialize(app)
     end
     
     -- Refresh server list on startup (needed for server selection to work)
+    -- Note: This is async, servers will populate on a later tick
     if app.features.serverlist and app.features.serverlist.refresh then
         app.features.serverlist:refresh()
     end
     
     -- Sync connection module with serverlist if server is already selected
+    -- (will be set from persisted state if available)
     if app.features.connection and app.features.serverlist then
         local selected = app.features.serverlist:getSelected()
         if selected then
@@ -188,6 +191,24 @@ function App.tick(app, dtSeconds)
     -- Wait for game to be ready and character to be loaded before doing anything
     if not App.isGameReady() then
         return
+    end
+    
+    -- Attempt auto-detect and auto-select server on first tick after servers are loaded
+    -- (deferred from initialize() because refresh() is async)
+    if not app._autoDetectAttempted and app.features.serverlist and app.features.serverlist.servers and #app.features.serverlist.servers > 0 then
+        app._autoDetectAttempted = true
+        local autoConnected = App.attemptAutoDetectAndConnect(app)
+        
+        -- If auto-connect succeeded, sync connection module with selected server
+        if autoConnected and app.features.connection and app.features.serverlist then
+            local selected = app.features.serverlist:getSelected()
+            if selected then
+                app.features.connection:setServer(selected.id, selected.baseUrl)
+            end
+        end
+        
+        -- Mark that we've finished the initial server detection attempt
+        app._serverDetectionCompleted = true
     end
     
     -- Note: Startup refresh is now triggered immediately in connection.lua:handleAuthResponse()
@@ -436,6 +457,57 @@ function App.release(app)
     
     app.initialized = false
     return nil
+end
+
+-- Attempt to auto-detect server and auto-select it
+-- Returns true if auto-detection and selection succeeded, false otherwise
+function App.attemptAutoDetectAndConnect(app)
+    if not app or not app.features or not app.features.connection or not app.features.serverlist then
+        return false
+    end
+    
+    -- If server is already selected, no need to auto-detect
+    if app.features.serverlist:isServerSelected() then
+        return true
+    end
+    
+    -- Try to detect the realm from game data
+    local realmDetector = app.deps and app.deps.realmDetector
+    if not realmDetector then
+        return false
+    end
+    
+    -- Attempt detection
+    local detectedRealmId = realmDetector:getRealmId()
+    if not detectedRealmId or detectedRealmId == "" then
+        -- Detection failed
+        return false
+    end
+    
+    -- Find matching server in the server list
+    local serverlist = app.features.serverlist
+    if not serverlist.servers or #serverlist.servers == 0 then
+        -- Server list is empty, can't match
+        return false
+    end
+    
+    for _, server in ipairs(serverlist.servers) do
+        if server.id and string.lower(server.id) == string.lower(detectedRealmId) then
+            -- Found a match! Auto-select this server
+            serverlist:selectServer(server.id)
+            
+            if app.deps.logger and app.deps.logger.info then
+                app.deps.logger.info("[App] Auto-detected and selected server: " .. server.id)
+            end
+            return true
+        end
+    end
+    
+    -- No matching server found for detected realm
+    if app.deps.logger and app.deps.logger.warn then
+        app.deps.logger.warn("[App] Auto-detected realm '" .. detectedRealmId .. "' but no matching server found")
+    end
+    return false
 end
 
 return App

@@ -5,12 +5,6 @@ local nations = require('core.nations')
 local M = {}
 
 function M.Render(state, dataModule, callbacks)
-    M.RenderMenuDetectionSection(state, callbacks)
-    imgui.Spacing()
-    M.RenderFriendViewSettingsSection(state, callbacks)
-    imgui.Spacing()
-    M.RenderHoverTooltipSettings(state, callbacks)
-    imgui.Spacing()
     M.RenderPrivacyControlsSection(state, callbacks)
     imgui.Spacing()
     M.RenderBlockedPlayersSection(state, dataModule, callbacks)

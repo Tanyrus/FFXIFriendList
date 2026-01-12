@@ -41,6 +41,8 @@ local state = {
     blockedPlayersExpanded = false,
     notificationsSettingsExpanded = true,
     controlsSettingsExpanded = true,
+    closeKeyExpanded = false,
+    controllerExpanded = false,
     themeSettingsExpanded = true,
     themeSelectionExpanded = true,
     customColorsExpanded = false,
@@ -517,16 +519,14 @@ function M.RenderContentArea(dataModule, callbacks)
     elseif state.selectedTab == 5 then
         NotificationsTab.Render(state, dataModule, callbacks)
     elseif state.selectedTab == 6 then
-        ControlsTab.Render(state, dataModule, callbacks)
-    elseif state.selectedTab == 7 then
         ThemesTab.Render(state, dataModule, callbacks)
-    elseif state.selectedTab == 8 then
+    elseif state.selectedTab == 7 then
         HelpTab.Render(state, dataModule, callbacks)
     end
 end
 
 function M.RenderGeneralTab(dataModule, callbacks)
-    -- General settings (Menu Detection, Friend View, Hover Tooltip, Group by Status, Compact Friend List)
+    -- View settings (Menu Detection, Friend View, Hover Tooltip, Group by Status, Compact Friend List, Window Behavior, Controls)
     PrivacyTab.RenderMenuDetectionSection(state, callbacks)
     imgui.Spacing()
     M.RenderCrossServerFriendsSection(callbacks)
@@ -542,6 +542,10 @@ function M.RenderGeneralTab(dataModule, callbacks)
     M.RenderWindowBehaviorSection(callbacks)
     imgui.Spacing()
     M.RenderWindowLockSection(callbacks)
+    imgui.Spacing()
+    M.RenderCloseKeySection(callbacks)
+    imgui.Spacing()
+    M.RenderControllerSection(callbacks)
 end
 
 function M.RenderCrossServerFriendsSection(callbacks)
@@ -639,6 +643,60 @@ function M.RenderWindowLockSection(callbacks)
     if imgui.IsItemHovered() then
         imgui.SetTooltip("When enabled, all addon windows cannot be closed via the X button.")
     end
+end
+
+function M.RenderCloseKeySection(callbacks)
+    local headerLabel = "Close Window Key"
+    local isOpen = imgui.CollapsingHeader(headerLabel, state.closeKeyExpanded and ImGuiTreeNodeFlags_DefaultOpen or 0)
+    
+    if isOpen ~= state.closeKeyExpanded then
+        state.closeKeyExpanded = isOpen
+        if callbacks and callbacks.onSaveState then callbacks.onSaveState() end
+    end
+    
+    if not isOpen then return end
+    
+    local app = _G.FFXIFriendListApp
+    local prefs = nil
+    if app and app.features and app.features.preferences then
+        prefs = app.features.preferences:getPrefs()
+    end
+    
+    if not prefs then
+        imgui.Text("Preferences not available")
+        return
+    end
+    
+    ControlsTab.RenderCloseKeySection(prefs)
+    
+    imgui.Spacing()
+    imgui.TextWrapped("Press the configured key to close the topmost unlocked window.")
+    imgui.TextWrapped("Windows can be locked via the Lock button to prevent accidental closing.")
+end
+
+function M.RenderControllerSection(callbacks)
+    local headerLabel = "Controller Settings"
+    local isOpen = imgui.CollapsingHeader(headerLabel, state.controllerExpanded and ImGuiTreeNodeFlags_DefaultOpen or 0)
+    
+    if isOpen ~= state.controllerExpanded then
+        state.controllerExpanded = isOpen
+        if callbacks and callbacks.onSaveState then callbacks.onSaveState() end
+    end
+    
+    if not isOpen then return end
+    
+    local app = _G.FFXIFriendListApp
+    local prefs = nil
+    if app and app.features and app.features.preferences then
+        prefs = app.features.preferences:getPrefs()
+    end
+    
+    if not prefs then
+        imgui.Text("Preferences not available")
+        return
+    end
+    
+    ControlsTab.RenderControllerSection(prefs)
 end
 
 function M.RenderGroupByStatusSection(callbacks)

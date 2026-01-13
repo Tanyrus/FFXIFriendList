@@ -891,7 +891,6 @@ function M.Friends:handlePCUpdate(packet)
     
     if self.lastKnownAnonStatus ~= currentAnon then
         self.lastKnownAnonStatus = currentAnon
-        print(string.format("[handlePCUpdate] Anon status changed: %s", tostring(currentAnon)))
         
         self.presenceChangedAt = getTime(self)
         self:updatePresence()
@@ -908,7 +907,6 @@ function M.Friends:handleUpdateChar(packet)
     
     if self.lastKnownAnonStatus ~= currentAnon then
         self.lastKnownAnonStatus = currentAnon
-        print(string.format("[handleUpdateChar] Anon status changed: %s", tostring(currentAnon)))
         
         self.presenceChangedAt = getTime(self)
         self:updatePresence()
@@ -922,9 +920,6 @@ function M.Friends:handleCharUpdate(packet)
     
     -- Packet detected job/level change - trigger update
     -- Actual data will be read from memory in updatePresence()
-    -- (Packet data can be invalid when anonymous, so we ignore it)
-    print("[handleCharUpdate] Job/level change detected via packet")
-    
     self.presenceChangedAt = getTime(self)
     self:updatePresence()
 end
@@ -958,9 +953,6 @@ function M.Friends:updatePresence()
     if not presence or not presence.characterName or presence.characterName == "" then
         return false
     end
-    
-    print(string.format("[updatePresence] Queried presence: mainJob=%s, mainJobLevel=%s, jobLevel=%s",
-        tostring(presence.mainJob), tostring(presence.mainJobLevel), tostring(presence.jobLevel)))
     
     -- Deduplicate: only send if something actually changed
     -- Compare against what we're about to send (presence object), not cached values

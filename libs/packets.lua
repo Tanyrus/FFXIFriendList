@@ -151,9 +151,6 @@ function M.Parse0DFPacket(e)
     
     if not mainJob or not subJob then return nil end
     
-    print(string.format("[PACKET 0x0DF] entityId=0x%08X, mainJob=%d, mainJobLevel=%d, subJob=%d, subJobLevel=%d",
-        entityId, mainJob, mainJobLevel or 0, subJob, subJobLevel or 0))
-    
     return {
         type = "char_update",
         entityId = entityId,

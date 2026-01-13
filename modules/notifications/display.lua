@@ -214,7 +214,8 @@ local function maybePlaySound(toast)
     end
     
     local currentTime = getCurrentTimeMs()
-    if not state.soundPolicy:shouldPlay(soundType, currentTime) then
+    -- Test toasts bypass sound policy cooldown
+    if not toast.isTest and not state.soundPolicy:shouldPlay(soundType, currentTime) then
         return
     end
     

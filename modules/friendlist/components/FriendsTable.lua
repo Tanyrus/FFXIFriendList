@@ -266,15 +266,6 @@ function M.RenderNameCell(friend, index, state, callbacks, sectionTag)
         isMuted = app.features.preferences:isFriendMuted(friend.friendAccountId)
     end
     
-    -- Render mute indicator
-    if isMuted then
-        imgui.TextColored({0.7, 0.7, 0.0, 1.0}, "(M)")
-        if imgui.IsItemHovered() then
-            imgui.SetTooltip("Notifications muted for this friend")
-        end
-        imgui.SameLine()
-    end
-    
     if not icons.RenderStatusIcon(isOnline, isPending, 16, isAway) then
         local color = isPending and {1.0, 0.8, 0.0, 1.0} or 
                      isAway and {1.0, 0.7, 0.2, 1.0} or
@@ -288,13 +279,24 @@ function M.RenderNameCell(friend, index, state, callbacks, sectionTag)
         imgui.PushStyleColor(ImGuiCol_Text, {0.6, 0.6, 0.6, 1.0})
     end
     
+    -- Render name with mute indicator to the right
+    local displayText = friendName
+    if isMuted then
+        displayText = friendName .. " (M)"
+    end
+    
     local flags = ImGuiSelectableFlags_SpanAllColumns
-    if imgui.Selectable(friendName .. "##friend_" .. uniqueId, false, flags) then
+    if imgui.Selectable(displayText .. "##friend_" .. uniqueId, false, flags) then
         if state.selectedFriendForDetails and state.selectedFriendForDetails.name == friend.name then
             state.selectedFriendForDetails = nil
         else
             state.selectedFriendForDetails = friend
         end
+    end
+    
+    -- Tooltip for muted indicator
+    if isMuted and imgui.IsItemHovered() then
+        imgui.SetTooltip("Notifications muted for this friend")
     end
     
     if imgui.BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID) then

@@ -45,13 +45,6 @@ M.MAX_TOAST_NOTIFICATIONS = 5
 M.MAX_RING_BUFFER_SIZE = 32
 
 --------------------------------------------------------------------------------
--- Notification Limits
---------------------------------------------------------------------------------
-
--- Minimum time (in seconds) a friend must be offline before triggering
--- an online notification. Prevents spam from friends going on/off quickly.
-M.MIN_OFFLINE_DURATION_FOR_NOTIFICATION = 180  -- 3 minutes
-
 --------------------------------------------------------------------------------
 -- Reconnection Limits
 --------------------------------------------------------------------------------

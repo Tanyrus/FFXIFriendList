@@ -1588,8 +1588,22 @@ function M.GetCallbacks(dataModule)
         end,
         
         onRemoveFriend = function(friendName)
-            if app and app.features and app.features.friends then
-                app.features.friends:removeFriend(friendName)
+            if app then
+                -- Clear mute entry if we can resolve accountId
+                if app.features and app.features.preferences and dataModule and dataModule.GetFriends then
+                    local friends = dataModule.GetFriends()
+                    for _, f in ipairs(friends or {}) do
+                        if f.name and string.lower(f.name) == string.lower(friendName) then
+                            if f.friendAccountId then
+                                app.features.preferences:clearFriendMute(f.friendAccountId)
+                            end
+                            break
+                        end
+                    end
+                end
+                if app.features and app.features.friends then
+                    app.features.friends:removeFriend(friendName)
+                end
             end
         end,
         
@@ -1609,6 +1623,10 @@ function M.GetCallbacks(dataModule)
                         -- Then remove friend (with retry if it fails)
                         if app.features.friends then
                             app.features.friends:removeFriend(friendName)
+                            -- Clear mute for this friend account
+                            if app.features.preferences and friendAccountId then
+                                app.features.preferences:clearFriendMute(friendAccountId)
+                            end
                             -- Note: If remove fails, they're still blocked but will show in friend list
                             -- Server-side they should be auto-filtered from friend list on next snapshot
                         end
@@ -1618,6 +1636,9 @@ function M.GetCallbacks(dataModule)
                             app.features.blocklist:block(friendName, function(retrySuccess, retryResult)
                                 if retrySuccess and app.features.friends then
                                     app.features.friends:removeFriend(friendName)
+                                    if app.features.preferences and friendAccountId then
+                                        app.features.preferences:clearFriendMute(friendAccountId)
+                                    end
                                 end
                             end)
                         end

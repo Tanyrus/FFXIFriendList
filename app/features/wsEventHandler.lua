@@ -343,6 +343,10 @@ function M.WsEventHandler:_handleFriendRemoved(payload)
     for _, friend in ipairs(allFriends) do
         if friend.friendAccountId == accountId or friend.friendAccountId == friendAccountId then
             friends.friendList:removeFriend(friend.name)
+            -- Clear any mute entry for this friend
+            if self.deps.preferences and friend.friendAccountId then
+                self.deps.preferences:clearFriendMute(friend.friendAccountId)
+            end
             if self.logger and self.logger.debug then
                 self.logger.debug("[WsEventHandler] Removed friend: " .. tostring(friend.name))
             end
@@ -691,16 +695,6 @@ function M.WsEventHandler:_notifyFriendOnline(characterName)
                     end
                 end
                 
-                -- Check 3-minute threshold
-                if friend.lastSeenAt and friend.lastSeenAt > 0 then
-                    local Limits = require("constants.limits")
-                    local currentTime = self:_getTime()
-                    local offlineDuration = (currentTime - friend.lastSeenAt) / 1000  -- Convert to seconds
-                    
-                    if offlineDuration < Limits.MIN_OFFLINE_DURATION_FOR_NOTIFICATION then
-                        return  -- Friend was offline for less than 3 minutes
-                    end
-                end
                 
                 break
             end

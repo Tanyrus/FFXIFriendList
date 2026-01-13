@@ -90,6 +90,8 @@ function M.Preferences:load()
     self.prefs.soundOnFriendRequest = getVal(prefs.soundOnFriendRequest, true)
     self.prefs.notificationSoundVolume = getVal(prefs.notificationSoundVolume, 0.6)
     self.prefs.notificationShowTestPreview = getVal(prefs.notificationShowTestPreview, false)
+    self.prefs.muteTestFriendOnline = getVal(prefs.muteTestFriendOnline, false)
+    self.prefs.muteTestFriendRequest = getVal(prefs.muteTestFriendRequest, false)
     -- Notification background color (nil = use theme, otherwise {r, g, b, a})
     if prefs.notificationBgColor and type(prefs.notificationBgColor) == "table" then
         self.prefs.notificationBgColor = {
@@ -152,6 +154,8 @@ function M.Preferences:save()
         soundOnFriendRequest = self.prefs.soundOnFriendRequest,
         notificationSoundVolume = self.prefs.notificationSoundVolume,
         notificationShowTestPreview = self.prefs.notificationShowTestPreview,
+        muteTestFriendOnline = self.prefs.muteTestFriendOnline,
+        muteTestFriendRequest = self.prefs.muteTestFriendRequest,
         notificationBgColor = self.prefs.notificationBgColor,
         controllerLayout = self.prefs.controllerLayout,
         flistBindButton = self.prefs.flistBindButton,
@@ -191,6 +195,8 @@ function M.Preferences:setPref(key, value)
     local knownPrefs = {
         notificationBgColor = true,
         notificationShowTestPreview = true,
+        muteTestFriendOnline = true,
+        muteTestFriendRequest = true,
         -- Add other optional fields here if needed
     }
     if knownPrefs[key] then
@@ -372,6 +378,17 @@ function M.Preferences:setFriendMuted(friendAccountId, muted)
     self.prefs.mutedFriends[friendAccountId] = muted == true
     self:save()
     return self.prefs.mutedFriends[friendAccountId]
+end
+
+-- Clear mute entry for a friend by account ID
+function M.Preferences:clearFriendMute(friendAccountId)
+    if not friendAccountId then return false end
+    if self.prefs.mutedFriends[friendAccountId] ~= nil then
+        self.prefs.mutedFriends[friendAccountId] = nil
+        self:save()
+        return true
+    end
+    return false
 end
 
 return M

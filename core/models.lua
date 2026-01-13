@@ -125,6 +125,8 @@ function M.Preferences.new()
     -- Notification mute settings
     self.dontSendNotificationsGlobal = false
     self.mutedFriends = {}  -- Table keyed by friendAccountId
+    self.muteTestFriendOnline = false
+    self.muteTestFriendRequest = false
     return self
 end
 

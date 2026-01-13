@@ -722,6 +722,9 @@ function M.WsClientAsync:_buildUpgradeRequest()
         if headers["X-Realm-Id"] then
             request = request .. "X-Realm-Id: " .. headers["X-Realm-Id"] .. "\r\n"
         end
+        if headers["User-Agent"] then
+            request = request .. "User-Agent: " .. headers["User-Agent"] .. "\r\n"
+        end
     end
     
     request = request .. "\r\n"

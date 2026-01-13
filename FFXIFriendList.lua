@@ -6,7 +6,7 @@
 
 addon.name = 'FFXIFriendList'
 addon.author = 'Tanyrus'
-addon.version = '0.9.95'
+addon.version = '0.9.96'
 addon.desc = 'Friend list addon for FFXI'
 
 -- Set up package.path (absolute requires only)

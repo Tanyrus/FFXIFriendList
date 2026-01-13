@@ -1572,12 +1572,6 @@ function M.GetCallbacks(dataModule)
         onRenderContextMenu = function(friend)
             FriendContextMenu.Render(friend, state, M.GetCallbacks(dataModule))
         end,
-        
-        onRefreshAltVisibility = function()
-            if app and app.features and app.features.altVisibility then
-                app.features.altVisibility:refresh()
-            end
-        end
     }
 end
 

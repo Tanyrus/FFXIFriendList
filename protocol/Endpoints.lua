@@ -82,15 +82,6 @@ M.PRESENCE = {
 }
 
 -- Characters endpoints (Per-Character Visibility)
-M.CHARACTERS = {
-    VISIBILITY = "/api/characters/visibility"
-}
-
--- Update character visibility (dynamic path by characterId)
-function M.characterVisibilityUpdate(characterId)
-    return "/api/characters/" .. tostring(characterId) .. "/visibility"
-end
-
 -- Visibility Matrix endpoints (Per-Friend Per-Character Visibility)
 M.VISIBILITY_MATRIX = {
     GET = "/api/visibility-matrix",

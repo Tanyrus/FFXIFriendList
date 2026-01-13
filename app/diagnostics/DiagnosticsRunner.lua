@@ -822,51 +822,7 @@ function M:showStatus()
         
         -- Per-Character Visibility status
         self:printChat("─── CHARACTER VISIBILITY (Per-Character Visibility Model) ───", COLORS.CYAN)
-        if app.features.characterVisibility then
-            local visState = app.features.characterVisibility:getState()
-            
-            -- Active character visibility explanation
-            local activeCharVis = app.features.characterVisibility:getActiveCharacterVisibility()
-            if activeCharVis then
-                self:printChat("Active character: VISIBLE (real status shown to friends)", COLORS.GREEN)
-            else
-                self:printChat("Active character: HIDDEN (appears OFFLINE to friends regardless of actual status)", COLORS.YELLOW)
-            end
-            
-            -- Character count
-            local chars = visState.characters or {}
-            local visibleCount = 0
-            local hiddenCount = 0
-            for _, char in ipairs(chars) do
-                if char.shareVisibility then
-                    visibleCount = visibleCount + 1
-                else
-                    hiddenCount = hiddenCount + 1
-                end
-            end
-            self:printChat(string.format("Characters: %d visible (real status), %d hidden (appear offline)", visibleCount, hiddenCount))
-            
-            -- Explain the model
-            self:printChat("Model: When shareVisibility=false, character appears OFFLINE to others.", COLORS.GRAY)
-            self:printChat("        When shareVisibility=true, character's real status is visible.", COLORS.GRAY)
-            
-            -- Last update info
-            if visState.lastUpdateTime and visState.lastUpdateTime > 0 then
-                local ago = math.floor((os.time() * 1000 - visState.lastUpdateTime) / 1000)
-                self:printChat(string.format("Last visibility update: %ds ago", ago))
-            end
-            
-            if visState.lastFetchTime and visState.lastFetchTime > 0 then
-                local ago = math.floor((os.time() * 1000 - visState.lastFetchTime) / 1000)
-                self:printChat(string.format("Last visibility fetch: %ds ago", ago))
-            end
-            
-            if visState.lastError then
-                self:printChat("Last error: " .. tostring(visState.lastError), COLORS.RED)
-            end
-        else
-            self:printChat("Character visibility feature: Not available", COLORS.YELLOW)
-        end
+        self:printChat("(Module not loaded)", COLORS.GRAY)
         
         -- Visibility Matrix status
         self:printChat("─── VISIBILITY MATRIX (Per-Friend Per-Character Control) ───", COLORS.CYAN)
@@ -1090,8 +1046,6 @@ function M:runProbe(callback)
         {name = "GET /preferences", method = "GET", endpoint = Endpoints.PREFERENCES, auth = "basic", expectedStatus = 200},
         -- Block
         {name = "GET /block", method = "GET", endpoint = Endpoints.BLOCK.LIST, auth = "basic", expectedStatus = 200},
-        -- Character Visibility
-        {name = "GET /characters/visibility", method = "GET", endpoint = Endpoints.CHARACTERS.VISIBILITY, auth = "basic", expectedStatus = 200},
     }
     
     self:runTestSequence(allTests, callback)

@@ -37,7 +37,6 @@ function M.RenderAccountInfoSection()
         imgui.Indent()
         
         local app = _G.FFXIFriendListApp
-        local characters = {}
         local currentCharName = nil
         
         -- Get current character name from connection
@@ -45,67 +44,18 @@ function M.RenderAccountInfoSection()
             currentCharName = app.features.connection:getCharacterName()
         end
         
-        -- Try to get characters from altVisibility first (it has them after visibility fetch)
-        if app and app.features and app.features.altVisibility then
-            characters = app.features.altVisibility:getCharacters() or {}
-            
-            -- Auto-refresh if we haven't fetched yet, or if logged into a different character
-            local shouldRefresh = not M.state.hasFetched or 
-                (currentCharName and M.state.lastFetchedForCharacter ~= currentCharName:lower())
-            local isLoading = app.features.altVisibility.isLoading
-            
-            if shouldRefresh and not isLoading then
-                M.state.hasFetched = true
-                M.state.lastFetchedForCharacter = currentCharName and currentCharName:lower() or nil
-                app.features.altVisibility:refresh()
-            end
+        -- Show current character
+        if currentCharName and currentCharName ~= "" then
+            local displayName = currentCharName:sub(1, 1):upper() .. currentCharName:sub(2):lower()
+            imgui.TextColored({0.0, 1.0, 0.0, 1.0}, "* " .. displayName)
+            imgui.SameLine()
+            imgui.TextDisabled("(current)")
+        else
+            imgui.TextDisabled("Not connected")
         end
         
-        if #characters == 0 then
-            -- Check if loading
-            local isLoading = app and app.features and app.features.altVisibility and app.features.altVisibility.isLoading
-            
-            -- Show current character at minimum
-            if currentCharName and currentCharName ~= "" then
-                local displayName = currentCharName:sub(1, 1):upper() .. currentCharName:sub(2):lower()
-                imgui.TextColored({0.0, 1.0, 0.0, 1.0}, "* " .. displayName)
-                imgui.SameLine()
-                imgui.TextDisabled("(current)")
-            else
-                imgui.TextDisabled("Not connected")
-            end
-            imgui.Spacing()
-            
-            if isLoading then
-                imgui.TextDisabled("Loading characters...")
-            else
-                imgui.TextDisabled("No other characters found.")
-            end
-        else
-            -- Show all characters
-            for _, charInfo in ipairs(characters) do
-                local charName = charInfo.characterName or "Unknown"
-                local displayName = charName:sub(1, 1):upper() .. charName:sub(2):lower()
-                
-                local isCurrent = currentCharName and charName:lower() == currentCharName:lower()
-                local isActive = charInfo.isActive
-                
-                if isCurrent then
-                    imgui.TextColored({0.0, 1.0, 0.0, 1.0}, "* " .. displayName)
-                    imgui.SameLine()
-                    imgui.TextDisabled("(current)")
-                elseif isActive then
-                    imgui.TextColored({0.7, 0.9, 1.0, 1.0}, "  " .. displayName)
-                    imgui.SameLine()
-                    imgui.TextDisabled("(active)")
-                else
-                    imgui.Text("  " .. displayName)
-                end
-            end
-            
-            imgui.Spacing()
-            imgui.TextDisabled("Characters linked to your account.")
-        end
+        imgui.Spacing()
+        imgui.TextDisabled("You are viewing the friend list for this character.")
         
         imgui.Unindent()
     end

@@ -274,6 +274,50 @@ function M.getSettingsPath()
     return settingsPath
 end
 
+-- Migrate old settings to new format
+local function migrateSettings(settings)
+    if not settings or type(settings) ~= 'table' then
+        return settings
+    end
+    
+    -- Check version (default to 0 if not present)
+    local version = settings._version or 0
+    
+    -- Migration from version 0 to 1
+    if version < 1 then
+        print("[FFXIFriendList] Migrating settings from version 0 to 1...")
+        
+        -- Ensure data.serverSelection exists
+        if not settings.data then
+            settings.data = T{}
+        end
+        if not settings.data.serverSelection then
+            settings.data.serverSelection = T{
+                savedServerId = "",
+                savedServerBaseUrl = ServerConfig.DEFAULT_SERVER_URL,
+                detectedServerShownOnce = false,
+                helpSeenPerServer = T{}
+            }
+        end
+        
+        -- Ensure data.preferences exists
+        if not settings.data.preferences then
+            settings.data.preferences = T{}
+        end
+        
+        -- Ensure apiKey field exists
+        if not settings.data.apiKey then
+            settings.data.apiKey = ""
+        end
+        
+        -- Update version
+        settings._version = 1
+        print("[FFXIFriendList] Settings migrated to version 1")
+    end
+    
+    return settings
+end
+
 -- Load settings from disk
 local function loadFromDisk()
     local path = M.getSettingsPath()
@@ -290,9 +334,37 @@ local function loadFromDisk()
         settings = loadfile(file)()
     end)
     
-    if not status or type(settings) ~= 'table' then
+    if not status then
+        -- Log the error for debugging
+        print(string.format("[FFXIFriendList] Warning: Failed to load settings file: %s", tostring(err)))
+        print("[FFXIFriendList] Creating backup and using default settings...")
+        
+        -- Create backup of corrupted file
+        local backupFile = file .. '.backup.' .. os.time()
+        local success = pcall(function()
+            local source = io.open(file, 'rb')
+            if source then
+                local content = source:read('*a')
+                source:close()
+                local dest = io.open(backupFile, 'wb')
+                if dest then
+                    dest:write(content)
+                    dest:close()
+                    print(string.format("[FFXIFriendList] Backup saved to: %s", backupFile))
+                end
+            end
+        end)
+        
         return nil
     end
+    
+    if type(settings) ~= 'table' then
+        print("[FFXIFriendList] Warning: Settings file did not return a table, using defaults")
+        return nil
+    end
+    
+    -- Migrate old settings if needed
+    settings = migrateSettings(settings)
     
     return T(settings)
 end

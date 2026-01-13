@@ -125,7 +125,23 @@ ashita.events.register('load', 'ffxifriendlist_load', function()
     -- API keys are obtained from auth/ensure endpoint and saved here
     gConfig = settings.initialize()
     
-    -- Ensure data structure exists
+    -- Defensive: Ensure critical data structure exists even if settings load failed
+    if not gConfig then
+        print("[FFXIFriendList] ERROR: Failed to initialize settings, using emergency defaults")
+        gConfig = {
+            data = {
+                apiKey = "",
+                serverSelection = {
+                    savedServerId = "",
+                    savedServerBaseUrl = ServerConfig.DEFAULT_SERVER_URL,
+                    detectedServerShownOnce = false
+                },
+                preferences = {}
+            }
+        }
+    end
+    
+    -- Ensure data structure exists (defense against partial loads)
     if not gConfig.data then
         gConfig.data = {}
     end

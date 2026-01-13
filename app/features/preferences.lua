@@ -105,6 +105,13 @@ function M.Preferences:load()
     self.prefs.flistBindButton = getVal(prefs.flistBindButton, '')
     self.prefs.closeBindButton = getVal(prefs.closeBindButton, '')
     self.prefs.flBindButton = getVal(prefs.flBindButton, '')
+    -- Notification mute settings
+    self.prefs.dontSendNotificationsGlobal = getVal(prefs.dontSendNotificationsGlobal, false)
+    if prefs.mutedFriends and type(prefs.mutedFriends) == "table" then
+        self.prefs.mutedFriends = prefs.mutedFriends
+    else
+        self.prefs.mutedFriends = {}
+    end
     return true
 end
 
@@ -149,7 +156,9 @@ function M.Preferences:save()
         controllerLayout = self.prefs.controllerLayout,
         flistBindButton = self.prefs.flistBindButton,
         closeBindButton = self.prefs.closeBindButton,
-        flBindButton = self.prefs.flBindButton
+        flBindButton = self.prefs.flBindButton,
+        dontSendNotificationsGlobal = self.prefs.dontSendNotificationsGlobal,
+        mutedFriends = self.prefs.mutedFriends
     }
     
     -- Update preferences in the data section (preserves apiKeys, serverSelection, etc.)
@@ -340,6 +349,29 @@ function M.Preferences:refresh()
     })
     
     return requestId ~= nil
+end
+
+-- Check if a friend is muted by account ID
+function M.Preferences:isFriendMuted(friendAccountId)
+    if not friendAccountId then return false end
+    return self.prefs.mutedFriends[friendAccountId] == true
+end
+
+-- Toggle mute status for a friend by account ID
+function M.Preferences:toggleFriendMuted(friendAccountId)
+    if not friendAccountId then return false end
+    local currentlyMuted = self.prefs.mutedFriends[friendAccountId] == true
+    self.prefs.mutedFriends[friendAccountId] = not currentlyMuted
+    self:save()
+    return not currentlyMuted  -- Return new mute status
+end
+
+-- Set mute status for a friend by account ID
+function M.Preferences:setFriendMuted(friendAccountId, muted)
+    if not friendAccountId then return false end
+    self.prefs.mutedFriends[friendAccountId] = muted == true
+    self:save()
+    return self.prefs.mutedFriends[friendAccountId]
 end
 
 return M

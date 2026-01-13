@@ -288,6 +288,21 @@ function M.RenderPrivacyControlsSection(state, callbacks)
     imgui.Spacing()
     imgui.Spacing()
     
+    -- Notification muting
+    local dontSendNotifications = {prefs.dontSendNotificationsGlobal or false}
+    if imgui.Checkbox("Prevent Friend Notifications", dontSendNotifications) then
+        if app and app.features and app.features.preferences then
+            app.features.preferences:setPref("dontSendNotificationsGlobal", dontSendNotifications[1])
+            app.features.preferences:save()
+        end
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("When enabled, you won't receive notifications when friends come online.\n\n[Character-specific: Stored locally]")
+    end
+    
+    imgui.Spacing()
+    imgui.Spacing()
+    
     -- Show preview of how friends see your information
     M.RenderPresencePreview(prefs)
 end
@@ -323,75 +338,82 @@ function M.RenderPresencePreview(prefs)
         -- Invisible: friends see you as offline
         imgui.BeginGroup()
         imgui.TextDisabled("Status:")
-        imgui.SameLine(80)
+        imgui.SameLine(100)
         imgui.TextColored({0.5, 0.5, 0.5, 1.0}, "Offline")
         imgui.EndGroup()
         
-        imgui.TextDisabled("(Server: You appear offline to all friends)")
+        imgui.TextDisabled("You appear completely offline to all friends")
     else
-        -- Online or Away (from server preferences)
+        -- Online or Away
         local statusColor = presenceStatus == "away" and {1.0, 0.7, 0.2, 1.0} or {0.4, 0.9, 0.4, 1.0}
         local statusText = presenceStatus == "away" and "Away" or "Online"
         
         imgui.BeginGroup()
-        imgui.TextDisabled("Status (from server):")
-        imgui.SameLine(120)
+        imgui.TextDisabled("Status:")
+        imgui.SameLine(100)
         imgui.TextColored(statusColor, statusText)
         imgui.EndGroup()
         
-        -- Character name (from server)
+        -- Character name
         local charName = "Unknown"
         if charStatus and charStatus.characterName and charStatus.characterName ~= "" then
             charName = charStatus.characterName:sub(1,1):upper() .. charStatus.characterName:sub(2)
         end
         
-        imgui.TextDisabled("Character name:")
-        imgui.SameLine(120)
+        imgui.TextDisabled("Character:")
+        imgui.SameLine(100)
         imgui.Text(charName)
         
-        -- Job (from server state + preferences)
-        imgui.TextDisabled("Job (from server):")
-        imgui.SameLine(120)
+        -- Job
+        imgui.TextDisabled("Job:")
+        imgui.SameLine(100)
         if shareJobWhenAnonymous or (charStatus and not charStatus.isAnonymous) then
             local jobText = "Unknown"
-            if charStatus and charStatus.job and charStatus.job ~= "" then
-                jobText = charStatus.job
+            if charStatus and charStatus.job then
+                -- Format like friends table: "SMN 99/RDM 49"
+                local mainJob = tostring(charStatus.job)
+                local mainLevel = charStatus.jobLevel or 0
+                jobText = mainJob .. " " .. tostring(mainLevel)
+                
+                -- Add sub job if present
+                if charStatus.subJob and charStatus.subJob ~= "" and charStatus.subJobLevel and charStatus.subJobLevel > 0 then
+                    jobText = jobText .. "/" .. tostring(charStatus.subJob) .. " " .. tostring(charStatus.subJobLevel)
+                end
             end
             imgui.Text(jobText)
         else
-            imgui.TextColored({0.4, 0.65, 0.85, 1.0}, "Hidden (anonymous mode)")
+            imgui.TextColored({0.4, 0.65, 0.85, 1.0}, "Hidden")
         end
         
-        -- Nation/Rank (from server state + preferences)
-        imgui.TextDisabled("Nation/Rank (from server):")
-        imgui.SameLine(120)
+        -- Nation/Rank
+        imgui.TextDisabled("Nation:")
+        imgui.SameLine(100)
         if shareJobWhenAnonymous or (charStatus and not charStatus.isAnonymous) then
             local nationText = "Unknown"
-            if charStatus then
+            if charStatus and charStatus.nation then
                 local nationName = nations.getDisplayName(charStatus.nation, "Unknown")
-                local rankText = charStatus.rank or ""
-                if rankText ~= "" then
-                    nationText = nationName .. " " .. rankText
+                if charStatus.rank and charStatus.rank > 0 then
+                    nationText = nationName .. " " .. tostring(charStatus.rank)
                 else
                     nationText = nationName
                 end
             end
             imgui.Text(nationText)
         else
-            imgui.TextColored({0.4, 0.65, 0.85, 1.0}, "Hidden (anonymous mode)")
+            imgui.TextColored({0.4, 0.65, 0.85, 1.0}, "Hidden")
         end
         
-        -- Zone (from server state + shareLocation preference)
-        imgui.TextDisabled("Zone (from server):")
-        imgui.SameLine(120)
+        -- Zone
+        imgui.TextDisabled("Zone:")
+        imgui.SameLine(100)
         if shareLocation then
             local zoneText = "Unknown"
-            if charStatus and charStatus.zone and charStatus.zone ~= "" then
-                zoneText = charStatus.zone
+            if charStatus and charStatus.zone then
+                zoneText = tostring(charStatus.zone)
             end
             imgui.Text(zoneText)
         else
-            imgui.TextColored({0.4, 0.65, 0.85, 1.0}, "Hidden (location sharing off)")
+            imgui.TextColored({0.4, 0.65, 0.85, 1.0}, "Hidden")
         end
     end
 end
@@ -401,17 +423,56 @@ function M._fetchCharacterStatus(app)
         return
     end
     
+    -- Need connection for baseUrl and headers
+    if not app.features or not app.features.connection then
+        return
+    end
+    
+    local connection = app.features.connection
+    if not connection:isConnected() then
+        return
+    end
+    
     local Endpoints = require('protocol.Endpoints')
+    local Envelope = require('protocol.Envelope')
+    
+    -- Build full URL with base
+    local baseUrl = connection:getBaseUrl()
+    local url = baseUrl .. Endpoints.PRESENCE.ME
+    local headers = connection:getHeaders(connection:getCharacterName())
+    
     app.deps.net.request({
-        url = Endpoints.PRESENCE.ME,
+        url = url,
         method = 'GET',
+        headers = headers,
+        body = "",
         callback = function(success, response)
-            if success and response and response.data then
-                state.characterStatus = response.data
+            if not success then
+                if app.deps.logger and app.deps.logger.warn then
+                    app.deps.logger.warn("[PrivacyTab] Failed to fetch character status")
+                end
+                return
+            end
+            
+            local ok, envelope, errorMsg = Envelope.decode(response)
+            if not ok then
+                if app.deps.logger and app.deps.logger.warn then
+                    app.deps.logger.warn("[PrivacyTab] Failed to decode response: " .. tostring(errorMsg))
+                end
+                return
+            end
+            
+            if envelope.data then
+                state.characterStatus = envelope.data
+                if app.deps.logger and app.deps.logger.debug then
+                    app.deps.logger.debug("[PrivacyTab] Fetched character status: job=" .. tostring(envelope.data.job) .. 
+                        ", zone=" .. tostring(envelope.data.zone) .. 
+                        ", nation=" .. tostring(envelope.data.nation) .. 
+                        ", rank=" .. tostring(envelope.data.rank))
+                end
             end
         end
     })
-end
 end
 
 function M.RenderBlockedPlayersSection(state, dataModule, callbacks)

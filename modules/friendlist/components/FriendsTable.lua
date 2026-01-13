@@ -259,6 +259,22 @@ function M.RenderNameCell(friend, index, state, callbacks, sectionTag)
     local isPending = friend.isPending or false
     local uniqueId = (sectionTag or "main") .. "_" .. index
     
+    -- Check if friend is muted
+    local isMuted = false
+    local app = _G.FFXIFriendListApp
+    if app and app.features and app.features.preferences and friend.friendAccountId then
+        isMuted = app.features.preferences:isFriendMuted(friend.friendAccountId)
+    end
+    
+    -- Render mute indicator
+    if isMuted then
+        imgui.TextColored({0.7, 0.7, 0.0, 1.0}, "(M)")
+        if imgui.IsItemHovered() then
+            imgui.SetTooltip("Notifications muted for this friend")
+        end
+        imgui.SameLine()
+    end
+    
     if not icons.RenderStatusIcon(isOnline, isPending, 16, isAway) then
         local color = isPending and {1.0, 0.8, 0.0, 1.0} or 
                      isAway and {1.0, 0.7, 0.2, 1.0} or

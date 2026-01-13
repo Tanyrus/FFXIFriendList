@@ -670,6 +670,43 @@ function M.WsEventHandler:_notifyFriendOnline(characterName)
     local notifications = self.deps.notifications
     if not notifications then return end
     
+    -- Check global mute preference
+    local preferences = self.deps.preferences
+    if preferences and preferences.prefs then
+        if preferences.prefs.dontSendNotificationsGlobal then
+            return  -- Global mute enabled
+        end
+    end
+    
+    -- Find friend by character name to get accountId and lastSeenAt
+    local friends = self.deps.friends
+    if friends and friends.friendList then
+        local allFriends = friends.friendList:getFriends()
+        for _, friend in ipairs(allFriends) do
+            if string.lower(friend.name) == string.lower(characterName) then
+                -- Check per-friend mute
+                if preferences and friend.friendAccountId then
+                    if preferences:isFriendMuted(friend.friendAccountId) then
+                        return  -- Friend is muted
+                    end
+                end
+                
+                -- Check 3-minute threshold
+                if friend.lastSeenAt and friend.lastSeenAt > 0 then
+                    local Limits = require("constants.limits")
+                    local currentTime = self:_getTime()
+                    local offlineDuration = (currentTime - friend.lastSeenAt) / 1000  -- Convert to seconds
+                    
+                    if offlineDuration < Limits.MIN_OFFLINE_DURATION_FOR_NOTIFICATION then
+                        return  -- Friend was offline for less than 3 minutes
+                    end
+                end
+                
+                break
+            end
+        end
+    end
+    
     local Notifications = require("app.features.notifications")
     local displayName = self:_capitalizeName(characterName or "")
     

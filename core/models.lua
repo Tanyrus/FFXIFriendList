@@ -122,6 +122,9 @@ function M.Preferences.new()
     self.flistBindButton = ''
     self.closeBindButton = ''
     self.flBindButton = ''
+    -- Notification mute settings
+    self.dontSendNotificationsGlobal = false
+    self.mutedFriends = {}  -- Table keyed by friendAccountId
     return self
 end
 

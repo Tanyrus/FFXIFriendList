@@ -29,6 +29,8 @@ local state = {
     initialized = false,
     hidden = false,
     selectedFriendForDetails = nil,
+    confirmBlockAndRemove = nil,  -- Stores { accountId, name } pending confirmation
+    confirmBlockAndRemovePopupOpened = false,  -- Track if popup was opened
     newFriendName = {""},
     newFriendNote = {""},
     selectedTab = 0,
@@ -431,6 +433,55 @@ function M.DrawWindow(settings, dataModule)
     
     if state.selectedFriendForDetails then
         FriendDetailsPopup.Render(state.selectedFriendForDetails, state, M.GetCallbacks(dataModule))
+    end
+    
+    -- Render Block & Remove confirmation modal
+    M.RenderBlockAndRemoveModal(state, M.GetCallbacks(dataModule))
+end
+
+function M.RenderBlockAndRemoveModal(state, callbacks)
+    if not state.confirmBlockAndRemove then return end
+    
+    local confirmData = state.confirmBlockAndRemove
+    if not confirmData.accountId or not confirmData.name then return end
+    
+    -- Open popup on first render of confirmation state
+    if not state.confirmBlockAndRemovePopupOpened then
+        imgui.OpenPopup("BlockAndRemoveConfirm")
+        state.confirmBlockAndRemovePopupOpened = true
+    end
+    
+    local isOpen = {true}
+    if imgui.BeginPopupModal("BlockAndRemoveConfirm", isOpen, ImGuiWindowFlags_AlwaysAutoResize) then
+        imgui.Text("Block & Remove Friend?")
+        imgui.Separator()
+        imgui.Text(string.format("Are you sure you want to block and remove '%s' from your friends?", confirmData.name))
+        imgui.Text("This action cannot be undone easily.")
+        imgui.Spacing()
+        imgui.Spacing()
+        
+        imgui.PushStyleColor(ImGuiCol_Button, {0.8, 0.2, 0.2, 1.0})
+        if imgui.Button("Block & Remove", {120, 0}) then
+            if callbacks.onBlockAndRemoveFriend then
+                callbacks.onBlockAndRemoveFriend(confirmData.accountId, confirmData.name)
+            end
+            state.confirmBlockAndRemove = nil
+            state.confirmBlockAndRemovePopupOpened = false
+            imgui.CloseCurrentPopup()
+        end
+        imgui.PopStyleColor()
+        
+        imgui.SameLine()
+        if imgui.Button("Cancel", {120, 0}) then
+            state.confirmBlockAndRemove = nil
+            state.confirmBlockAndRemovePopupOpened = false
+            imgui.CloseCurrentPopup()
+        end
+        
+        imgui.EndPopup()
+    else
+        state.confirmBlockAndRemove = nil
+        state.confirmBlockAndRemovePopupOpened = false
     end
 end
 
@@ -1539,6 +1590,39 @@ function M.GetCallbacks(dataModule)
         onRemoveFriend = function(friendName)
             if app and app.features and app.features.friends then
                 app.features.friends:removeFriend(friendName)
+            end
+        end,
+        
+        onToggleMuteFriend = function(friendAccountId)
+            if app and app.features and app.features.preferences then
+                app.features.preferences:toggleFriendMuted(friendAccountId)
+            end
+        end,
+        
+        onBlockAndRemoveFriend = function(friendAccountId, friendName)
+            if not app or not app.features then return end
+            
+            -- First block the player
+            if app.features.blocklist then
+                app.features.blocklist:block(friendName, function(blockSuccess, blockResult)
+                    if blockSuccess then
+                        -- Then remove friend (with retry if it fails)
+                        if app.features.friends then
+                            app.features.friends:removeFriend(friendName)
+                            -- Note: If remove fails, they're still blocked but will show in friend list
+                            -- Server-side they should be auto-filtered from friend list on next snapshot
+                        end
+                    else
+                        -- Block failed - retry once
+                        if app.features.blocklist then
+                            app.features.blocklist:block(friendName, function(retrySuccess, retryResult)
+                                if retrySuccess and app.features.friends then
+                                    app.features.friends:removeFriend(friendName)
+                                end
+                            end)
+                        end
+                    end
+                end)
             end
         end,
         

@@ -2,20 +2,19 @@ local imgui = require('imgui')
 local utils = require('modules.friendlist.components.helpers.utils')
 local icons = require('libs.icons')
 local tagcore = require('core.tagcore')
+local nations = require('core.nations')
+local IconText = require('ui.helpers.IconText')
 
 local M = {}
 
 local TOOLTIP_CONSTANTS = {
     LABEL_WIDTH = 95,
     VALUE_UNKNOWN = "Unknown",
-    VALUE_ANON = "Anon",
+    VALUE_ANON = "Anonymous",
+    ICON_SIZE = 16,
 }
 
-local NATION_ICON_NAMES = {
-    [0] = "nation_sandoria",
-    [1] = "nation_bastok",
-    [2] = "nation_windurst"
-}
+local NATION_ICON_NAMES = nations.ICON_NAMES
 
 local function getValueOrAnon(val)
     if val == nil then return TOOLTIP_CONSTANTS.VALUE_ANON end
@@ -58,25 +57,27 @@ function M.Render(friend, settings, forceAll)
     end
     
     if showAll or (settings and settings.showNationRank) then
-        local nationIconName = NATION_ICON_NAMES[presence.nation]
+        local nationIconName = nations.getIconName(presence.nation)
         
         imgui.TextDisabled("Nation:")
         imgui.SameLine(TOOLTIP_CONSTANTS.LABEL_WIDTH)
         
-        -- If nation is hidden, show Anon (ignore rank)
+        -- If nation is hidden/unknown, show Anonymous
         if not nationIconName then
             imgui.Text(TOOLTIP_CONSTANTS.VALUE_ANON)
         else
-            -- Nation is visible - show icon and rank
-            icons.RenderIcon(nationIconName, 14, 14)
+            -- Nation is visible - show icon and rank with proper vertical centering
+            IconText.renderIconAligned(nationIconName, TOOLTIP_CONSTANTS.ICON_SIZE, IconText.SPACING.NORMAL)
             
             local rank = presence.rank or ""
             if type(rank) ~= "string" then rank = tostring(rank) end
             local rankNum = rank:match("%d+") or ""
             
             if rankNum ~= "" and rankNum ~= "0" then
-                imgui.SameLine(0, 4)
                 imgui.Text("Rank " .. rankNum)
+            else
+                -- Show nation name if no rank
+                imgui.Text(nations.getDisplayName(presence.nation))
             end
         end
     end
@@ -87,8 +88,10 @@ function M.Render(friend, settings, forceAll)
         if isOnline then
             imgui.Text("Now")
         else
-            local lastSeenAt = presence.lastSeenAt or 0
-            if type(lastSeenAt) == "number" and lastSeenAt > 0 then
+            local lastSeenRaw = presence.lastSeenAt or 0
+            -- Normalize to handle ISO8601 strings from server
+            local lastSeenAt = utils.normalizeLastSeen(lastSeenRaw)
+            if lastSeenAt > 0 then
                 imgui.Text(utils.formatRelativeTime(lastSeenAt))
             else
                 imgui.Text(TOOLTIP_CONSTANTS.VALUE_UNKNOWN)
@@ -106,6 +109,8 @@ function M.Render(friend, settings, forceAll)
             imgui.Text(TOOLTIP_CONSTANTS.VALUE_UNKNOWN)
         end
     end
+    
+
     
     local app = _G.FFXIFriendListApp
     local tagsFeature = app and app.features and app.features.tags

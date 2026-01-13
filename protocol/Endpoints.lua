@@ -1,75 +1,85 @@
+-- Endpoints.lua
+-- New server endpoint definitions (friendlist-server)
+-- Source of truth: friendlist-server/src/routes/*.ts
+
 local M = {}
 
+-- API prefix
 M.API_PREFIX = "/api"
 
+-- Health check (no auth)
+M.HEALTH = "/health"
+
+-- Version (no auth)
+M.VERSION = "/api/version"
+
+-- Server list (no auth)
+M.SERVERS = "/api/servers"
+
+-- WebSocket upgrade endpoint
+M.WEBSOCKET = "/ws"
+
+-- Authentication endpoints
 M.AUTH = {
-    ENSURE = "/api/auth/ensure"
+    REGISTER = "/api/auth/register",
+    ENSURE = "/api/auth/ensure",
+    ADD_CHARACTER = "/api/auth/add-character",
+    SET_ACTIVE = "/api/auth/set-active",
+    ME = "/api/auth/me"
 }
 
-M.HEARTBEAT = "/api/heartbeat"
-
+-- Friends endpoints
 M.FRIENDS = {
     LIST = "/api/friends",
-    REQUESTS = "/api/friends/requests",
-    SEND_REQUEST = "/api/friends/requests/request",
-    ACCEPT = "/api/friends/requests/accept",
-    REJECT = "/api/friends/requests/reject",
-    CANCEL = "/api/friends/requests/cancel",
-    VISIBILITY = "/api/friends/visibility"
+    SEND_REQUEST = "/api/friends/request",
+    REQUESTS_PENDING = "/api/friends/requests/pending",
+    REQUESTS_OUTGOING = "/api/friends/requests/outgoing",
+    CHARACTER_AND_FRIENDS = "/api/friends/character-and-friends"
 }
 
-M.CHARACTERS = {
-    LIST = "/api/characters",
-    ACTIVE = "/api/characters/active",
-    STATE = "/api/characters/state",
-    PRIVACY = "/api/characters/privacy"
-}
+-- Friend request actions (dynamic paths)
+function M.friendRequestAccept(requestId)
+    return "/api/friends/requests/" .. tostring(requestId) .. "/accept"
+end
 
-M.PREFERENCES = "/api/preferences"
+function M.friendRequestDecline(requestId)
+    return "/api/friends/requests/" .. tostring(requestId) .. "/decline"
+end
 
-M.NOTES = {
-    LIST = "/api/notes"
-}
+-- Cancel friend request (dynamic path by requestId)
+function M.friendRequestCancel(requestId)
+    return "/api/friends/requests/" .. tostring(requestId)
+end
 
+-- Remove friend (dynamic path by accountId)
+function M.friendRemove(accountId)
+    return "/api/friends/" .. tostring(accountId)
+end
+
+-- Remove friend visibility only (dynamic path by characterName)
+function M.friendVisibilityDelete(characterName)
+    return "/api/friends/" .. tostring(characterName) .. "/visibility"
+end
+
+-- Block endpoints
 M.BLOCK = {
-    LIST = "/api/blocked",
+    LIST = "/api/block",
     ADD = "/api/block"
 }
 
-M.SERVERS = "/api/servers"
-
-function M.friendDelete(friendName)
-    local encodedName = friendName:gsub("([^%w%-%.%_])", function(c)
-        return string.format("%%%02X", string.byte(c))
-    end)
-    return "/api/friends/" .. encodedName
+-- Unblock (dynamic path by accountId)
+function M.blockRemove(accountId)
+    return "/api/block/" .. tostring(accountId)
 end
 
-function M.noteGet(friendName)
-    local encodedName = friendName:gsub("([^%w%-%.%_])", function(c)
-        return string.format("%%%02X", string.byte(c))
-    end)
-    return "/api/notes/" .. encodedName
-end
+-- Preferences endpoints
+M.PREFERENCES = "/api/preferences"
 
-function M.noteUpdate(friendName)
-    return M.noteGet(friendName)
-end
-
-function M.noteDelete(friendName)
-    return M.noteGet(friendName)
-end
-
-function M.friendVisibilityDelete(friendName)
-    local encodedName = friendName:gsub("([^%w%-%.%_])", function(c)
-        return string.format("%%%02X", string.byte(c))
-    end)
-    return "/api/friends/" .. encodedName .. "/visibility"
-end
-
-function M.blockRemove(blockedAccountId)
-    return "/api/block/" .. tostring(blockedAccountId)
-end
+-- Presence endpoints
+M.PRESENCE = {
+    ME = "/api/presence/me",
+    UPDATE = "/api/presence/update",
+    HEARTBEAT = "/api/presence/heartbeat"
+}
 
 return M
-

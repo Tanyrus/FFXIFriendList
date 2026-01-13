@@ -11,7 +11,12 @@ local state = {
     friends = {},
     incomingRequests = {},
     outgoingRequests = {},
+    characters = {},
+    charactersFetched = false,
     connectionState = "uninitialized",
+    wsConnectionState = "DISCONNECTED",
+    wsStatusText = "Disconnected",
+    wsStatusDetail = "",
     friendsState = "idle",  -- Track friends sync state: idle, syncing, error
     lastError = nil,
     lastUpdatedAt = nil
@@ -67,6 +72,19 @@ function M.Update()
     else
         state.connectionState = "uninitialized"
     end
+    
+    -- Update WebSocket connection state for real-time status
+    if appState.wsConnection then
+        state.wsConnectionState = appState.wsConnection.state or "DISCONNECTED"
+        state.wsStatusText = appState.wsConnection.statusText or "Disconnected"
+        state.wsStatusDetail = appState.wsConnection.statusDetail or ""
+    end
+    
+    -- Fetch characters list if we have app access (only once)
+    if app and app.features and app.features.friends and not state.charactersFetched then
+        state.charactersFetched = true
+        M._FetchCharacters(app)
+    end
 end
 
 -- Get friends list
@@ -114,6 +132,16 @@ function M.IsConnected()
     return state.connectionState == "connected"
 end
 
+-- Get WebSocket connection status for UI display
+function M.GetWsStatus()
+    return state.wsStatusText, state.wsStatusDetail
+end
+
+-- Check if WebSocket is connected
+function M.IsWsConnected()
+    return state.wsConnectionState == "CONNECTED"
+end
+
 -- Get blocked players list
 function M.GetBlockedPlayers()
     local app = _G.FFXIFriendListApp
@@ -132,12 +160,37 @@ function M.GetBlockedPlayersCount()
     return 0
 end
 
+-- Get characters list
+function M.GetCharacters()
+    return state.characters
+end
+
+-- Fetch characters from server
+function M._FetchCharacters(app)
+    if not app or not app.features or not app.features.friends then
+        return
+    end
+    
+    -- Call the friends feature's refresh method which includes character data
+    local friends = app.features.friends
+    if friends and friends._fetchCharacterList then
+        friends:_fetchCharacterList()
+    end
+end
+
+-- Set characters (called by friends feature)
+function M.SetCharacters(characters)
+    state.characters = characters or {}
+end
+
 -- Cleanup
 function M.Cleanup()
     state.initialized = false
     state.friends = {}
     state.incomingRequests = {}
     state.outgoingRequests = {}
+    state.characters = {}
+    state.charactersFetched = false
 end
 
 return M

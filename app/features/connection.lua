@@ -1,11 +1,9 @@
 local M = {}
 local RequestEncoder = require("protocol.Encoding.RequestEncoder")
 local Envelope = require("protocol.Envelope")
-local DecodeRouter = require("protocol.DecodeRouter")
-local MessageTypes = require("protocol.MessageTypes")
 local Endpoints = require("protocol.Endpoints")
-
-local DEFAULT_SERVER_URL = "https://api.horizonfriendlist.com"
+local ServerConfig = require("core.ServerConfig")
+local VersionCore = require("core.versioncore")
 
 M.ConnectionState = {
     Disconnected = "Disconnected",
@@ -103,9 +101,10 @@ function M.Connection.new(deps)
     self.session = deps.session
     self.prefsStore = deps.storage
     self.realmDetector = deps.realmDetector
+    self._timeMs = deps.time or function() return os.clock() * 1000 end
     
     self.state = M.ConnectionState.Disconnected
-    self.apiKeys = {}
+    self.apiKey = ""  -- Single API key for the account
     self.savedServerId = nil
     self.savedServerBaseUrl = nil
     self.savedRealmId = nil
@@ -116,11 +115,32 @@ function M.Connection.new(deps)
     self.autoConnectAttempted = false
     self.autoConnectInProgress = false
     self.lastCharacterName = ""
+    self.retryAttemptCount = 0
+    self.nextAutoConnectAt = nil
+    self.backoffBaseMs = 2000
+    self.backoffMaxMs = 60000
     
-    if _G.gConfig and _G.gConfig.data and _G.gConfig.data.apiKeys then
-        for charName, apiKey in pairs(_G.gConfig.data.apiKeys) do
-            if apiKey and apiKey ~= "" then
-                self.apiKeys[charName] = apiKey
+    -- Load API key (single key model)
+    if _G.gConfig and _G.gConfig.data and _G.gConfig.data.apiKey and _G.gConfig.data.apiKey ~= "" then
+        self.apiKey = _G.gConfig.data.apiKey
+    -- Migration: check old per-realm or per-character keys
+    elseif _G.gConfig and _G.gConfig.data then
+        -- Try apiKeysByRealm first
+        if _G.gConfig.data.apiKeysByRealm then
+            for _, apiKey in pairs(_G.gConfig.data.apiKeysByRealm) do
+                if apiKey and apiKey ~= "" then
+                    self.apiKey = apiKey
+                    break
+                end
+            end
+        end
+        -- Try old apiKeys (per-character) if still empty
+        if self.apiKey == "" and _G.gConfig.data.apiKeys then
+            for _, apiKey in pairs(_G.gConfig.data.apiKeys) do
+                if apiKey and apiKey ~= "" then
+                    self.apiKey = apiKey
+                    break
+                end
             end
         end
     end
@@ -129,7 +149,7 @@ function M.Connection.new(deps)
         local serverSel = _G.gConfig.data.serverSelection
         if serverSel.savedServerId and serverSel.savedServerId ~= "" then
             self.savedServerId = serverSel.savedServerId
-            self.savedServerBaseUrl = serverSel.savedServerBaseUrl or DEFAULT_SERVER_URL
+            self.savedServerBaseUrl = serverSel.savedServerBaseUrl or ServerConfig.DEFAULT_SERVER_URL
             self.savedRealmId = serverSel.savedServerId
             if self.logger and self.logger.info then
                 self.logger.info("[Connection] Loaded saved server: " .. tostring(self.savedServerId) .. " (" .. tostring(self.savedServerBaseUrl) .. "), realm: " .. tostring(self.savedRealmId))
@@ -156,18 +176,30 @@ function M.Connection:tick(dtSeconds)
         return
     end
     
-    if self:isConnected() or self.autoConnectInProgress or self.autoConnectAttempted then
-        return
-    end
-    
     local characterName = getCharacterName()
     if characterName == "" then
         return
     end
     
+    -- BUG 2 FIX: Detect character change even when connected
     if characterName ~= self.lastCharacterName then
+        local previousCharacter = self.lastCharacterName
         self.lastCharacterName = characterName
-        if self.autoConnectAttempted then
+        
+        if self:isConnected() then
+            -- Character changed while connected - trigger re-auth to update active character
+            if self.logger and self.logger.info then
+                self.logger.info(string.format("[Connection] Character changed from %s to %s while connected, triggering re-auth",
+                    tostring(previousCharacter), characterName))
+            end
+            -- Reset connection state to trigger re-auth
+            self.autoConnectAttempted = false
+            self.autoConnectInProgress = false
+            self.state = M.ConnectionState.Disconnected
+            -- Trigger immediate re-connect with new character
+            self:autoConnect(characterName)
+            return
+        elseif self.autoConnectAttempted then
             self.autoConnectAttempted = false
             self.autoConnectInProgress = false
             if self.logger and self.logger.info then
@@ -176,6 +208,25 @@ function M.Connection:tick(dtSeconds)
         end
     end
     
+    -- If previously failed, schedule retry with backoff
+    if (self.state == M.ConnectionState.Failed or self.state == M.ConnectionState.Disconnected) then
+        if self.autoConnectInProgress then
+            return
+        end
+        -- If a retry is scheduled and not yet due, wait
+        if self.nextAutoConnectAt and self._timeMs() < self.nextAutoConnectAt then
+            return
+        end
+        -- Ready to retry
+        self.autoConnectAttempted = false
+        self:autoConnect(characterName)
+        return
+    end
+
+    if self:isConnected() or self.autoConnectInProgress or self.autoConnectAttempted then
+        return
+    end
+
     self:autoConnect(characterName)
 end
 
@@ -255,20 +306,21 @@ function M.Connection:canConnect()
            self.state == M.ConnectionState.Failed
 end
 
+-- Single API key for the account (characterName param kept for backward compat but ignored)
 function M.Connection:getApiKey(characterName)
-    return self.apiKeys[characterName] or ""
+    return self.apiKey or ""
 end
 
 function M.Connection:setApiKey(characterName, apiKey)
-    self.apiKeys[characterName] = apiKey
+    self.apiKey = apiKey or ""
 end
 
 function M.Connection:hasApiKey(characterName)
-    return self.apiKeys[characterName] ~= nil and self.apiKeys[characterName] ~= ""
+    return self.apiKey ~= nil and self.apiKey ~= ""
 end
 
 function M.Connection:clearApiKey(characterName)
-    self.apiKeys[characterName] = nil
+    self.apiKey = ""
 end
 
 function M.Connection:hasSavedServer()
@@ -283,6 +335,11 @@ function M.Connection:setSavedServer(serverId, baseUrl)
     self.savedServerId = serverId
     self.savedServerBaseUrl = baseUrl
     self.savedRealmId = serverId
+    
+    -- Reset auto-connect flags so tick() will trigger a new connection attempt
+    self.autoConnectAttempted = false
+    self.autoConnectInProgress = false
+    
     if self.logger and self.logger.echo then
         self.logger.echo("Server selected: " .. tostring(serverId) .. " (" .. tostring(baseUrl) .. ")")
     elseif self.logger and self.logger.info then
@@ -314,7 +371,7 @@ function M.Connection:getBaseUrl()
     if self.savedServerBaseUrl and self.savedServerBaseUrl ~= "" then
         return self.savedServerBaseUrl
     end
-    return DEFAULT_SERVER_URL
+    return ServerConfig.DEFAULT_SERVER_URL
 end
 
 function M.Connection:getCharacterName()
@@ -325,17 +382,24 @@ function M.Connection:isGameAlive()
     return isGameAlive()
 end
 
+-- Get auth headers matching new server middleware (friendlist-server/src/middleware/auth.ts)
+-- Required: Authorization: Bearer <apiKey>
+-- Optional: X-Character-Name, X-Realm-Id (for endpoints requiring character context)
 function M.Connection:getHeaders(characterName)
     characterName = characterName or ""
-    local ProtocolVersion = require("protocol.ProtocolVersion")
-    local addonVersion = addon and addon.version or "0.9.9"
+    local addonVersion = addon and addon.version or VersionCore.ADDON_VERSION
     
     local headers = {
         ["Content-Type"] = "application/json",
-        ["User-Agent"] = "FFXIFriendList/" .. addonVersion,
-        ["X-Protocol-Version"] = ProtocolVersion.PROTOCOL_VERSION
+        ["User-Agent"] = "FFXIFriendList/" .. addonVersion
     }
     
+    -- Add character name header if provided
+    if characterName ~= "" then
+        headers["X-Character-Name"] = characterName
+    end
+    
+    -- Add realm ID header
     local realmIdForHeader = nil
     if self.savedRealmId and self.savedRealmId ~= "" then
         realmIdForHeader = self.savedRealmId
@@ -346,24 +410,17 @@ function M.Connection:getHeaders(characterName)
         headers["X-Realm-Id"] = realmIdForHeader
     end
     
+    -- Add Authorization header (Bearer token format)
     if characterName ~= "" then
         local apiKey = self:getApiKey(characterName)
         if apiKey ~= "" then
-            headers["X-API-Key"] = apiKey
-            headers["characterName"] = characterName
+            headers["Authorization"] = "Bearer " .. apiKey
             if self.logger and self.logger.debug then
-                self.logger.debug("[Connection] Headers: API key present for " .. characterName)
+                self.logger.debug("[Connection] Headers: Auth token present for " .. characterName)
             end
         else
             if self.logger and self.logger.warn then
                 self.logger.warn("[Connection] Headers: No API key for " .. characterName)
-            end
-        end
-        
-        if self.session and self.session.getSessionId then
-            local sessionId = self.session:getSessionId()
-            if sessionId and sessionId ~= "" then
-                headers["X-Session-Id"] = sessionId
             end
         end
     end
@@ -405,59 +462,42 @@ function M.Connection:autoConnect(characterName)
     
     local storedApiKey = self:getApiKey(normalizedName)
     
-    -- If no API key for this character, use any available API key from linked characters
-    -- This allows alt registration to link to the existing account
-    if not storedApiKey or storedApiKey == "" then
-        for charName, apiKey in pairs(self.apiKeys) do
-            if apiKey and apiKey ~= "" then
-                storedApiKey = apiKey
-                if self.logger and self.logger.debug then
-                    self.logger.debug("[Connection] Using API key from " .. charName .. " for alt registration")
-                end
-                break
-            end
-        end
-    end
+    -- With per-realm API keys, we don't need to search through character keys
+    -- The getApiKey() already returns the realm's API key if available
     
     local function attemptConnect()
         local baseUrl = self:getBaseUrl()
         baseUrl = baseUrl:gsub("/+$", "")
         
-        -- If we have an API key, use /api/characters/active (auto-creates character on same account)
-        -- If no API key, use /api/auth/ensure (new registration or recovery)
+        -- New server auth flow:
+        -- If we have an API key, use /api/auth/add-character to add this character
+        -- If no API key, use /api/auth/register to create a new account
         local hasApiKey = storedApiKey and storedApiKey ~= ""
         local url, requestBody
         
         if hasApiKey then
-            -- Use characters/active endpoint (matches C++ behavior)
-            url = baseUrl .. Endpoints.CHARACTERS.ACTIVE
-            requestBody = RequestEncoder.encodeSetActiveCharacter(normalizedName, realmId)
+            -- Add character to account (creates if needed, links if exists)
+            url = baseUrl .. Endpoints.AUTH.ADD_CHARACTER
+            requestBody = RequestEncoder.encodeAddCharacter(normalizedName, realmId)
         else
-            -- Use auth/ensure for new registrations
-            url = baseUrl .. Endpoints.AUTH.ENSURE
-            requestBody = RequestEncoder.encodeAuthEnsure(normalizedName, realmId)
+            -- No API key - register as new user
+            url = baseUrl .. Endpoints.AUTH.REGISTER
+            requestBody = RequestEncoder.encodeRegister(normalizedName, realmId)
         end
         
-        local ProtocolVersion = require("protocol.ProtocolVersion")
-        local addonVersion = addon and addon.version or "0.9.9"
+        local addonVersion = addon and addon.version or VersionCore.ADDON_VERSION
         local headers = {
             ["Content-Type"] = "application/json",
             ["User-Agent"] = "FFXIFriendList/" .. addonVersion,
-            ["X-Protocol-Version"] = ProtocolVersion.PROTOCOL_VERSION
+            ["X-Character-Name"] = normalizedName
         }
         
+        -- Add Authorization header (Bearer token format) if we have an API key
         if hasApiKey then
-            headers["X-API-Key"] = storedApiKey
-            headers["characterName"] = normalizedName
+            headers["Authorization"] = "Bearer " .. storedApiKey
         end
         
-        if self.session and self.session.getSessionId then
-            local sessionId = self.session:getSessionId()
-            if sessionId and sessionId ~= "" then
-                headers["X-Session-Id"] = sessionId
-            end
-        end
-        
+        -- Add realm ID header
         local realmIdForHeader = nil
         if self.savedRealmId and self.savedRealmId ~= "" then
             realmIdForHeader = self.savedRealmId
@@ -506,6 +546,19 @@ function M.Connection:handleAuthResponse(success, response, characterName, fallb
     if not success then
         self:setFailed()
         self.lastError = response or "Network error"
+        -- Schedule retry with exponential backoff + jitter
+        local attempt = math.max(1, self.retryAttemptCount + 1)
+        local delay = self.backoffBaseMs * (2 ^ (attempt - 1))
+        delay = math.min(delay, self.backoffMaxMs)
+        local jitterRange = math.floor(delay * 0.2)
+        local jitter = (math.random(0, jitterRange * 2) - jitterRange)
+        delay = math.max(250, delay + jitter)
+        self.nextAutoConnectAt = self._timeMs() + delay
+        self.retryAttemptCount = attempt
+        self.autoConnectAttempted = false
+        if self.logger and self.logger.warn then
+            self.logger.warn(string.format("[Connection] Auth failed; retry in %.1fs (attempt %d)", delay / 1000, attempt))
+        end
         if self.logger and self.logger.echo then
             self.logger.echo("Connection failed: " .. tostring(self.lastError))
         elseif self.logger and self.logger.error then
@@ -514,61 +567,35 @@ function M.Connection:handleAuthResponse(success, response, characterName, fallb
         return
     end
     
-    local ok, envelope = Envelope.decode(response)
+    -- Use new envelope decoder for { success, data, timestamp } format
+    local ok, result, errorMsg = Envelope.decode(response)
     if not ok then
         self:setFailed()
-        self.lastError = envelope or "Failed to decode response"
+        self.lastError = errorMsg or result or "Failed to decode response"
         if self.logger and self.logger.error then
             self.logger.error("[Connection] Envelope decode failed: " .. tostring(self.lastError))
         end
         return
     end
     
-    -- Accept both AuthEnsureResponse (new registration) and SetActiveCharacterResponse (alt linking)
-    local validResponseTypes = {
-        [MessageTypes.ResponseType.AuthEnsureResponse] = true,
-        [MessageTypes.ResponseType.SetActiveCharacterResponse] = true
-    }
-    if not envelope.success or not validResponseTypes[envelope.type] then
-        self:setFailed()
-        self.lastError = envelope.error or "Authentication failed"
-        if self.logger and self.logger.echo then
-            self.logger.echo("Authentication failed: " .. tostring(self.lastError))
-        elseif self.logger and self.logger.error then
-            self.logger.error("[Connection] Auth failed: " .. tostring(self.lastError))
-        end
-        return
-    end
+    -- result contains { success, data, timestamp }
+    local data = result.data or {}
     
-    local decodeOk, result = DecodeRouter.decode(envelope)
-    if not decodeOk then
-        self:setFailed()
-        self.lastError = result or "Failed to decode response"
-        return
-    end
-    
-    local apiKey = ""
-    if result and type(result) == "table" then
-        apiKey = result.apiKey or ""
-    end
-    if apiKey == "" and envelope.payload and type(envelope.payload) == "table" then
-        apiKey = envelope.payload.apiKey or ""
-    end
-    
-    if apiKey == "" then
-        apiKey = fallbackApiKey or ""
-    end
+    -- Check for API key in response (from /api/auth/register)
+    -- The register endpoint returns { apiKey, accountId, character }
+    local apiKey = data.apiKey or fallbackApiKey or ""
     
     if apiKey and apiKey ~= "" then
-        self:setApiKey(characterName, apiKey)
+        self:setApiKey(nil, apiKey)  -- Single API key, characterName ignored
+        -- Persist to config
         if _G.gConfig then
             if not _G.gConfig.data then
                 _G.gConfig.data = {}
             end
-            if not _G.gConfig.data.apiKeys then
-                _G.gConfig.data.apiKeys = {}
-            end
-            _G.gConfig.data.apiKeys[characterName] = apiKey
+            _G.gConfig.data.apiKey = apiKey
+            -- Clean up old structures if present
+            _G.gConfig.data.apiKeys = nil
+            _G.gConfig.data.apiKeysByRealm = nil
             local settings = require("libs.settings")
             if settings and settings.save then
                 settings.save()
@@ -576,6 +603,77 @@ function M.Connection:handleAuthResponse(success, response, characterName, fallb
         end
     end
     
+    -- BUG 2 FIX: Extract character ID and set as active character
+    -- This ensures friends see the correct character after switching
+    local characterId = nil
+    if data.character and data.character.id then
+        characterId = data.character.id
+    end
+    
+    -- Store the character ID for later use
+    self.lastCharacterId = characterId
+    self.lastSetActiveAt = nil
+    -- Reset backoff on success
+    self.retryAttemptCount = 0
+    self.nextAutoConnectAt = nil
+    
+    -- If we have a character ID, call set-active to ensure this is the active character
+    if characterId and apiKey and apiKey ~= "" then
+        self:setActiveCharacter(characterId, characterName, apiKey)
+    else
+        -- No character ID available, proceed with connection
+        self:completeConnection(characterName)
+    end
+end
+
+-- BUG 2 FIX: Set the active character on the server
+function M.Connection:setActiveCharacter(characterId, characterName, apiKey)
+    if not self.net then
+        self:completeConnection(characterName)
+        return
+    end
+    
+    local baseUrl = self:getBaseUrl()
+    baseUrl = baseUrl:gsub("/+$", "")
+    
+    local url = baseUrl .. Endpoints.AUTH.SET_ACTIVE
+    local requestBody = RequestEncoder.encodeSetActiveCharacter(characterId)
+    
+    local addonVersion = addon and addon.version or VersionCore.ADDON_VERSION
+    local headers = {
+        ["Content-Type"] = "application/json",
+        ["User-Agent"] = "FFXIFriendList/" .. addonVersion,
+        ["Authorization"] = "Bearer " .. apiKey
+    }
+    
+    if self.logger and self.logger.debug then
+        self.logger.debug("[Connection] Setting active character: " .. tostring(characterId))
+    end
+    
+    self.net.request({
+        url = url,
+        method = "POST",
+        headers = headers,
+        body = requestBody,
+        callback = function(success, response)
+            if success then
+                self.lastSetActiveAt = os.time() * 1000
+                if self.logger and self.logger.debug then
+                    self.logger.debug("[Connection] Set active character succeeded")
+                end
+            else
+                if self.logger and self.logger.warn then
+                    self.logger.warn("[Connection] Set active character failed: " .. tostring(response))
+                end
+            end
+            -- Complete connection regardless of set-active result
+            self:completeConnection(characterName)
+        end
+    })
+end
+
+-- Complete the connection process after auth and set-active
+function M.Connection:completeConnection(characterName)
     self:setConnected()
     if self.logger and self.logger.echo then
         self.logger.echo("Connected to server as " .. characterName)
@@ -598,6 +696,10 @@ function M.Connection:handleAuthResponse(success, response, characterName, fallb
         if App and App._triggerStartupRefresh then
             App._triggerStartupRefresh(app)
             app._startupRefreshCompleted = true
+            -- Ensure WS connection requested (in case we came online later)
+            if app.features and app.features.wsConnectionManager then
+                app.features.wsConnectionManager:requestConnect()
+            end
         end
     end
 end

@@ -15,9 +15,10 @@ function M.decode(payload)
     
     if payload.blocked and type(payload.blocked) == "table" then
         for _, entry in ipairs(payload.blocked) do
+            -- Server returns characterName, normalize to displayName for UI
             table.insert(result.blocked, {
                 accountId = entry.accountId,
-                displayName = entry.displayName or "Unknown",
+                displayName = entry.characterName or entry.displayName or "Unknown",
                 blockedAt = entry.blockedAt
             })
         end

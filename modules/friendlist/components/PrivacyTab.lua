@@ -1,19 +1,19 @@
 local imgui = require('imgui')
+local PresenceStatusPicker = require('ui.widgets.PresenceStatusPicker')
+local nations = require('core.nations')
 
 local M = {}
 
+-- Local state for fetching character status from server
+local state = {
+    characterStatus = nil,
+    lastFetchedCharacterId = nil
+}
+
 function M.Render(state, dataModule, callbacks)
-    M.RenderMenuDetectionSection(state, callbacks)
-    imgui.Spacing()
-    M.RenderFriendViewSettingsSection(state, callbacks)
-    imgui.Spacing()
-    M.RenderHoverTooltipSettings(state, callbacks)
-    imgui.Spacing()
     M.RenderPrivacyControlsSection(state, callbacks)
     imgui.Spacing()
     M.RenderBlockedPlayersSection(state, dataModule, callbacks)
-    imgui.Spacing()
-    M.RenderAltVisibilitySection(state, dataModule, callbacks)
 end
 
 function M.RenderMenuDetectionSection(state, callbacks)
@@ -96,6 +96,8 @@ function M.RenderFriendViewSettingsSection(state, callbacks)
     if imgui.IsItemHovered() then
         imgui.SetTooltip("Show the Added As column (the character name used when adding this friend).")
     end
+    
+
 end
 
 function M.RenderHoverTooltipSettings(state, callbacks)
@@ -163,6 +165,9 @@ function M.RenderHoverTooltipSettings(state, callbacks)
             mainHover.showFriendedAs = showFriendedAs[1]
             changed = true
         end
+        imgui.SameLine()
+        
+
         
         if changed and app.features.preferences then
             app.features.preferences:save()
@@ -211,6 +216,9 @@ function M.RenderHoverTooltipSettings(state, callbacks)
             quickHover.showFriendedAs = showFriendedAs[1]
             changed = true
         end
+        imgui.SameLine()
+        
+
         
         if changed and app.features.preferences then
             app.features.preferences:save()
@@ -227,6 +235,15 @@ function M.RenderPrivacyControlsSection(state, callbacks)
     if isOpen ~= state.privacyControlsExpanded then
         state.privacyControlsExpanded = isOpen
         if callbacks.onSaveState then callbacks.onSaveState() end
+        
+        -- Auto-refresh preview when tab is first opened
+        if isOpen then
+            local app = _G.FFXIFriendListApp
+            if app then
+                state.lastFetchedCharacterId = nil  -- Force re-fetch
+                M._fetchCharacterStatus(app)
+            end
+        end
     end
     
     if not isOpen then return end
@@ -275,48 +292,218 @@ function M.RenderPrivacyControlsSection(state, callbacks)
         imgui.SetTooltip("Controls how your online status appears to friends.\n\n[Account-wide: Synced to server for all characters]")
     end
     
-    local currentStatus = prefs.presenceStatus or "online"
+    PresenceStatusPicker.RenderRadioButtons("_privacy_tab", true)
     
-    local isOnline = currentStatus == "online"
-    if imgui.RadioButton("Online", isOnline) then
-        if not isOnline and app and app.features and app.features.preferences then
-            app.features.preferences:setPref("presenceStatus", "online")
-            app.features.preferences:setPref("showOnlineStatus", true)
+    imgui.Spacing()
+    imgui.Spacing()
+    
+    -- Notification muting
+    local dontSendNotifications = {prefs.dontSendNotificationsGlobal or false}
+    if imgui.Checkbox("Prevent Friend Notifications", dontSendNotifications) then
+        if app and app.features and app.features.preferences then
+            app.features.preferences:setPref("dontSendNotificationsGlobal", dontSendNotifications[1])
             app.features.preferences:save()
-            app.features.preferences:syncToServer()
         end
     end
     if imgui.IsItemHovered() then
-        imgui.SetTooltip("You appear online to friends with full status.")
+        imgui.SetTooltip("When enabled, you won't receive notifications when friends come online.\n\n[Character-specific: Stored locally]")
     end
     
-    imgui.SameLine()
-    local isAway = currentStatus == "away"
-    if imgui.RadioButton("Away", isAway) then
-        if not isAway and app and app.features and app.features.preferences then
-            app.features.preferences:setPref("presenceStatus", "away")
-            app.features.preferences:setPref("showOnlineStatus", true)
-            app.features.preferences:save()
-            app.features.preferences:syncToServer()
-        end
-    end
-    if imgui.IsItemHovered() then
-        imgui.SetTooltip("You appear online but marked as 'Away' to friends.")
+    imgui.Spacing()
+    imgui.Spacing()
+    
+    -- Show preview of how friends see your information
+    M.RenderPresencePreview(prefs)
+end
+
+--- Render a preview showing how friends see your information
+function M.RenderPresencePreview(prefs)
+    local app = _G.FFXIFriendListApp
+    
+    -- Get CURRENT presence from local client (always up-to-date with packet detection + memory fallback)
+    local charStatus = nil
+    if app and app.features and app.features.friends then
+        charStatus = app.features.friends:queryPlayerPresence()
     end
     
-    imgui.SameLine()
-    local isInvisible = currentStatus == "invisible"
-    if imgui.RadioButton("Invisible", isInvisible) then
-        if not isInvisible and app and app.features and app.features.preferences then
-            app.features.preferences:setPref("presenceStatus", "invisible")
-            app.features.preferences:setPref("showOnlineStatus", false)
-            app.features.preferences:save()
-            app.features.preferences:syncToServer()
+    -- Use SERVER preferences - these are what matter to friends
+    local presenceStatus = prefs.presenceStatus or "online"
+    local shareLocation = prefs.shareLocation ~= false
+    local shareJobWhenAnonymous = prefs.shareJobWhenAnonymous or false
+    
+    imgui.TextDisabled("Preview: How friends see you (live)")
+    imgui.Separator()
+    
+    -- Determine status and color
+    local statusColor = {0.4, 0.9, 0.4, 1.0}  -- Green for online
+    local statusText = "Online"
+    local isInvisible = presenceStatus == "invisible"
+    
+    if isInvisible then
+        statusColor = {0.5, 0.5, 0.5, 1.0}  -- Gray for offline
+        statusText = "Offline"
+    elseif presenceStatus == "away" then
+        statusColor = {1.0, 0.7, 0.2, 1.0}  -- Orange for away
+        statusText = "Away"
+    end
+    
+    imgui.BeginGroup()
+    imgui.TextDisabled("Status:")
+    imgui.SameLine(100)
+    imgui.TextColored(statusColor, statusText)
+    imgui.EndGroup()
+    
+    if isInvisible then
+        imgui.TextDisabled("You appear offline - all information hidden from friends")
+        imgui.Spacing()
+    end
+    
+    -- Character name
+    local charName = "Unknown"
+    if charStatus and charStatus.characterName and charStatus.characterName ~= "" then
+        charName = charStatus.characterName:sub(1,1):upper() .. charStatus.characterName:sub(2)
+    end
+    
+    imgui.TextDisabled("Character:")
+    imgui.SameLine(100)
+    if isInvisible then
+        imgui.TextDisabled(charName)
+    else
+        imgui.Text(charName)
+    end
+    
+    -- Job
+    imgui.TextDisabled("Job:")
+    imgui.SameLine(100)
+    if shareJobWhenAnonymous or (charStatus and not charStatus.isAnonymous) then
+        local jobText = "Unknown"
+        -- Use the already-formatted job string from queryPlayerPresence()
+        if charStatus and charStatus.job and charStatus.job ~= "" then
+            jobText = charStatus.job
         end
+        if isInvisible then
+            imgui.TextDisabled(jobText)
+        else
+            imgui.Text(jobText)
+        end
+    else
+        if isInvisible then
+            imgui.TextDisabled("Hidden")
+        else
+            imgui.TextColored({0.4, 0.65, 0.85, 1.0}, "Hidden")
+            end
+        end
+        
+        -- Nation/Rank
+        imgui.TextDisabled("Nation:")
+        imgui.SameLine(100)
+        if shareJobWhenAnonymous or (charStatus and not charStatus.isAnonymous) then
+            local nationText = "Unknown"
+            if charStatus and charStatus.nation then
+                local nationName = nations.getDisplayName(charStatus.nation, "Unknown")
+                -- charStatus.rank is a formatted string like "Rank 10" or a number
+                if charStatus.rank then
+                    if type(charStatus.rank) == "string" and charStatus.rank ~= "" then
+                        nationText = nationName .. " " .. charStatus.rank
+                    elseif type(charStatus.rank) == "number" and charStatus.rank > 0 then
+                        nationText = nationName .. " Rank " .. tostring(charStatus.rank)
+                    else
+                        nationText = nationName
+                    end
+                else
+                    nationText = nationName
+                end
+            end
+            if isInvisible then
+                imgui.TextDisabled(nationText)
+            else
+                imgui.Text(nationText)
+            end
+        else
+            if isInvisible then
+                imgui.TextDisabled("Hidden")
+            else
+                imgui.TextColored({0.4, 0.65, 0.85, 1.0}, "Hidden")
+            end
+        end
+        
+        -- Zone
+        imgui.TextDisabled("Zone:")
+        imgui.SameLine(100)
+        if shareLocation then
+            local zoneText = "Unknown"
+            if charStatus and charStatus.zone then
+                zoneText = tostring(charStatus.zone)
+            end
+            if isInvisible then
+                imgui.TextDisabled(zoneText)
+            else
+                imgui.Text(zoneText)
+            end
+        else
+            if isInvisible then
+                imgui.TextDisabled("Hidden")
+            else
+                imgui.TextColored({0.4, 0.65, 0.85, 1.0}, "Hidden")
+            end
+        end
+end
+
+function M._fetchCharacterStatus(app)
+    if not app or not app.deps or not app.deps.net then
+        return
     end
-    if imgui.IsItemHovered() then
-        imgui.SetTooltip("You appear offline to friends.\nFriends will not see your online status or activity.")
+    
+    -- Need connection for baseUrl and headers
+    if not app.features or not app.features.connection then
+        return
     end
+    
+    local connection = app.features.connection
+    if not connection:isConnected() then
+        return
+    end
+    
+    local Endpoints = require('protocol.Endpoints')
+    local Envelope = require('protocol.Envelope')
+    
+    -- Build full URL with base
+    local baseUrl = connection:getBaseUrl()
+    local url = baseUrl .. Endpoints.PRESENCE.ME
+    local headers = connection:getHeaders(connection:getCharacterName())
+    
+    app.deps.net.request({
+        url = url,
+        method = 'GET',
+        headers = headers,
+        body = "",
+        callback = function(success, response)
+            if not success then
+                if app.deps.logger and app.deps.logger.warn then
+                    app.deps.logger.warn("[PrivacyTab] Failed to fetch character status")
+                end
+                return
+            end
+            
+            local ok, envelope, errorMsg = Envelope.decode(response)
+            if not ok then
+                if app.deps.logger and app.deps.logger.warn then
+                    app.deps.logger.warn("[PrivacyTab] Failed to decode response: " .. tostring(errorMsg))
+                end
+                return
+            end
+            
+            if envelope.data then
+                state.characterStatus = envelope.data
+                if app.deps.logger and app.deps.logger.debug then
+                    app.deps.logger.debug("[PrivacyTab] Fetched character status: job=" .. tostring(envelope.data.job) .. 
+                        ", zone=" .. tostring(envelope.data.zone) .. 
+                        ", nation=" .. tostring(envelope.data.nation) .. 
+                        ", rank=" .. tostring(envelope.data.rank))
+                end
+            end
+        end
+    })
 end
 
 function M.RenderBlockedPlayersSection(state, dataModule, callbacks)
@@ -368,242 +555,6 @@ function M.RenderBlockedPlayersSection(state, dataModule, callbacks)
         end
         
         imgui.EndChild()
-    end
-end
-
-function M.RenderAltVisibilitySection(state, dataModule, callbacks)
-    local headerLabel = "Alt Online Visibility"
-    local isOpen = imgui.CollapsingHeader(headerLabel, state.altVisibilityExpanded and ImGuiTreeNodeFlags_DefaultOpen or 0)
-    
-    if isOpen ~= state.altVisibilityExpanded then
-        state.altVisibilityExpanded = isOpen
-        if callbacks.onSaveState then callbacks.onSaveState() end
-        
-        if isOpen and callbacks.onRefreshAltVisibility then
-            callbacks.onRefreshAltVisibility()
-        end
-    end
-    
-    if isOpen then
-        local app = _G.FFXIFriendListApp
-        if app and app.features and app.features.altVisibility then
-            local altVis = app.features.altVisibility
-            local visState = altVis:getState()
-            
-            if visState.pendingRefresh then
-                altVis:checkPendingRefresh()
-            elseif #altVis:getRows() == 0 and not visState.isLoading and not visState.lastError then
-                if callbacks.onRefreshAltVisibility then
-                    callbacks.onRefreshAltVisibility()
-                end
-            end
-        end
-        
-        M.RenderAltVisibilityContent(state, dataModule, callbacks)
-    end
-end
-
-function M.RenderAltVisibilityContent(state, dataModule, callbacks)
-    local app = _G.FFXIFriendListApp
-    local prefs = nil
-    if app and app.features and app.features.preferences then
-        prefs = app.features.preferences:getPrefs()
-    end
-    
-    if not prefs then
-        imgui.Text("Preferences not available")
-        return
-    end
-    
-    local shareFriendsAcrossAlts = {prefs.shareFriendsAcrossAlts ~= false}
-    if imgui.Checkbox("Share Visibility of Alts to all Friends", shareFriendsAcrossAlts) then
-        if app and app.features and app.features.preferences then
-            app.features.preferences:setPref("shareFriendsAcrossAlts", shareFriendsAcrossAlts[1])
-            app.features.preferences:save()
-            app.features.preferences:syncToServer()
-            if callbacks.onRefreshAltVisibility then
-                callbacks.onRefreshAltVisibility()
-            end
-        end
-    end
-    if imgui.IsItemHovered() then
-        imgui.SetTooltip("When enabled, all your alt characters share visibility with all friends.\nWhen disabled, you can set visibility per friend per character\nusing the table below.\n\n[Account-wide: Synced to server for all characters]")
-    end
-    
-    imgui.Spacing()
-    
-    if shareFriendsAcrossAlts[1] then
-        imgui.Text("A table will appear below if you disable sharing to manage visibility per friend per character.")
-    else
-        M.RenderAltVisibilityFilter(state)
-        imgui.Spacing()
-        M.RenderAltVisibilityTable(state, callbacks)
-    end
-end
-
-function M.RenderAltVisibilityFilter(state)
-    if not state.altVisibilityFilterText then
-        state.altVisibilityFilterText = {""}
-    end
-    
-    imgui.Text("Search:")
-    imgui.SameLine()
-    imgui.SetNextItemWidth(200)
-    imgui.InputText("##alt_visibility_filter", state.altVisibilityFilterText, 256)
-end
-
-function M.RenderAltVisibilityTable(state, callbacks)
-    local app = _G.FFXIFriendListApp
-    if not app or not app.features or not app.features.altVisibility then
-        imgui.Text("Alt visibility feature not available")
-        return
-    end
-    
-    local altVis = app.features.altVisibility
-    local visState = altVis:getState()
-    
-    if visState.isLoading then
-        if visState.pendingRefresh then
-            imgui.Text("Waiting for connection...")
-        else
-            imgui.Text("Loading...")
-        end
-        return
-    end
-    
-    if visState.lastError then
-        imgui.TextColored({1.0, 0.0, 0.0, 1.0}, "Error: " .. tostring(visState.lastError))
-        if imgui.Button("Retry") then
-            if callbacks.onRefreshAltVisibility then
-                callbacks.onRefreshAltVisibility()
-            end
-        end
-        return
-    end
-    
-    local characters = altVis:getCharacters()
-    local filterText = state.altVisibilityFilterText and state.altVisibilityFilterText[1] or ""
-    local rows = altVis:getFilteredRows(filterText)
-    local allRows = altVis:getRows()
-    
-    if #allRows == 0 then
-        if visState.lastUpdateTime == 0 and not visState.isLoading then
-            imgui.Text("Loading visibility data...")
-            if callbacks.onRefreshAltVisibility then
-                callbacks.onRefreshAltVisibility()
-            end
-        elseif visState.isLoading then
-            imgui.Text("Loading visibility data...")
-        else
-            imgui.Text("No friends found")
-            if imgui.Button("Refresh") then
-                if callbacks.onRefreshAltVisibility then
-                    callbacks.onRefreshAltVisibility()
-                end
-            end
-        end
-        return
-    end
-    
-    if #characters == 0 then
-        imgui.Text("No characters found")
-        return
-    end
-    
-    if #rows == 0 then
-        imgui.Text("No friends match filter")
-        return
-    end
-    
-    imgui.TextDisabled("Note: A '-' means visibility is inherited from the character that added the friend.")
-    imgui.Spacing()
-    
-    local numColumns = 1 + #characters
-    local tableFlags = bit.bor(
-        ImGuiTableFlags_Borders,
-        ImGuiTableFlags_RowBg,
-        ImGuiTableFlags_ScrollY
-    )
-    
-    if imgui.BeginTable("##alt_visibility_table", numColumns, tableFlags, {0, 200}) then
-        imgui.TableSetupColumn("Friend", ImGuiTableColumnFlags_WidthFixed, 150)
-        for _, charInfo in ipairs(characters) do
-            local charName = charInfo.characterName or "Unknown"
-            if #charName > 0 then
-                charName = string.upper(string.sub(charName, 1, 1)) .. string.sub(charName, 2)
-            end
-            imgui.TableSetupColumn(charName, ImGuiTableColumnFlags_WidthFixed, 100)
-        end
-        
-        imgui.TableHeadersRow()
-        
-        for _, row in ipairs(rows) do
-            imgui.TableNextRow()
-            
-            imgui.TableNextColumn()
-            local displayName = row.friendedAsName or ""
-            if #displayName > 0 then
-                displayName = string.upper(string.sub(displayName, 1, 1)) .. string.sub(displayName, 2)
-            end
-            imgui.Text(displayName)
-            
-            for i, charVis in ipairs(row.characterVisibility) do
-                imgui.TableNextColumn()
-                
-                local shouldShow = altVis:shouldShowCheckbox(row, charVis)
-                
-                if shouldShow then
-                    local isChecked = altVis:isCheckboxChecked(charVis)
-                    local isEnabled = altVis:isCheckboxEnabled(charVis)
-                    local checkboxId = "##vis_" .. tostring(row.friendAccountId) .. "_" .. tostring(charVis.characterId)
-                    
-                    if not isEnabled then
-                        imgui.PushStyleColor(ImGuiCol_CheckMark, {0.5, 0.5, 0.5, 1.0})
-                        imgui.PushStyleColor(ImGuiCol_FrameBg, {0.2, 0.2, 0.2, 1.0})
-                    end
-                    
-                    local checked = {isChecked}
-                    if imgui.Checkbox(checkboxId, checked) then
-                        if isEnabled then
-                            altVis:toggleVisibility(
-                                row.friendAccountId,
-                                row.friendedAsName,
-                                charVis.characterId,
-                                checked[1]
-                            )
-                        end
-                    end
-                    
-                    if not isEnabled then
-                        imgui.PopStyleColor(2)
-                        
-                        if charVis.visibilityState == "PendingRequest" then
-                            if imgui.IsItemHovered() then
-                                imgui.SetTooltip("Visibility request pending")
-                            end
-                        elseif charVis.isBusy then
-                            if imgui.IsItemHovered() then
-                                imgui.SetTooltip("Updating...")
-                            end
-                        end
-                    end
-                else
-                    imgui.TextDisabled("-")
-                    if imgui.IsItemHovered() then
-                        imgui.SetTooltip("Added from this character")
-                    end
-                end
-            end
-        end
-        
-        imgui.EndTable()
-    end
-    
-    imgui.Spacing()
-    if imgui.Button("Refresh") then
-        if callbacks.onRefreshAltVisibility then
-            callbacks.onRefreshAltVisibility()
-        end
     end
 end
 

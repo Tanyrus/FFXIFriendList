@@ -60,6 +60,12 @@ function M.Render(state, dataModule, callbacks)
             app.features.preferences:save()
         end
     end
+    imgui.SameLine()
+    if imgui.Button("Test Notification##friend_online") then
+        if app and app.features and app.features.notifications then
+            app.features.notifications:showTestFriendOnline(nil)
+        end
+    end
     if imgui.IsItemHovered() then
         imgui.SetTooltip("Play a sound when a friend comes online.")
     end
@@ -78,6 +84,12 @@ function M.Render(state, dataModule, callbacks)
     else
         local disabledValue = {prefs.soundOnFriendRequest ~= false}
         imgui.Checkbox("Play Sound on Friend Request", disabledValue)
+    end
+    imgui.SameLine()
+    if imgui.Button("Test Notification##friend_request") then
+        if app and app.features and app.features.notifications then
+            app.features.notifications:showTestFriendRequest(nil)
+        end
     end
     
     if checkboxChanged then
@@ -166,9 +178,10 @@ function M.Render(state, dataModule, callbacks)
     if imgui.IsItemHovered() then
         imgui.SetTooltip("Show a persistent test notification that can be dragged with Shift to set the position.")
     end
-    
+
     imgui.Spacing()
-    
+    imgui.Separator()
+    imgui.Spacing()
     imgui.Text("Tip: Hold Shift and drag a notification to reposition it.")
     imgui.Text("Enable 'Show test notification' to place it easily.")
     

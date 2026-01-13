@@ -57,6 +57,7 @@ function M.HoverTooltipSettings.new()
     self.showNationRank = true
     self.showLastSeen = false
     self.showFriendedAs = true
+    self.showRealm = false
     return self
 end
 
@@ -65,7 +66,8 @@ function M.HoverTooltipSettings:__eq(other)
            self.showZone == other.showZone and
            self.showNationRank == other.showNationRank and
            self.showLastSeen == other.showLastSeen and
-           self.showFriendedAs == other.showFriendedAs
+           self.showFriendedAs == other.showFriendedAs and
+           self.showRealm == other.showRealm
 end
 
 M.Color = {}
@@ -120,6 +122,11 @@ function M.Preferences.new()
     self.flistBindButton = ''
     self.closeBindButton = ''
     self.flBindButton = ''
+    -- Notification mute settings
+    self.dontSendNotificationsGlobal = false
+    self.mutedFriends = {}  -- Table keyed by friendAccountId
+    self.muteTestFriendOnline = false
+    self.muteTestFriendRequest = false
     return self
 end
 

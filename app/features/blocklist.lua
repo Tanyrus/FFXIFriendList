@@ -1,5 +1,4 @@
 local Envelope = require("protocol.Envelope")
-local DecodeRouter = require("protocol.DecodeRouter")
 local Endpoints = require("protocol.Endpoints")
 
 local M = {}
@@ -58,7 +57,9 @@ end
 function M.Blocklist:findByName(name)
     local lowerName = string.lower(name or "")
     for _, entry in ipairs(self.blocked) do
-        if string.lower(entry.displayName or "") == lowerName then
+        -- Server returns characterName, UI may expect displayName
+        local entryName = entry.displayName or entry.characterName or ""
+        if string.lower(entryName) == lowerName then
             return entry
         end
     end
@@ -108,27 +109,17 @@ function M.Blocklist:handleRefreshResponse(success, response)
         return
     end
     
-    local ok, envelope = Envelope.decode(response)
+    -- Use new envelope format: { success, data, timestamp }
+    local ok, result, errorMsg = Envelope.decode(response)
     if not ok then
-        self.lastError = "Failed to decode response"
-        log(self, "warn", "[Blocklist] Failed to decode envelope")
+        self.lastError = errorMsg or "Failed to decode response"
+        log(self, "warn", "[Blocklist] Failed to decode: " .. tostring(errorMsg))
         return
     end
     
-    if not envelope.success then
-        self.lastError = envelope.error or "Server error"
-        log(self, "warn", "[Blocklist] Server error: " .. tostring(envelope.error))
-        return
-    end
-    
-    local decodeOk, result = DecodeRouter.decode(envelope)
-    if not decodeOk then
-        self.lastError = "Failed to decode payload"
-        log(self, "warn", "[Blocklist] Failed to decode payload")
-        return
-    end
-    
-    self.blocked = result.blocked or {}
+    -- Extract blocked list from data
+    local data = result.data or {}
+    self.blocked = data.blocked or {}
     self.blockedByAccountId = {}
     for _, entry in ipairs(self.blocked) do
         if entry.accountId then
@@ -153,18 +144,24 @@ function M.Blocklist:block(characterName, callback)
         return false
     end
     
+    -- Use new server endpoint: POST /api/block
     local url = self.deps.connection:getBaseUrl() .. Endpoints.BLOCK.ADD
     
     -- Get current user's character name for authentication headers
-    -- NOTE: characterName parameter is the person TO BLOCK, not the current user
     local currentUserCharacterName = self:_getCharacterName()
-    
     local headers = self.deps.connection:getHeaders(currentUserCharacterName)
     
-    -- Use JSON encoding to properly escape special characters
-    -- characterName parameter is the person TO BLOCK, not the current user
-    local Json = require("protocol.Json")
-    local body = Json.encode({characterName = tostring(characterName)})
+    -- Get realm ID for the request
+    local realmId = "unknown"
+    if self.deps.connection.savedRealmId and self.deps.connection.savedRealmId ~= "" then
+        realmId = self.deps.connection.savedRealmId
+    elseif self.deps.connection.realmDetector and self.deps.connection.realmDetector.getRealmId then
+        realmId = self.deps.connection.realmDetector:getRealmId() or "unknown"
+    end
+    
+    -- New server expects: { characterName, realmId }
+    local RequestEncoder = require("protocol.Encoding.RequestEncoder")
+    local body = RequestEncoder.encodeBlock(tostring(characterName), realmId)
     
     local requestId = self.deps.net.request({
         url = url,
@@ -186,28 +183,23 @@ function M.Blocklist:handleBlockResponse(success, response, characterName, callb
         return
     end
     
-    local ok, envelope = Envelope.decode(response)
+    -- Use new envelope format: { success, data, timestamp }
+    local ok, result, errorMsg = Envelope.decode(response)
     if not ok then
-        log(self, "warn", "[Blocklist] Failed to decode block response")
-        if callback then callback(false, "Failed to decode response") end
-        return
-    end
-    
-    if not envelope.success then
-        local errorMsg = envelope.error or "Server error"
-        log(self, "warn", "[Blocklist] Block failed: " .. errorMsg)
-        if callback then callback(false, errorMsg) end
+        log(self, "warn", "[Blocklist] Failed to decode block response: " .. tostring(errorMsg))
+        if callback then callback(false, errorMsg or "Failed to decode response") end
         return
     end
     
     log(self, "info", "[Blocklist] Blocked " .. tostring(characterName))
     
+    -- Refresh blocklist to get updated list from server
+    -- (WS blocked event only goes to the blocked person, not the blocker)
     self:refresh()
     
     if callback then
         callback(true, {
-            blockedAccountId = envelope.payload and envelope.payload.blockedAccountId,
-            alreadyBlocked = envelope.payload and envelope.payload.alreadyBlocked
+            blocked = true
         })
     end
 end
@@ -247,28 +239,23 @@ function M.Blocklist:handleUnblockResponse(success, response, accountId, callbac
         return
     end
     
-    local ok, envelope = Envelope.decode(response)
+    -- Use new envelope format: { success, data, timestamp }
+    local ok, result, errorMsg = Envelope.decode(response)
     if not ok then
-        log(self, "warn", "[Blocklist] Failed to decode unblock response")
-        if callback then callback(false, "Failed to decode response") end
-        return
-    end
-    
-    if not envelope.success then
-        local errorMsg = envelope.error or "Server error"
-        log(self, "warn", "[Blocklist] Unblock failed: " .. errorMsg)
-        if callback then callback(false, errorMsg) end
+        log(self, "warn", "[Blocklist] Failed to decode unblock response: " .. tostring(errorMsg))
+        if callback then callback(false, errorMsg or "Failed to decode response") end
         return
     end
     
     log(self, "info", "[Blocklist] Unblocked accountId " .. tostring(accountId))
     
+    -- Refresh blocklist to get updated list from server
+    -- (WS unblocked event only goes to the unblocked person, not the unblocker)
     self:refresh()
     
     if callback then
         callback(true, {
-            unblockedAccountId = envelope.payload and envelope.payload.unblockedAccountId,
-            wasBlocked = envelope.payload and envelope.payload.wasBlocked
+            unblocked = true
         })
     end
 end

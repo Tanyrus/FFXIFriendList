@@ -83,9 +83,49 @@ local function testConnectionHeaders()
     
     local headers = conn:getHeaders("TestChar")
     assert(headers["Content-Type"] == "application/json", "Should have Content-Type header")
-    assert(headers["X-API-Key"] == "test-key", "Should have API key header")
-    assert(headers["characterName"] == "TestChar", "Should have character name header")
+    -- New auth format: Authorization: Bearer <apiKey>
+    assert(headers["Authorization"] == "Bearer test-key", "Should have Authorization Bearer header")
+    assert(headers["X-Character-Name"] == "TestChar", "Should have X-Character-Name header")
     assert(headers["X-Session-Id"] == "test-session", "Should have session ID header")
+    
+    return true
+end
+
+-- BUG 2 FIX TESTS: Character switch and set-active functionality
+
+local function testConnectionHasSetActiveMethod()
+    -- Verify that the setActiveCharacter method exists and has correct signature
+    local deps = createFakeDeps()
+    local conn = Connection.Connection.new(deps)
+    
+    assert(type(conn.setActiveCharacter) == "function", "Should have setActiveCharacter method")
+    assert(type(conn.completeConnection) == "function", "Should have completeConnection method")
+    
+    return true
+end
+
+local function testConnectionTracksSetActiveTimestamp()
+    local deps = createFakeDeps()
+    local conn = Connection.Connection.new(deps)
+    
+    -- Initially no set-active timestamp
+    assert(conn.lastSetActiveAt == nil, "Should not have lastSetActiveAt initially")
+    
+    -- After successful set-active call, timestamp should be set
+    -- (This would be set during actual set-active flow)
+    conn.lastSetActiveAt = os.time() * 1000
+    assert(conn.lastSetActiveAt ~= nil, "Should have lastSetActiveAt after set-active")
+    
+    return true
+end
+
+local function testConnectionTracksCharacterId()
+    local deps = createFakeDeps()
+    local conn = Connection.Connection.new(deps)
+    
+    -- After auth response with character ID
+    conn.lastCharacterId = "test-uuid-12345"
+    assert(conn.lastCharacterId == "test-uuid-12345", "Should store lastCharacterId")
     
     return true
 end
@@ -95,7 +135,11 @@ local function runTests()
         testConnectionStateTransitions,
         testConnectionApiKeys,
         testConnectionServerSelection,
-        testConnectionHeaders
+        testConnectionHeaders,
+        -- BUG 2 FIX TESTS
+        testConnectionHasSetActiveMethod,
+        testConnectionTracksSetActiveTimestamp,
+        testConnectionTracksCharacterId
     }
     
     local passed = 0

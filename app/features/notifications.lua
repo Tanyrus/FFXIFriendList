@@ -129,11 +129,37 @@ local function getTime(self)
     return os.time() * 1000
 end
 
+local function dismissExistingTestToasts(self, toastType)
+    if not self.queue then
+        return
+    end
+    for _, toast in ipairs(self.queue) do
+        if toast.type == toastType and toast.isTest then
+            toast.dismissed = true
+            toast.state = M.ToastState.COMPLETE
+        end
+    end
+    self:cleanup()
+end
+
+local function pushTestToast(self, type, payload)
+    payload = payload or {}
+    self:cleanup()
+    local toast = M.Toast.new(type, payload.title, payload.message, getTime(self), payload.duration)
+    toast.isOnline = payload.isOnline
+    toast.characterName = payload.characterName
+    toast.isTest = true
+    table.insert(self.queue, toast)
+end
+
 function M.Notifications:push(type, payload)
     payload = payload or {}
     local title = payload.title or ""
     local message = payload.message or ""
     local dedupeKey = payload.dedupeKey
+    
+    -- Clean up dismissed/completed toasts before checking for duplicates
+    self:cleanup()
     
     if dedupeKey then
         for _, toast in ipairs(self.queue) do
@@ -148,6 +174,15 @@ function M.Notifications:push(type, payload)
     
     local toast = M.Toast.new(type, title, message, getTime(self), payload.duration)
     toast.dedupeKey = dedupeKey
+    
+    -- Copy additional payload fields for display (e.g., isOnline for status icon)
+    if payload.isOnline ~= nil then
+        toast.isOnline = payload.isOnline
+    end
+    if payload.characterName then
+        toast.characterName = payload.characterName
+    end
+    
     table.insert(self.queue, toast)
     
     if self.deps and self.deps.logger and self.deps.logger.debug then
@@ -178,6 +213,68 @@ function M.Notifications:showTestNotification()
     if self.deps and self.deps.logger and self.deps.logger.info then
         self.deps.logger.info("[Notifications] Test notification triggered")
     end
+end
+
+-- Show a test friend-online notification (respects muteTestFriendOnline preference)
+function M.Notifications:showTestFriendOnline(friendName)
+    dismissExistingTestToasts(self, M.ToastType.FriendOnline)
+
+    local prefs = nil
+    if self.deps and self.deps.preferences and self.deps.preferences.getPrefs then
+        prefs = self.deps.preferences:getPrefs()
+    end
+    local name = friendName and friendName ~= "" and friendName or "TestFriend"
+    local duration = TimingConstants.NOTIFICATION_DEFAULT_DURATION_MS
+    if prefs and prefs.notificationDuration then
+        local prefDuration = tonumber(prefs.notificationDuration)
+        if prefDuration and prefDuration > 0 then
+            duration = prefDuration * 1000
+        end
+    end
+    pushTestToast(self, M.ToastType.FriendOnline, {
+        title = "Friend Online",
+        message = name .. " is now online",
+        duration = duration,
+        characterName = name,
+        isOnline = true
+    })
+end
+
+-- Show a test friend-request notification (respects muteTestFriendRequest preference)
+function M.Notifications:showTestFriendRequest(friendName)
+    dismissExistingTestToasts(self, M.ToastType.FriendRequestReceived)
+
+    local prefs = nil
+    if self.deps and self.deps.preferences and self.deps.preferences.getPrefs then
+        prefs = self.deps.preferences:getPrefs()
+    end
+
+    local name = friendName and friendName ~= "" and friendName or "TestFriend"
+    local duration = TimingConstants.NOTIFICATION_DEFAULT_DURATION_MS
+    if prefs and prefs.notificationDuration then
+        local prefDuration = tonumber(prefs.notificationDuration)
+        if prefDuration and prefDuration > 0 then
+            duration = prefDuration * 1000
+        end
+    end
+
+    pushTestToast(self, M.ToastType.FriendRequestReceived, {
+        title = "Friend Request",
+        message = name .. " sent you a friend request",
+        duration = duration,
+        characterName = name
+    })
+end
+
+-- Remove dismissed/completed toasts from the queue to prevent unbounded growth
+function M.Notifications:cleanup()
+    local newQueue = {}
+    for _, toast in ipairs(self.queue) do
+        if not toast.dismissed then
+            table.insert(newQueue, toast)
+        end
+    end
+    self.queue = newQueue
 end
 
 function M.Notifications:drain()

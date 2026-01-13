@@ -26,6 +26,37 @@ function M.Render(friend, state, callbacks)
             callbacks.onRemoveFriend(friend.name)
         end
     end
+    
+    imgui.Separator()
+    
+    -- Mute notifications toggle
+    local app = _G.FFXIFriendListApp
+    local isMuted = false
+    if app and app.features and app.features.preferences and friend.friendAccountId then
+        isMuted = app.features.preferences:isFriendMuted(friend.friendAccountId)
+    end
+    
+    if imgui.MenuItem("Mute Notifications", nil, isMuted) then
+        if callbacks.onToggleMuteFriend then
+            callbacks.onToggleMuteFriend(friend.friendAccountId)
+        end
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip(isMuted and "Unmute notifications for this friend" or "Mute notifications for this friend")
+    end
+    
+    imgui.Separator()
+    
+    -- Block & Remove Friend (shows persistent modal for confirmation)
+    if imgui.MenuItem("Block & Remove Friend") then
+        state.confirmBlockAndRemove = {
+            accountId = friend.friendAccountId,
+            name = friend.name
+        }
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("Block this player and remove them from your friends list")
+    end
 end
 
 return M

@@ -18,6 +18,7 @@ local ThemesTab = require('modules.friendlist.components.ThemesTab')
 local HelpTab = require('modules.friendlist.components.HelpTab')
 local CollapsibleTagSection = require('modules.friendlist.components.CollapsibleTagSection')
 local TagManager = require('modules.friendlist.components.TagManager')
+local PresenceStatusPicker = require('ui.widgets.PresenceStatusPicker')
 local utils = require('modules.friendlist.components.helpers.utils')
 local tagcore = require('core.tagcore')
 local taggrouper = require('core.taggrouper')
@@ -28,6 +29,8 @@ local state = {
     initialized = false,
     hidden = false,
     selectedFriendForDetails = nil,
+    confirmBlockAndRemove = nil,  -- Stores { accountId, name } pending confirmation
+    confirmBlockAndRemovePopupOpened = false,  -- Track if popup was opened
     newFriendName = {""},
     newFriendNote = {""},
     selectedTab = 0,
@@ -38,9 +41,10 @@ local state = {
     hoverTooltipSettingsExpanded = false,
     privacyControlsExpanded = false,
     blockedPlayersExpanded = false,
-    altVisibilityExpanded = false,
     notificationsSettingsExpanded = true,
     controlsSettingsExpanded = true,
+    closeKeyExpanded = false,
+    controllerExpanded = false,
     themeSettingsExpanded = true,
     themeSelectionExpanded = true,
     customColorsExpanded = false,
@@ -106,6 +110,8 @@ local state = {
         ["Last Seen"] = 120.0,
         ["Added As"] = 100.0
     },
+    crossServerFriendsEnabled = false,
+    crossServerFriendsExpanded = false,
     draggingColumn = nil,
     hoveredColumn = nil,
     tagManagerExpanded = false,
@@ -188,6 +194,20 @@ function M.Initialize(settings)
             state.columnOrder = {}
             for i, col in ipairs(settings.columnOrder) do
                 state.columnOrder[i] = col
+            end
+            -- Ensure any new columns (added in later versions) are appended to the order
+            local defaultColumnOrder = {"Name", "Job", "Zone", "Nation/Rank", "Last Seen", "Added As", "Realm"}
+            for _, defaultCol in ipairs(defaultColumnOrder) do
+                local found = false
+                for _, savedCol in ipairs(state.columnOrder) do
+                    if savedCol == defaultCol then
+                        found = true
+                        break
+                    end
+                end
+                if not found then
+                    table.insert(state.columnOrder, defaultCol)
+                end
             end
         end
         if settings.columnWidths and type(settings.columnWidths) == "table" then
@@ -315,21 +335,30 @@ function M.DrawWindow(settings, dataModule)
     local app = _G.FFXIFriendListApp
     local needsServerSelection = false
     if app and app.features and app.features.serverlist then
-        needsServerSelection = not app.features.serverlist:isServerSelected()
+        -- Only show server not detected if:
+        -- 1. No server is selected AND
+        -- 2. Server detection has already been attempted (not just waiting for servers to load)
+        if not app.features.serverlist:isServerSelected() and app._serverDetectionCompleted then
+            needsServerSelection = true
+        end
     end
     
-    -- If server selection needed, only show server selection window (not main window)
+    -- If server detection is still pending, wait without showing window
+    -- Once detection completes, if no server was found, show error message
     if needsServerSelection then
-        if not state.serverSelectionPopupOpened then
-            state.serverSelectionPopupOpened = true
-            state.serverWindowNeedsCenter = true
-            state.serverListRefreshTriggered = false
-        end
-        M.RenderServerSelectionWindow()
+        M.RenderServerNotDetectedWindow()
         return
     end
     
-    -- Server is configured - render main window normally
+    -- Wait for connection to establish before showing main window
+    -- This ensures auto-connect completes before rendering
+    if app and app.features and app.features.connection then
+        if not app.features.connection:isConnected() then
+            return
+        end
+    end
+    
+    -- Server is connected - render main window normally
     local windowFlags = 0
     local app = _G.FFXIFriendListApp
     local globalLocked = false
@@ -404,6 +433,55 @@ function M.DrawWindow(settings, dataModule)
     
     if state.selectedFriendForDetails then
         FriendDetailsPopup.Render(state.selectedFriendForDetails, state, M.GetCallbacks(dataModule))
+    end
+    
+    -- Render Block & Remove confirmation modal
+    M.RenderBlockAndRemoveModal(state, M.GetCallbacks(dataModule))
+end
+
+function M.RenderBlockAndRemoveModal(state, callbacks)
+    if not state.confirmBlockAndRemove then return end
+    
+    local confirmData = state.confirmBlockAndRemove
+    if not confirmData.accountId or not confirmData.name then return end
+    
+    -- Open popup on first render of confirmation state
+    if not state.confirmBlockAndRemovePopupOpened then
+        imgui.OpenPopup("BlockAndRemoveConfirm")
+        state.confirmBlockAndRemovePopupOpened = true
+    end
+    
+    local isOpen = {true}
+    if imgui.BeginPopupModal("BlockAndRemoveConfirm", isOpen, ImGuiWindowFlags_AlwaysAutoResize) then
+        imgui.Text("Block & Remove Friend?")
+        imgui.Separator()
+        imgui.Text(string.format("Are you sure you want to block and remove '%s' from your friends?", confirmData.name))
+        imgui.Text("This action cannot be undone easily.")
+        imgui.Spacing()
+        imgui.Spacing()
+        
+        imgui.PushStyleColor(ImGuiCol_Button, {0.8, 0.2, 0.2, 1.0})
+        if imgui.Button("Block & Remove", {120, 0}) then
+            if callbacks.onBlockAndRemoveFriend then
+                callbacks.onBlockAndRemoveFriend(confirmData.accountId, confirmData.name)
+            end
+            state.confirmBlockAndRemove = nil
+            state.confirmBlockAndRemovePopupOpened = false
+            imgui.CloseCurrentPopup()
+        end
+        imgui.PopStyleColor()
+        
+        imgui.SameLine()
+        if imgui.Button("Cancel", {120, 0}) then
+            state.confirmBlockAndRemove = nil
+            state.confirmBlockAndRemovePopupOpened = false
+            imgui.CloseCurrentPopup()
+        end
+        
+        imgui.EndPopup()
+    else
+        state.confirmBlockAndRemove = nil
+        state.confirmBlockAndRemovePopupOpened = false
     end
 end
 
@@ -506,17 +584,17 @@ function M.RenderContentArea(dataModule, callbacks)
     elseif state.selectedTab == 5 then
         NotificationsTab.Render(state, dataModule, callbacks)
     elseif state.selectedTab == 6 then
-        ControlsTab.Render(state, dataModule, callbacks)
-    elseif state.selectedTab == 7 then
         ThemesTab.Render(state, dataModule, callbacks)
-    elseif state.selectedTab == 8 then
+    elseif state.selectedTab == 7 then
         HelpTab.Render(state, dataModule, callbacks)
     end
 end
 
 function M.RenderGeneralTab(dataModule, callbacks)
-    -- General settings (Menu Detection, Friend View, Hover Tooltip, Group by Status, Compact Friend List)
+    -- View settings (Menu Detection, Friend View, Hover Tooltip, Group by Status, Compact Friend List, Window Behavior, Controls)
     PrivacyTab.RenderMenuDetectionSection(state, callbacks)
+    imgui.Spacing()
+    M.RenderCrossServerFriendsSection(callbacks)
     imgui.Spacing()
     PrivacyTab.RenderFriendViewSettingsSection(state, callbacks)
     imgui.Spacing()
@@ -529,6 +607,14 @@ function M.RenderGeneralTab(dataModule, callbacks)
     M.RenderWindowBehaviorSection(callbacks)
     imgui.Spacing()
     M.RenderWindowLockSection(callbacks)
+    imgui.Spacing()
+    M.RenderCloseKeySection(callbacks)
+    imgui.Spacing()
+    M.RenderControllerSection(callbacks)
+end
+
+function M.RenderCrossServerFriendsSection(callbacks)
+    -- Cross-server friend adding is disabled. Users can only add friends from their current realm.
 end
 
 function M.RenderWindowBehaviorSection(callbacks)
@@ -622,6 +708,60 @@ function M.RenderWindowLockSection(callbacks)
     if imgui.IsItemHovered() then
         imgui.SetTooltip("When enabled, all addon windows cannot be closed via the X button.")
     end
+end
+
+function M.RenderCloseKeySection(callbacks)
+    local headerLabel = "Close Window Key"
+    local isOpen = imgui.CollapsingHeader(headerLabel, state.closeKeyExpanded and ImGuiTreeNodeFlags_DefaultOpen or 0)
+    
+    if isOpen ~= state.closeKeyExpanded then
+        state.closeKeyExpanded = isOpen
+        if callbacks and callbacks.onSaveState then callbacks.onSaveState() end
+    end
+    
+    if not isOpen then return end
+    
+    local app = _G.FFXIFriendListApp
+    local prefs = nil
+    if app and app.features and app.features.preferences then
+        prefs = app.features.preferences:getPrefs()
+    end
+    
+    if not prefs then
+        imgui.Text("Preferences not available")
+        return
+    end
+    
+    ControlsTab.RenderCloseKeySection(prefs)
+    
+    imgui.Spacing()
+    imgui.TextWrapped("Press the configured key to close the topmost unlocked window.")
+    imgui.TextWrapped("Windows can be locked via the Lock button to prevent accidental closing.")
+end
+
+function M.RenderControllerSection(callbacks)
+    local headerLabel = "Controller Settings"
+    local isOpen = imgui.CollapsingHeader(headerLabel, state.controllerExpanded and ImGuiTreeNodeFlags_DefaultOpen or 0)
+    
+    if isOpen ~= state.controllerExpanded then
+        state.controllerExpanded = isOpen
+        if callbacks and callbacks.onSaveState then callbacks.onSaveState() end
+    end
+    
+    if not isOpen then return end
+    
+    local app = _G.FFXIFriendListApp
+    local prefs = nil
+    if app and app.features and app.features.preferences then
+        prefs = app.features.preferences:getPrefs()
+    end
+    
+    if not prefs then
+        imgui.Text("Preferences not available")
+        return
+    end
+    
+    ControlsTab.RenderControllerSection(prefs)
 end
 
 function M.RenderGroupByStatusSection(callbacks)
@@ -795,12 +935,12 @@ function M.RenderCompactFriendListSettings(callbacks)
 end
 
 function M.RenderPrivacyTab(dataModule, callbacks)
-    -- Privacy settings (Privacy Controls, Blocked Players, Alt Visibility)
+    -- Privacy settings (Privacy Controls, Blocked Players)
     PrivacyTab.RenderPrivacyControlsSection(state, callbacks)
     imgui.Spacing()
     PrivacyTab.RenderBlockedPlayersSection(state, dataModule, callbacks)
-    imgui.Spacing()
-    PrivacyTab.RenderAltVisibilitySection(state, dataModule, callbacks)
+    -- Old per-character visibility replaced by visibility matrix
+    -- PrivacyTab.RenderAltVisibilitySection(state, dataModule, callbacks)
 end
 
 function M.RenderTagsTab()
@@ -811,7 +951,7 @@ function M.RenderTagsTab()
 end
 
 function M.RenderFriendsTab(dataModule, callbacks)
-    AddFriendSection.Render(state, dataModule, callbacks.onAddFriend)
+    AddFriendSection.Render(state, dataModule, callbacks.onAddFriend, callbacks.onAddFriendWithRealm)
     
     imgui.Dummy({0, 6})
     
@@ -860,6 +1000,12 @@ function M.RenderTaggedFriendSections(dataModule, callbacks)
     if imgui.IsItemHovered() then
         imgui.SetTooltip("Filter friends by name, job, or zone")
     end
+    
+    -- Add presence status picker to the right of filter
+    imgui.SameLine()
+    imgui.Text(" ")  -- Spacer
+    imgui.SameLine()
+    PresenceStatusPicker.RenderCompact("_friends_tab")
     
     imgui.Spacing()
     
@@ -996,7 +1142,7 @@ function M.RenderTaggedFriendSections(dataModule, callbacks)
                 if callbacks.onSaveState then callbacks.onSaveState() end
             end
             
-            imgui.Spacing()
+            local realmVisible = {state.columnVisible.realm}
             imgui.Separator()
             imgui.Text("Column Widths:")
             imgui.Separator()
@@ -1128,6 +1274,72 @@ function M.RenderAboutPopup()
     end
 end
 
+-- Simple error window when server auto-detection fails
+function M.RenderServerNotDetectedWindow()
+    local screenWidth = scaling.window.w
+    local screenHeight = scaling.window.h
+    
+    -- Window flags
+    local windowFlags = bit.bor(
+        ImGuiWindowFlags_NoCollapse,
+        ImGuiWindowFlags_NoScrollbar,
+        ImGuiWindowFlags_AlwaysAutoResize
+    )
+    
+    -- Center on screen
+    local windowWidth = 400
+    local windowHeight = 200
+    local posX = (screenWidth - windowWidth) / 2
+    local posY = (screenHeight - windowHeight) / 2
+    imgui.SetNextWindowPos({posX, posY}, ImGuiCond_FirstUseEver)
+    imgui.SetNextWindowSize({windowWidth, 0}, ImGuiCond_FirstUseEver)
+    
+    -- Apply theme
+    local themePushed = M.ApplyTheme()
+    
+    local windowOpenTable = {true}
+    if not imgui.Begin("Server Not Detected##servernotdetected", windowOpenTable, windowFlags) then
+        imgui.End()
+        M.PopTheme(themePushed)
+        return
+    end
+    
+    -- Check ServerProfiles for error info
+    local ServerProfiles = require("core.ServerProfiles")
+    local loadError = ServerProfiles.getLoadError and ServerProfiles.getLoadError()
+    
+    imgui.TextColored({1.0, 0.3, 0.3, 1.0}, "Server Detection Failed")
+    imgui.Separator()
+    imgui.Spacing()
+    
+    if loadError then
+        imgui.TextWrapped("Could not fetch server list: " .. tostring(loadError))
+    else
+        imgui.TextWrapped("Your FFXI server could not be auto-detected.")
+    end
+    
+    imgui.Spacing()
+    imgui.TextWrapped("This addon currently supports: Horizon, Eden")
+    imgui.Spacing()
+    imgui.Separator()
+    imgui.Spacing()
+    
+    imgui.TextColored({0.5, 0.8, 1.0, 1.0}, "Need your server added?")
+    imgui.TextWrapped("Contact Tanyrus on Discord to request support for your server.")
+    imgui.Spacing()
+    
+    if imgui.Button("Join Discord Server", {200, 30}) then
+        os.execute('start https://discord.gg/horizonfriendlist')
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("Click to open Discord (opens in default browser)")
+    end
+    
+    imgui.End()
+    M.PopTheme(themePushed)
+end
+
+-- DEPRECATED: Server selection window replaced by auto-detection only
 function M.RenderServerSelectionWindow()
     -- Use the serverselection data module for draft selection
     local serverSelectionData = require('modules.serverselection.data')
@@ -1321,6 +1533,12 @@ function M.GetCallbacks(dataModule)
             end
         end,
         
+        onAddFriendWithRealm = function(name, realmId, note)
+            if app and app.features and app.features.friends then
+                app.features.friends:addFriendWithRealm(name, realmId, note)
+            end
+        end,
+        
         onAcceptRequest = function(requestId)
             if app and app.features and app.features.friends then
                 app.features.friends:acceptRequest(requestId)
@@ -1370,8 +1588,62 @@ function M.GetCallbacks(dataModule)
         end,
         
         onRemoveFriend = function(friendName)
-            if app and app.features and app.features.friends then
-                app.features.friends:removeFriend(friendName)
+            if app then
+                -- Clear mute entry if we can resolve accountId
+                if app.features and app.features.preferences and dataModule and dataModule.GetFriends then
+                    local friends = dataModule.GetFriends()
+                    for _, f in ipairs(friends or {}) do
+                        if f.name and string.lower(f.name) == string.lower(friendName) then
+                            if f.friendAccountId then
+                                app.features.preferences:clearFriendMute(f.friendAccountId)
+                            end
+                            break
+                        end
+                    end
+                end
+                if app.features and app.features.friends then
+                    app.features.friends:removeFriend(friendName)
+                end
+            end
+        end,
+        
+        onToggleMuteFriend = function(friendAccountId)
+            if app and app.features and app.features.preferences then
+                app.features.preferences:toggleFriendMuted(friendAccountId)
+            end
+        end,
+        
+        onBlockAndRemoveFriend = function(friendAccountId, friendName)
+            if not app or not app.features then return end
+            
+            -- First block the player
+            if app.features.blocklist then
+                app.features.blocklist:block(friendName, function(blockSuccess, blockResult)
+                    if blockSuccess then
+                        -- Then remove friend (with retry if it fails)
+                        if app.features.friends then
+                            app.features.friends:removeFriend(friendName)
+                            -- Clear mute for this friend account
+                            if app.features.preferences and friendAccountId then
+                                app.features.preferences:clearFriendMute(friendAccountId)
+                            end
+                            -- Note: If remove fails, they're still blocked but will show in friend list
+                            -- Server-side they should be auto-filtered from friend list on next snapshot
+                        end
+                    else
+                        -- Block failed - retry once
+                        if app.features.blocklist then
+                            app.features.blocklist:block(friendName, function(retrySuccess, retryResult)
+                                if retrySuccess and app.features.friends then
+                                    app.features.friends:removeFriend(friendName)
+                                    if app.features.preferences and friendAccountId then
+                                        app.features.preferences:clearFriendMute(friendAccountId)
+                                    end
+                                end
+                            end)
+                        end
+                    end
+                end)
             end
         end,
         
@@ -1405,12 +1677,6 @@ function M.GetCallbacks(dataModule)
         onRenderContextMenu = function(friend)
             FriendContextMenu.Render(friend, state, M.GetCallbacks(dataModule))
         end,
-        
-        onRefreshAltVisibility = function()
-            if app and app.features and app.features.altVisibility then
-                app.features.altVisibility:refresh()
-            end
-        end
     }
 end
 

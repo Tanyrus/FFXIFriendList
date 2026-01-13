@@ -5,13 +5,18 @@ local SoundPlayer = require('platform.services.SoundPlayer')
 local FontManager = require('app.ui.FontManager')
 local InputHelper = require('ui.helpers.InputHelper')
 local scaling = require('scaling')
+local TimingConstants = require('core.TimingConstants')
+local UIConst = require('constants.ui')
+local Colors = require('constants.colors')
+local Assets = require('constants.assets')
 
 local M = {}
 
-local TOAST_SPACING = 10.0
-local DEFAULT_POSITION_X = 10.0
-local DEFAULT_POSITION_Y = 15.0
-local DEFAULT_DURATION_MS = 8000
+-- Use centralized constants (originals kept as fallbacks for compatibility)
+local TOAST_SPACING = UIConst.SPACING.TOAST_SPACING
+local DEFAULT_POSITION_X = UIConst.NOTIFICATION_POSITION and UIConst.NOTIFICATION_POSITION[1] or 10.0
+local DEFAULT_POSITION_Y = UIConst.NOTIFICATION_POSITION and UIConst.NOTIFICATION_POSITION[2] or 15.0
+local DEFAULT_DURATION_MS = TimingConstants.NOTIFICATION_DEFAULT_DURATION_MS or 8000
 
 local TOAST_WINDOW_FLAGS = bit.bor(
     ImGuiWindowFlags_NoTitleBar or 0x00000001,
@@ -146,10 +151,18 @@ local function getToastColor(toastType)
     end
 end
 
-local function getSoundType(toastType)
+local function getSoundType(toast)
+    local toastType = toast.type
     if toastType == ToastType.FriendOnline then
         return NotificationSoundPolicy.NotificationSoundType.FriendOnline
-    elseif toastType == ToastType.FriendRequestReceived or toastType == ToastType.FriendRequestAccepted then
+    elseif toastType == ToastType.FriendRequestAccepted then
+        -- Play friend online sound only if the friend is online, otherwise no sound
+        if toast.isOnline then
+            return NotificationSoundPolicy.NotificationSoundType.FriendOnline
+        else
+            return NotificationSoundPolicy.NotificationSoundType.Unknown
+        end
+    elseif toastType == ToastType.FriendRequestReceived then
         return NotificationSoundPolicy.NotificationSoundType.FriendRequest
     else
         return NotificationSoundPolicy.NotificationSoundType.Unknown
@@ -181,7 +194,7 @@ local function maybePlaySound(toast)
         return
     end
     
-    local soundType = getSoundType(toastType)
+    local soundType = getSoundType(toast)
     if soundType == NotificationSoundPolicy.NotificationSoundType.Unknown then
         return
     end
@@ -201,15 +214,17 @@ local function maybePlaySound(toast)
     end
     
     local currentTime = getCurrentTimeMs()
-    if not state.soundPolicy:shouldPlay(soundType, currentTime) then
+    -- Test toasts bypass sound policy cooldown
+    if not toast.isTest and not state.soundPolicy:shouldPlay(soundType, currentTime) then
         return
     end
     
+    -- Use centralized asset constants for sound filenames
     local soundFile = nil
     if soundType == NotificationSoundPolicy.NotificationSoundType.FriendOnline then
-        soundFile = "online.wav"
+        soundFile = Assets.SOUNDS.FRIEND_ONLINE
     elseif soundType == NotificationSoundPolicy.NotificationSoundType.FriendRequest then
-        soundFile = "friend-request.wav"
+        soundFile = Assets.SOUNDS.FRIEND_REQUEST
     end
     
     if soundFile then
@@ -254,6 +269,7 @@ local function updateToast(toast, currentTime, prefsDurationMs)
         if fadeProgress >= 1.0 then
             toast.alpha = 0.0
             toast.state = ToastState.COMPLETE
+            toast.dismissed = true  -- Mark as dismissed so it won't block future notifications with same dedupeKey
         else
             toast.alpha = math.max(0.0, 1.0 - fadeProgress)
         end
@@ -424,6 +440,14 @@ local function renderToast(toast, targetY, isFirstToast)
         imgui.PushStyleColor(ImGuiCol_Text, {color[1], color[2], color[3], alpha})
         imgui.Text(toast.title or "")
         imgui.PopStyleColor()
+        
+        -- For FriendRequestAccepted, show online/offline status icon next to the message
+        if toast.type == ToastType.FriendRequestAccepted and toast.isOnline ~= nil then
+            local icons = require('libs.icons')
+            if icons.RenderStatusIcon(toast.isOnline, false, 12, false) then
+                imgui.SameLine()
+            end
+        end
         
         imgui.PushStyleColor(ImGuiCol_Text, {1.0, 1.0, 1.0, alpha * 0.9})
         imgui.Text(toast.message or "")

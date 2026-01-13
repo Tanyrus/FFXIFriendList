@@ -3,7 +3,10 @@ local icons = require('libs.icons')
 local utils = require('modules.friendlist.components.helpers.utils')
 local InputHelper = require('ui.helpers.InputHelper')
 local HoverTooltip = require('ui.widgets.HoverTooltip')
+local PresenceStatusPicker = require('ui.widgets.PresenceStatusPicker')
 local tagcore = require('core.tagcore')
+local nations = require('core.nations')
+local IconText = require('ui.helpers.IconText')
 
 local M = {}
 
@@ -145,6 +148,12 @@ function M.Render(state, dataModule, callbacks)
         imgui.SetTooltip("Filter friends by name, job, or zone")
     end
     
+    -- Add presence status picker to the right of filter
+    imgui.SameLine()
+    imgui.Text(" ")  -- Spacer
+    imgui.SameLine()
+    PresenceStatusPicker.RenderCompact("_friends_table")
+    
     if #filteredFriends == 0 then
         imgui.Text("No friends" .. (filterText ~= "" and " matching filter" or ""))
         return
@@ -212,6 +221,8 @@ function M.Render(state, dataModule, callbacks)
                 if callbacks.onSaveState then callbacks.onSaveState() end
             end
             
+
+            
             imgui.EndPopup()
         end
         
@@ -248,7 +259,14 @@ function M.RenderNameCell(friend, index, state, callbacks, sectionTag)
     local isPending = friend.isPending or false
     local uniqueId = (sectionTag or "main") .. "_" .. index
     
-    if not icons.RenderStatusIcon(isOnline, isPending, 12, isAway) then
+    -- Check if friend is muted
+    local isMuted = false
+    local app = _G.FFXIFriendListApp
+    if app and app.features and app.features.preferences and friend.friendAccountId then
+        isMuted = app.features.preferences:isFriendMuted(friend.friendAccountId)
+    end
+    
+    if not icons.RenderStatusIcon(isOnline, isPending, 16, isAway) then
         local color = isPending and {1.0, 0.8, 0.0, 1.0} or 
                      isAway and {1.0, 0.7, 0.2, 1.0} or
                      isOnline and {0.0, 1.0, 0.0, 1.0} or 
@@ -261,13 +279,24 @@ function M.RenderNameCell(friend, index, state, callbacks, sectionTag)
         imgui.PushStyleColor(ImGuiCol_Text, {0.6, 0.6, 0.6, 1.0})
     end
     
+    -- Render name with mute indicator to the right
+    local displayText = friendName
+    if isMuted then
+        displayText = friendName .. " (M)"
+    end
+    
     local flags = ImGuiSelectableFlags_SpanAllColumns
-    if imgui.Selectable(friendName .. "##friend_" .. uniqueId, false, flags) then
+    if imgui.Selectable(displayText .. "##friend_" .. uniqueId, false, flags) then
         if state.selectedFriendForDetails and state.selectedFriendForDetails.name == friend.name then
             state.selectedFriendForDetails = nil
         else
             state.selectedFriendForDetails = friend
         end
+    end
+    
+    -- Tooltip for muted indicator
+    if isMuted and imgui.IsItemHovered() then
+        imgui.SetTooltip("Notifications muted for this friend")
     end
     
     if imgui.BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID) then
@@ -366,30 +395,30 @@ function M.RenderNationRankCell(friend)
     local nation = presence.nation
     local rank = presence.rank
     local isOnline = friend.isOnline or false
-    if type(rank) ~= "string" then rank = "" end
+    -- Convert rank to string if it's a number (server sends numeric rank)
+    if type(rank) == "number" then
+        rank = tostring(rank)
+    elseif type(rank) ~= "string" then
+        rank = ""
+    end
     
     local rankNum = rank:match("%d+") or ""
     local anonColor = {0.4, 0.65, 0.85, 1.0}  -- Dark sky blue
     local anonColorDim = {0.3, 0.45, 0.6, 1.0}  -- Dimmed for offline
     
-    if nation == nil or (rankNum == "") then
+    -- Use nations module for icon lookup (supports both numeric and string values)
+    local nationIcon = nations.getIconName(nation)
+    
+    if nation == nil or nation == -1 or (rankNum == "" and not nationIcon) then
         if isOnline then
-            imgui.TextColored(anonColor, "Anon")
+            imgui.TextColored(anonColor, "Anonymous")
         else
-            imgui.TextColored(anonColorDim, "Anon")
+            imgui.TextColored(anonColorDim, "Anonymous")
         end
     else
-        local nationIcons = {
-            [0] = "nation_sandoria",
-            [1] = "nation_bastok",
-            [2] = "nation_windurst"
-        }
-        local nationIcon = nationIcons[nation]
-        
         if nationIcon and rankNum ~= "" then
-            if icons.RenderIcon(nationIcon, 12, 12) then
-                imgui.SameLine()
-            end
+            -- Render icon with proper vertical centering
+            IconText.renderIconAligned(nationIcon, IconText.ICON_SIZE.MEDIUM, IconText.SPACING.NORMAL)
             if isOnline then
                 imgui.Text("Rank " .. rankNum)
             else
@@ -402,10 +431,12 @@ function M.RenderNationRankCell(friend)
                 imgui.TextDisabled("Rank " .. rankNum)
             end
         else
+            -- Has nation but no rank - show nation name
+            local nationName = nations.getDisplayName(nation, "Anonymous")
             if isOnline then
-                imgui.TextColored(anonColor, "Anon")
+                imgui.Text(nationName)
             else
-                imgui.TextColored(anonColorDim, "Anon")
+                imgui.TextDisabled(nationName)
             end
         end
     end
@@ -418,10 +449,9 @@ function M.RenderLastSeenCell(friend)
     if isOnline then
         imgui.Text("Now")
     else
-        local lastSeenAt = presence.lastSeenAt
-        if type(lastSeenAt) ~= "number" then
-            lastSeenAt = 0
-        end
+        local lastSeenRaw = presence.lastSeenAt
+        -- Normalize to handle ISO8601 strings from server
+        local lastSeenAt = utils.normalizeLastSeen(lastSeenRaw)
         if lastSeenAt > 0 then
             imgui.TextDisabled(utils.formatRelativeTime(lastSeenAt))
         else
@@ -444,6 +474,8 @@ function M.RenderAddedAsCell(friend)
         imgui.TextDisabled(displayName)
     end
 end
+
+
 
 function M.RenderGroupTable(friends, state, callbacks, sectionTag)
     if not friends or #friends == 0 then

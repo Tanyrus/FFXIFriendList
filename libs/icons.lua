@@ -248,7 +248,7 @@ function M.GetStatusTint(isOnline, isPending, isAway)
     if isPending then
         return { 1.0, 0.8, 0.0, 1.0 };
     elseif isAway then
-        return { 1.0, 0.7, 0.2, 1.0 };
+        return { 1.0, 1.0, 1.0, 1.0 };
     elseif isOnline then
         return { 1.0, 1.0, 1.0, 1.0 };
     else

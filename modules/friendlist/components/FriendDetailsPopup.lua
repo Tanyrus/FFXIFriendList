@@ -4,6 +4,7 @@ local utils = require('modules.friendlist.components.helpers.utils')
 local tagcore = require('core.tagcore')
 local TagSelectDropdown = require('modules.friendlist.components.TagSelectDropdown')
 local FontManager = require('app.ui.FontManager')
+local nations = require('core.nations')
 
 local M = {}
 
@@ -165,18 +166,16 @@ function M.Render(friend, state, callbacks)
             imgui.Text(zoneDisplay)
         end
         
-        -- Nation - dark sky blue if Anon
+        -- Nation - use nations module for proper display string
+        -- Handles both numeric IDs and string values from server
         local nation = presence.nation
-        local nationNames = {[0] = "San d'Oria", [1] = "Bastok", [2] = "Windurst"}
-        local nationName = "Anon"
-        if nation ~= nil and nationNames[nation] then
-            nationName = nationNames[nation]
-        end
-        local nationDisplay = "Nation: " .. nationName .. (isLastKnown and nationName ~= "Anon" and lastKnownSuffix or "")
-        if nationName == "Anon" then
+        local nationName = nations.getDisplayName(nation, "Anonymous")
+        local isNationAnon = nations.isAnonymous(nation)
+        local nationDisplay = "Nation: " .. nationName .. (isLastKnown and not isNationAnon and lastKnownSuffix or "")
+        if isNationAnon then
             imgui.Text("Nation: ")
             imgui.SameLine(0, 0)
-            imgui.TextColored(anonColor, "Anon")
+            imgui.TextColored(anonColor, "Anonymous")
         else
             imgui.Text(nationDisplay)
         end
@@ -196,8 +195,10 @@ function M.Render(friend, state, callbacks)
         end
         
         local lastSeenText = "Unknown"
-        local lastSeenAt = presence.lastSeenAt or friend.lastSeenAt or friend.lastSeen
-        if type(lastSeenAt) == "number" and lastSeenAt > 0 then
+        local lastSeenRaw = presence.lastSeenAt or friend.lastSeenAt or friend.lastSeen
+        -- Normalize lastSeenAt to numeric timestamp (handles ISO8601 strings from server)
+        local lastSeenAt = utils.normalizeLastSeen(lastSeenRaw)
+        if lastSeenAt > 0 then
             lastSeenText = utils.formatRelativeTime(lastSeenAt)
         end
         if isOnline then
@@ -205,6 +206,8 @@ function M.Render(friend, state, callbacks)
         else
             imgui.Text("Last Seen: " .. lastSeenText)
         end
+        
+
         
         imgui.Separator()
         

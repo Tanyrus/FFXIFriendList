@@ -97,12 +97,16 @@ function M.Render(tagGroup, state, callbacks, renderFriendsTable, idSuffix, over
     end
 end
 
-function M.RenderAllSections(groups, state, callbacks, renderFriendsTable, idSuffix, overlayEnabled, disableInteraction)
+function M.RenderAllSections(groups, state, callbacks, renderFriendsTable, idSuffix, overlayEnabled, disableInteraction, hideEmpty)
     overlayEnabled = overlayEnabled or false
     disableInteraction = disableInteraction or false
+    hideEmpty = hideEmpty or false
     for _, tagGroup in ipairs(groups or {}) do
-        M.Render(tagGroup, state, callbacks, renderFriendsTable, idSuffix, overlayEnabled, disableInteraction)
-        imgui.Spacing()
+        local friends = tagGroup.friends or {}
+        if not hideEmpty or #friends > 0 then
+            M.Render(tagGroup, state, callbacks, renderFriendsTable, idSuffix, overlayEnabled, disableInteraction)
+            imgui.Spacing()
+        end
     end
     
     if not overlayEnabled and not disableInteraction then

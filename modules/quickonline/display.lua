@@ -9,7 +9,10 @@ local icons = require('libs.icons')
 local scaling = require('scaling')
 local InputHelper = require('ui.helpers.InputHelper')
 local HoverTooltip = require('ui.widgets.HoverTooltip')
+local TooltipHelper = require('ui.helpers.TooltipHelper')
 local FontManager = require('app.ui.FontManager')
+local UIConst = require('constants.ui')
+local Colors = require('constants.colors')
 
 local FriendContextMenu = require('modules.friendlist.components.FriendContextMenu')
 local FriendDetailsPopup = require('modules.friendlist.components.FriendDetailsPopup')
@@ -154,21 +157,30 @@ function M.DrawWindow(settings, dataModule)
     local app = _G.FFXIFriendListApp
     local needsServerSelection = false
     if app and app.features and app.features.serverlist then
-        needsServerSelection = not app.features.serverlist:isServerSelected()
+        -- Only show server not detected if:
+        -- 1. No server is selected AND
+        -- 2. Server detection has already been attempted (not just waiting for servers to load)
+        if not app.features.serverlist:isServerSelected() and app._serverDetectionCompleted then
+            needsServerSelection = true
+        end
     end
     
-    -- If server selection needed, only show server selection window (not main window)
+    -- If server detection is still pending, wait without showing window
+    -- Once detection completes, if no server was found, show error message
     if needsServerSelection then
-        if not state.serverSelectionOpened then
-            state.serverSelectionOpened = true
-            state.serverWindowNeedsCenter = true
-            state.serverListRefreshTriggered = false
-        end
-        M.RenderServerSelectionWindow()
+        M.RenderServerNotDetectedWindow()
         return
     end
     
-    -- Server is configured - render main window normally
+    -- Wait for connection to establish before showing main window
+    -- This ensures auto-connect completes before rendering
+    if app and app.features and app.features.connection then
+        if not app.features.connection:isConnected() then
+            return
+        end
+    end
+    
+    -- Server is connected - render main window normally
     local overlayEnabled = gConfig and gConfig.quickOnlineSettings and gConfig.quickOnlineSettings.compact_overlay_enabled or false
     local disableInteraction = false
     local tooltipBgEnabled = false
@@ -252,15 +264,12 @@ function M.DrawWindow(settings, dataModule)
     -- Apply theme styles (only if not default theme)
     local themePushed = false
     local overlayStylePushed = false
-    if overlayEnabled then
-        imgui.PushStyleColor(ImGuiCol_WindowBg, {0.0, 0.0, 0.0, 0.0})
-        imgui.PushStyleColor(ImGuiCol_ChildBg, {0.0, 0.0, 0.0, 0.0})
-        if not disableInteraction and not tooltipBgEnabled then
-            imgui.PushStyleColor(ImGuiCol_PopupBg, {0.0, 0.0, 0.0, 0.0})
-        end
-        imgui.PushStyleColor(ImGuiCol_Border, {0.0, 0.0, 0.0, 0.0})
-        overlayStylePushed = true
-    elseif app and app.features and app.features.themes then
+    local overlayColorCount = 0
+    
+    -- ALWAYS apply addon theme first (unless using Ashita default theme)
+    -- This ensures text colors, buttons, scrollbars etc. use our theme
+    local app = _G.FFXIFriendListApp
+    if app and app.features and app.features.themes then
         local themesFeature = app.features.themes
         local themeIndex = themesFeature:getThemeIndex()
         
@@ -283,6 +292,20 @@ function M.DrawWindow(settings, dataModule)
                 end
             end
         end
+    end
+    
+    -- THEN apply overlay transparency on top of the theme
+    if overlayEnabled then
+        imgui.PushStyleColor(ImGuiCol_WindowBg, Colors.TRANSPARENT)
+        imgui.PushStyleColor(ImGuiCol_ChildBg, Colors.TRANSPARENT)
+        overlayColorCount = 2
+        if not disableInteraction and not tooltipBgEnabled then
+            imgui.PushStyleColor(ImGuiCol_PopupBg, Colors.TRANSPARENT)
+            overlayColorCount = 3
+        end
+        imgui.PushStyleColor(ImGuiCol_Border, Colors.TRANSPARENT)
+        overlayColorCount = overlayColorCount + 1
+        overlayStylePushed = true
     end
     
     -- Pass windowOpen as a table so ImGui can modify it when X button is clicked
@@ -333,7 +356,7 @@ function M.DrawWindow(settings, dataModule)
             end
             imgui.BeginChild("##quick_online_body", {0, 0}, false, childFlags)
             if overlayEnabled then
-                imgui.PushStyleColor(ImGuiCol_ChildBg, {0.0, 0.0, 0.0, 0.0})
+                imgui.PushStyleColor(ImGuiCol_ChildBg, Colors.TRANSPARENT)
             end
             M.RenderFriendsTable(dataModule, overlayEnabled, disableInteraction, tooltipBgEnabled)
             if overlayEnabled then
@@ -345,13 +368,9 @@ function M.DrawWindow(settings, dataModule)
     
     imgui.End()
     
-    -- Pop overlay styles if we pushed them
+    -- Pop overlay styles if we pushed them (must pop before theme)
     if overlayStylePushed then
-        if disableInteraction or tooltipBgEnabled then
-            imgui.PopStyleColor(3)
-        else
-            imgui.PopStyleColor(4)
-        end
+        imgui.PopStyleColor(overlayColorCount)
     end
     
     -- Pop theme styles if we pushed them
@@ -409,9 +428,9 @@ function M.RenderTopBar(dataModule)
     imgui.SameLine(0, s(8))
     
     if not isConnected then
-        imgui.PushStyleColor(ImGuiCol_Button, {0.3, 0.3, 0.3, 1.0})
-        imgui.PushStyleColor(ImGuiCol_ButtonHovered, {0.3, 0.3, 0.3, 1.0})
-        imgui.PushStyleColor(ImGuiCol_ButtonActive, {0.3, 0.3, 0.3, 1.0})
+        imgui.PushStyleColor(ImGuiCol_Button, Colors.BUTTON.DISABLED)
+        imgui.PushStyleColor(ImGuiCol_ButtonHovered, Colors.BUTTON.DISABLED)
+        imgui.PushStyleColor(ImGuiCol_ButtonActive, Colors.BUTTON.DISABLED)
     end
     
     if imgui.Button("Refresh") then
@@ -568,7 +587,7 @@ function M.RenderFriendsTable(dataModule, overlayEnabled, disableInteraction, to
         
         if onlineExpanded then
             imgui.Indent(10)
-            CollapsibleTagSection.RenderAllSections(onlineGroups, state, sectionCallbacks, renderFriendsTable, "_qo_online", overlayEnabled, disableInteraction)
+            CollapsibleTagSection.RenderAllSections(onlineGroups, state, sectionCallbacks, renderFriendsTable, "_qo_online", overlayEnabled, disableInteraction, true)
             imgui.Unindent(10)
         end
         
@@ -597,14 +616,14 @@ function M.RenderFriendsTable(dataModule, overlayEnabled, disableInteraction, to
         
         if offlineExpanded then
             imgui.Indent(10)
-            CollapsibleTagSection.RenderAllSections(offlineGroups, state, sectionCallbacks, renderFriendsTable, "_qo_offline", overlayEnabled, disableInteraction)
+            CollapsibleTagSection.RenderAllSections(offlineGroups, state, sectionCallbacks, renderFriendsTable, "_qo_offline", overlayEnabled, disableInteraction, true)
             imgui.Unindent(10)
         end
     else
         -- Default behavior: just tag sections without online/offline grouping
         local groups = taggrouper.groupFriendsByTag(filteredFriends, tagOrder, getFriendTag)
         taggrouper.sortAllGroups(groups, sortMode, sortDirection)
-        CollapsibleTagSection.RenderAllSections(groups, state, sectionCallbacks, renderFriendsTable, nil, overlayEnabled, disableInteraction)
+        CollapsibleTagSection.RenderAllSections(groups, state, sectionCallbacks, renderFriendsTable, nil, overlayEnabled, disableInteraction, true)
     end
     
     if tagsFeature then
@@ -634,7 +653,7 @@ function M.RenderCompactFriendsList(friends, sectionTag, dataModule, disableInte
             local isAway = friend.isAway == true
             local uniqueId = (sectionTag or "qo") .. "_" .. i
             
-            if not icons.RenderStatusIcon(isOnline, false, 12, isAway) then
+            if not icons.RenderStatusIcon(isOnline, false, 16, isAway) then
                 if isAway then
                     imgui.TextColored({1.0, 0.7, 0.2, 1.0}, "A")
                 elseif isOnline then
@@ -649,8 +668,12 @@ function M.RenderCompactFriendsList(friends, sectionTag, dataModule, disableInte
                 imgui.PushStyleColor(ImGuiCol_Text, {0.6, 0.6, 0.6, 1.0})
             end
             
+            -- Render the friend name - either as text (disabled) or selectable (interactive)
+            local itemHovered = false
             if disableInteraction then
                 imgui.Text(friendName)
+                -- Use TooltipHelper for hover detection even when interaction is disabled
+                itemHovered = TooltipHelper.isItemHovered(true)
             else
                 if imgui.Selectable(friendName .. "##friend_" .. uniqueId, false, ImGuiSelectableFlags_SpanAllColumns) then
                     if state.selectedFriendForDetails and state.selectedFriendForDetails.name == friend.name then
@@ -677,49 +700,50 @@ function M.RenderCompactFriendsList(friends, sectionTag, dataModule, disableInte
                     end
                 end
                 
-                local itemHovered = imgui.IsItemHovered()
-                
-                if itemHovered then
-                    local forceAll = InputHelper.isShiftDown()
-                    if overlayEnabled and tooltipBgEnabled then
-                        local app = _G.FFXIFriendListApp
-                        local popupBgColor = {0.2, 0.2, 0.2, 0.9}
-                        if app and app.features and app.features.themes then
-                            local themesFeature = app.features.themes
-                            local themeIndex = themesFeature:getThemeIndex()
-                            if themeIndex ~= -2 then
-                                local themeColors = themesFeature:getCurrentThemeColors()
-                                local bgAlpha = themesFeature:getBackgroundAlpha() or 0.95
-                                if themeColors then
-                                    if themeColors.windowBgColor then
-                                        popupBgColor = {
-                                            themeColors.windowBgColor.r,
-                                            themeColors.windowBgColor.g,
-                                            themeColors.windowBgColor.b,
-                                            themeColors.windowBgColor.a * bgAlpha
-                                        }
-                                    elseif themeColors.frameBgColor then
-                                        popupBgColor = {
-                                            themeColors.frameBgColor.r,
-                                            themeColors.frameBgColor.g,
-                                            themeColors.frameBgColor.b,
-                                            themeColors.frameBgColor.a * bgAlpha
-                                        }
-                                    end
-                                end
-                            end
-                        end
-                        imgui.PushStyleColor(ImGuiCol_PopupBg, popupBgColor)
-                        HoverTooltip.Render(friend, hoverSettings, forceAll)
-                        imgui.PopStyleColor()
-                    else
-                        HoverTooltip.Render(friend, hoverSettings, forceAll)
-                    end
-                end
+                itemHovered = imgui.IsItemHovered()
                 
                 if imgui.BeginPopupContextItem("##friend_context_" .. uniqueId) then
                     FriendContextMenu.Render(friend, state, M.GetCallbacks(dataModule))
                     imgui.EndPopup()
+                end
+            end
+            
+            -- Render tooltip if hovered (works for both disabled and enabled interaction)
+            if itemHovered then
+                local forceAll = InputHelper.isShiftDown()
+                if overlayEnabled and tooltipBgEnabled then
+                    local app = _G.FFXIFriendListApp
+                    local popupBgColor = {0.2, 0.2, 0.2, 0.9}
+                    if app and app.features and app.features.themes then
+                        local themesFeature = app.features.themes
+                        local themeIndex = themesFeature:getThemeIndex()
+                        if themeIndex ~= -2 then
+                            local themeColors = themesFeature:getCurrentThemeColors()
+                            local bgAlpha = themesFeature:getBackgroundAlpha() or 0.95
+                            if themeColors then
+                                if themeColors.windowBgColor then
+                                    popupBgColor = {
+                                        themeColors.windowBgColor.r,
+                                        themeColors.windowBgColor.g,
+                                        themeColors.windowBgColor.b,
+                                        themeColors.windowBgColor.a * bgAlpha
+                                    }
+                                elseif themeColors.frameBgColor then
+                                    popupBgColor = {
+                                        themeColors.frameBgColor.r,
+                                        themeColors.frameBgColor.g,
+                                        themeColors.frameBgColor.b,
+                                        themeColors.frameBgColor.a * bgAlpha
+                                    }
+                                end
+                            end
+                        end
+                    end
+                    imgui.PushStyleColor(ImGuiCol_PopupBg, popupBgColor)
+                    HoverTooltip.Render(friend, hoverSettings, forceAll)
+                    imgui.PopStyleColor()
+                else
+                    HoverTooltip.Render(friend, hoverSettings, forceAll)
                 end
             end
             
@@ -842,7 +866,70 @@ function M.SaveWindowState()
     end
 end
 
--- Render server selection window (separate from main window)
+-- Simple error window when server auto-detection fails
+function M.RenderServerNotDetectedWindow()
+    local screenWidth = scaling.window.w
+    local screenHeight = scaling.window.h
+    
+    local windowFlags = bit.bor(
+        ImGuiWindowFlags_NoCollapse,
+        ImGuiWindowFlags_NoScrollbar,
+        ImGuiWindowFlags_AlwaysAutoResize
+    )
+    
+    -- Center on screen
+    local windowWidth = 400
+    local windowHeight = 200
+    local posX = (screenWidth - windowWidth) / 2
+    local posY = (screenHeight - windowHeight) / 2
+    imgui.SetNextWindowPos({posX, posY}, ImGuiCond_FirstUseEver)
+    imgui.SetNextWindowSize({windowWidth, 0}, ImGuiCond_FirstUseEver)
+    
+    -- Apply theme
+    local themePushed = M.ApplyTheme()
+    
+    local windowOpenTable = {true}
+    if not imgui.Begin("Server Not Detected##qo_servernotdetected", windowOpenTable, windowFlags) then
+        imgui.End()
+        M.PopTheme(themePushed)
+        return
+    end
+    
+    local ServerProfiles = require("core.ServerProfiles")
+    local loadError = ServerProfiles.getLoadError and ServerProfiles.getLoadError()
+    
+    imgui.TextColored({1.0, 0.3, 0.3, 1.0}, "Server Detection Failed")
+    imgui.Separator()
+    imgui.Spacing()
+    
+    if loadError then
+        imgui.TextWrapped("Could not fetch server list: " .. tostring(loadError))
+    else
+        imgui.TextWrapped("Your FFXI server could not be auto-detected.")
+    end
+    
+    imgui.Spacing()
+    imgui.TextWrapped("This addon currently supports: Horizon, Eden")
+    imgui.Spacing()
+    imgui.Separator()
+    imgui.Spacing()
+    
+    imgui.TextColored({0.5, 0.8, 1.0, 1.0}, "Need your server added?")
+    imgui.TextWrapped("Contact Tanyrus on Discord to request support for your server.")
+    imgui.Spacing()
+    
+    if imgui.Button("Join Discord Server", {200, 30}) then
+        os.execute('start https://discord.gg/horizonfriendlist')
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("Click to open Discord (opens in default browser)")
+    end
+    
+    imgui.End()
+    M.PopTheme(themePushed)
+end
+
+-- DEPRECATED: Server selection window replaced by auto-detection only
 function M.RenderServerSelectionWindow()
     local serverSelectionData = require('modules.serverselection.data')
     

@@ -7,6 +7,7 @@
 ]]--
 
 require('common')
+local ServerConfig = require('core.ServerConfig')
 
 local M = {}
 
@@ -128,12 +129,12 @@ local defaultSettings = T{
     tagOrder = T{ "Favorite" },
     collapsedTags = T{},
     
-    -- Data section (API keys, server selection, preferences)
+    -- Data section (API key, server selection, preferences)
     data = T{
-        apiKeys = T{},
+        apiKey = "",  -- Single API key for the account
         serverSelection = T{
             savedServerId = "",
-            savedServerBaseUrl = "https://api.horizonfriendlist.com",
+            savedServerBaseUrl = ServerConfig.DEFAULT_SERVER_URL,
             detectedServerShownOnce = false,
             helpSeenPerServer = T{}
         },
@@ -157,6 +158,10 @@ local defaultSettings = T{
             soundOnFriendRequest = true,
             notificationSoundVolume = 0.6,
             notificationShowTestPreview = false,
+            dontSendNotificationsGlobal = false,
+            muteTestFriendOnline = false,
+            muteTestFriendRequest = false,
+            mutedFriends = {},
             mainShowJob = true,
             mainShowZone = false,
             mainShowNationRank = false,

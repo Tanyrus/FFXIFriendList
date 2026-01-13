@@ -4,9 +4,11 @@
 * Follows plan: config loading, module registry, packet routing, network polling
 ]]--
 
+local VersionCore = require('core.versioncore')
+
 addon.name = 'FFXIFriendList'
 addon.author = 'Tanyrus'
-addon.version = '0.9.9'
+addon.version = VersionCore.ADDON_VERSION
 addon.desc = 'Friend list addon for FFXI'
 
 -- Set up package.path (absolute requires only)
@@ -38,6 +40,7 @@ require('imgui')
 -- config module removed - using libs.settings directly
 local moduleRegistry = require('core.moduleregistry')
 local settings = require('libs.settings')
+local ServerConfig = require('core.ServerConfig')
 
 -- Expose moduleRegistry globally for window close policy
 _G.moduleRegistry = moduleRegistry
@@ -62,20 +65,22 @@ local closeInputHandler = require('ui.input.close_input')
 -- Load sound player service
 local SoundPlayer = require('platform.services.SoundPlayer')
 
+-- Load diagnostics runner
+local DiagnosticsRunner = require('app.diagnostics.DiagnosticsRunner')
+
+-- Load realm detector service (auto-detects server from Ashita config)
+local RealmDetectorModule = require('platform.services.RealmDetector')
+
+-- Load server profile fetcher (fetches server list from API)
+local ServerProfileFetcher = require('platform.services.ServerProfileFetcher')
+local ServerProfiles = require('core.ServerProfiles')
+
 -- Simple services (no platform dependencies)
 local SessionManager = {}
 SessionManager.new = function()
     local self = { sessionId = "" }
     function self:getSessionId() return self.sessionId end
     function self:setSessionId(id) self.sessionId = id end
-    return self
-end
-
-local RealmDetector = {}
-RealmDetector.new = function(ashitaCore)
-    local self = { ashitaCore = ashitaCore, realmId = "notARealServer" }
-    function self:getRealmId() return self.realmId end
-    function self:setRealmId(id) self.realmId = id end
     return self
 end
 
@@ -87,6 +92,9 @@ gAdjustedSettings = nil
 local app = nil
 local initialized = false
 local installPath = nil
+
+-- Diagnostics runner
+local diagRunner = nil
 
 -- Update timing (for network polling - now per-frame for faster response)
 local lastUpdateTime = 0
@@ -121,13 +129,13 @@ ashita.events.register('load', 'ffxifriendlist_load', function()
     if not gConfig.data then
         gConfig.data = {}
     end
-    if not gConfig.data.apiKeys then
-        gConfig.data.apiKeys = {}
+    if not gConfig.data.apiKey then
+        gConfig.data.apiKey = ""
     end
     if not gConfig.data.serverSelection then
         gConfig.data.serverSelection = {
             savedServerId = "",
-            savedServerBaseUrl = "https://api.horizonfriendlist.com",
+            savedServerBaseUrl = ServerConfig.DEFAULT_SERVER_URL,
             detectedServerShownOnce = false
         }
     end
@@ -153,14 +161,77 @@ ashita.events.register('load', 'ffxifriendlist_load', function()
     
     -- Initialize simple services
     local sessionManager = SessionManager.new()
-    local realmDetector = RealmDetector.new(ashitaCore)
+    
+    -- Create logger early so RealmDetector can use it
+    local logger = {
+        debug = function(msg) return nil end,  -- Silent by default
+        info = function(msg) return nil end,   -- Silent by default
+        error = function(msg) 
+            print("[FFXIFriendList ERROR] " .. tostring(msg))
+            return nil
+        end,
+        warn = function(msg) return nil end,   -- Silent by default
+        echo = function(msg) return nil end    -- Silent by default
+    }
+    
+    -- Initialize realm detector (auto-detects server from Ashita config)
+    local realmDetector = RealmDetectorModule.RealmDetector.new(AshitaCore, logger)
+    
+    -- Helper to save detected server to config AND notify the app
+    local function saveDetectedServer(serverId, serverName)
+        if gConfig and gConfig.data and gConfig.data.serverSelection then
+            gConfig.data.serverSelection.savedServerId = serverId
+            gConfig.data.serverSelection.savedServerBaseUrl = ServerConfig.DEFAULT_SERVER_URL
+            local settings = require('libs.settings')
+            if settings and settings.save then
+                settings.save()
+            end
+            
+            -- Also notify the ServerList feature if app is already created
+            if app and app.features and app.features.serverlist then
+                local ServerListCore = require("core.serverlistcore")
+                app.features.serverlist.selected = ServerListCore.ServerInfo.new(
+                    serverId,
+                    serverId,
+                    ServerConfig.DEFAULT_SERVER_URL,
+                    serverId,
+                    false
+                )
+            end
+        end
+    end
+    
+    -- Fetch server profiles from API (async, required for server detection)
+    -- If fetch fails, auto-detection will not work
+    local profileFetcher = ServerProfileFetcher.ServerProfileFetcher.new(net.request, logger)
+    
+    -- Helper function to perform detection after profiles are loaded
+    local function performServerDetection()
+        realmDetector:clearCache()
+        local newResult = realmDetector:getDetectionResult()
+        
+        if newResult and newResult.success and newResult.profile then
+            saveDetectedServer(newResult.profile.id, newResult.profile.name)
+            return true
+        else
+            return false
+        end
+    end
+    
+    -- Start the profile fetch
+    profileFetcher:fetch(function(success, profiles, err)
+        if success then
+            ServerProfiles.setProfiles(profiles)
+            -- Re-detect with updated profiles
+            performServerDetection()
+        else
+            ServerProfiles.setLoadError(err)
+        end
+    end)
     
     -- Set up session
     local sessionId = generateSessionId()
     sessionManager:setSessionId(sessionId)
-    
-    -- Set up realm
-    local realmId = realmDetector:getRealmId()
     
     -- Create storage (uses persistence.lua)
     local storage = storageLib.create(installPath, createDirectory)
@@ -168,22 +239,15 @@ ashita.events.register('load', 'ffxifriendlist_load', function()
     -- Create network wrapper (uses libs/net.lua)
     local netClient = netWrapper.create(sessionManager, realmDetector, nil)
     
-    -- Build deps table (logging disabled for production - enable for debugging)
+    -- Build deps table
     local deps = {
-        logger = {
-            debug = function(msg) return nil end,  -- Silent
-            info = function(msg) return nil end,   -- Silent
-            error = function(msg) 
-                print("[FFXIFriendList ERROR] " .. tostring(msg))
-                return nil
-            end,
-            warn = function(msg) return nil end,   -- Silent
-            echo = function(msg) return nil end    -- Silent
-        },
+        logger = logger,
         net = netClient,
         storage = storage,
         session = sessionManager,
         realmDetector = realmDetector,
+        profileFetcher = profileFetcher,
+        retryServerDetection = performServerDetection,
         time = function() return os.time() * 1000 end
     }
     
@@ -199,6 +263,20 @@ ashita.events.register('load', 'ffxifriendlist_load', function()
         
         -- Set global app instance for modules to access
         _G.FFXIFriendListApp = app
+        
+        -- Create diagnostics runner
+        diagRunner = DiagnosticsRunner.new({
+            logger = deps.logger,
+            net = netClient,
+            connection = app.features.connection,
+            wsClient = app.features.wsClient
+        })
+        
+        -- Enable diagnostics if debugMode is set in preferences
+        local debugModeEnabled = gConfig and gConfig.data and gConfig.data.preferences and gConfig.data.preferences.debugMode
+        if debugModeEnabled then
+            diagRunner:setEnabled(true)
+        end
     end
     
     -- Initialize handlers
@@ -415,6 +493,26 @@ ashita.events.register('packet_in', 'ffxifriendlist_packet', function(e)
             -- Schedule zone change handling (processed after debounce delay)
             local _ = app.features.friends:scheduleZoneChange(parsedPacket)
         end
+    elseif e.id == 0x00D then
+        parsedPacket = packets.ParsePCUpdatePacket(e)
+        if parsedPacket and app and app.features.friends then
+            -- Handle PC Update (anonymous status, etc.)
+            local _ = app.features.friends:handlePCUpdate(parsedPacket)
+        end
+    elseif e.id == 0x037 then
+        -- Update Char packet - contains anonymous status for self-updates
+        parsedPacket = packets.Parse037Packet(e)
+        if parsedPacket and app and app.features.friends then
+            -- Handle Update Char (anonymous status, etc.)
+            local _ = app.features.friends:handleUpdateChar(parsedPacket)
+        end
+    elseif e.id == 0x0DF then
+        -- Char Update packet (HP/MP/TP updates and JOB CHANGES)
+        parsedPacket = packets.Parse0DFPacket(e)
+        if parsedPacket and app and app.features.friends then
+            -- Handle Char Update (job changes, HP/MP/TP)
+            local _ = app.features.friends:handleCharUpdate(parsedPacket)
+        end
     else
         -- Generic packet (for future expansion)
         parsedPacket = packets.ParseGenericPacket(e)
@@ -424,10 +522,12 @@ ashita.events.register('packet_in', 'ffxifriendlist_packet', function(e)
     return false
 end)
 
+local Assets = require('constants.assets')
+
 local function M_playSoundTest(soundType)
     local sounds = {
-        online = "online.wav",
-        request = "friend-request.wav"
+        online = Assets.SOUNDS.FRIEND_ONLINE,
+        request = Assets.SOUNDS.FRIEND_REQUEST
     }
     
     if soundType == "all" then
@@ -593,7 +693,40 @@ ashita.events.register('command', 'ffxifriendlist_command', function(e)
                 print("  /fl block <name> - Block a player from sending friend requests")
                 print("  /fl unblock <name> - Unblock a player")
                 print("  /fl blocked - List all blocked players")
+                print("  /fl diag <cmd> - Run diagnostics (requires DebugMode=true)")
                 print("  /befriend <name> [tag] - Send friend request with optional tag")
+                return
+            end
+            
+            if subcmd == "diag" then
+                if diagRunner then
+                    -- Collect remaining args
+                    local diagArgs = {}
+                    for i = 3, #command_args do
+                        table.insert(diagArgs, command_args[i])
+                    end
+                    diagRunner:handleCommand(diagArgs)
+                else
+                    print("[FFXIFriendList] Diagnostics not available")
+                end
+                return
+            end
+            
+            if subcmd == "debug" then
+                -- Toggle debug mode which enables diagnostics
+                if gConfig and gConfig.data and gConfig.data.preferences then
+                    gConfig.data.preferences.debugMode = not gConfig.data.preferences.debugMode
+                    local enabled = gConfig.data.preferences.debugMode
+                    if diagRunner then
+                        diagRunner:setEnabled(enabled)
+                    end
+                    print("[FFXIFriendList] Debug mode " .. (enabled and "ENABLED" or "DISABLED"))
+                    -- Save the setting
+                    local settings = require("libs.settings")
+                    if settings and settings.save then
+                        settings.save()
+                    end
+                end
                 return
             end
             

@@ -493,6 +493,26 @@ ashita.events.register('packet_in', 'ffxifriendlist_packet', function(e)
             -- Schedule zone change handling (processed after debounce delay)
             local _ = app.features.friends:scheduleZoneChange(parsedPacket)
         end
+    elseif e.id == 0x00D then
+        parsedPacket = packets.ParsePCUpdatePacket(e)
+        if parsedPacket and app and app.features.friends then
+            -- Handle PC Update (anonymous status, etc.)
+            local _ = app.features.friends:handlePCUpdate(parsedPacket)
+        end
+    elseif e.id == 0x037 then
+        -- Update Char packet - contains anonymous status for self-updates
+        parsedPacket = packets.Parse037Packet(e)
+        if parsedPacket and app and app.features.friends then
+            -- Handle Update Char (anonymous status, etc.)
+            local _ = app.features.friends:handleUpdateChar(parsedPacket)
+        end
+    elseif e.id == 0x0DF then
+        -- Char Update packet (HP/MP/TP updates and JOB CHANGES)
+        parsedPacket = packets.Parse0DFPacket(e)
+        if parsedPacket and app and app.features.friends then
+            -- Handle Char Update (job changes, HP/MP/TP)
+            local _ = app.features.friends:handleCharUpdate(parsedPacket)
+        end
     else
         -- Generic packet (for future expansion)
         parsedPacket = packets.ParseGenericPacket(e)

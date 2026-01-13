@@ -235,6 +235,15 @@ function M.RenderPrivacyControlsSection(state, callbacks)
     if isOpen ~= state.privacyControlsExpanded then
         state.privacyControlsExpanded = isOpen
         if callbacks.onSaveState then callbacks.onSaveState() end
+        
+        -- Auto-refresh preview when tab is first opened
+        if isOpen then
+            local app = _G.FFXIFriendListApp
+            if app then
+                state.lastFetchedCharacterId = nil  -- Force re-fetch
+                M._fetchCharacterStatus(app)
+            end
+        end
     end
     
     if not isOpen then return end
@@ -311,78 +320,78 @@ end
 function M.RenderPresencePreview(prefs)
     local app = _G.FFXIFriendListApp
     
-    -- Get current character ID to check if we need to fetch
-    local currentCharId = nil
-    if app and app.features and app.features.connection then
-        currentCharId = app.features.connection.lastCharacterId
+    -- Get CURRENT presence from local client (always up-to-date with packet detection + memory fallback)
+    local charStatus = nil
+    if app and app.features and app.features.friends then
+        charStatus = app.features.friends:queryPlayerPresence()
     end
-    
-    -- Fetch character status from server if we haven't already or if character changed
-    if currentCharId and currentCharId ~= state.lastFetchedCharacterId then
-        state.lastFetchedCharacterId = currentCharId
-        M._fetchCharacterStatus(app)
-    end
-    
-    -- Use server's character status if available
-    local charStatus = state.characterStatus
     
     -- Use SERVER preferences - these are what matter to friends
     local presenceStatus = prefs.presenceStatus or "online"
     local shareLocation = prefs.shareLocation ~= false
     local shareJobWhenAnonymous = prefs.shareJobWhenAnonymous or false
     
-    imgui.TextDisabled("Preview: How friends see you (from server)")
+    imgui.TextDisabled("Preview: How friends see you (live)")
     imgui.Separator()
     
-    if presenceStatus == "invisible" then
-        -- Invisible: friends see you as offline
-        imgui.BeginGroup()
-        imgui.TextDisabled("Status:")
-        imgui.SameLine(100)
-        imgui.TextColored({0.5, 0.5, 0.5, 1.0}, "Offline")
-        imgui.EndGroup()
-        
-        imgui.TextDisabled("You appear completely offline to all friends")
+    -- Determine status and color
+    local statusColor = {0.4, 0.9, 0.4, 1.0}  -- Green for online
+    local statusText = "Online"
+    local isInvisible = presenceStatus == "invisible"
+    
+    if isInvisible then
+        statusColor = {0.5, 0.5, 0.5, 1.0}  -- Gray for offline
+        statusText = "Offline"
+    elseif presenceStatus == "away" then
+        statusColor = {1.0, 0.7, 0.2, 1.0}  -- Orange for away
+        statusText = "Away"
+    end
+    
+    imgui.BeginGroup()
+    imgui.TextDisabled("Status:")
+    imgui.SameLine(100)
+    imgui.TextColored(statusColor, statusText)
+    imgui.EndGroup()
+    
+    if isInvisible then
+        imgui.TextDisabled("You appear offline - all information hidden from friends")
+        imgui.Spacing()
+    end
+    
+    -- Character name
+    local charName = "Unknown"
+    if charStatus and charStatus.characterName and charStatus.characterName ~= "" then
+        charName = charStatus.characterName:sub(1,1):upper() .. charStatus.characterName:sub(2)
+    end
+    
+    imgui.TextDisabled("Character:")
+    imgui.SameLine(100)
+    if isInvisible then
+        imgui.TextDisabled(charName)
     else
-        -- Online or Away
-        local statusColor = presenceStatus == "away" and {1.0, 0.7, 0.2, 1.0} or {0.4, 0.9, 0.4, 1.0}
-        local statusText = presenceStatus == "away" and "Away" or "Online"
-        
-        imgui.BeginGroup()
-        imgui.TextDisabled("Status:")
-        imgui.SameLine(100)
-        imgui.TextColored(statusColor, statusText)
-        imgui.EndGroup()
-        
-        -- Character name
-        local charName = "Unknown"
-        if charStatus and charStatus.characterName and charStatus.characterName ~= "" then
-            charName = charStatus.characterName:sub(1,1):upper() .. charStatus.characterName:sub(2)
-        end
-        
-        imgui.TextDisabled("Character:")
-        imgui.SameLine(100)
         imgui.Text(charName)
-        
-        -- Job
-        imgui.TextDisabled("Job:")
-        imgui.SameLine(100)
-        if shareJobWhenAnonymous or (charStatus and not charStatus.isAnonymous) then
-            local jobText = "Unknown"
-            if charStatus and charStatus.job then
-                -- Format like friends table: "SMN 99/RDM 49"
-                local mainJob = tostring(charStatus.job)
-                local mainLevel = charStatus.jobLevel or 0
-                jobText = mainJob .. " " .. tostring(mainLevel)
-                
-                -- Add sub job if present
-                if charStatus.subJob and charStatus.subJob ~= "" and charStatus.subJobLevel and charStatus.subJobLevel > 0 then
-                    jobText = jobText .. "/" .. tostring(charStatus.subJob) .. " " .. tostring(charStatus.subJobLevel)
-                end
-            end
+    end
+    
+    -- Job
+    imgui.TextDisabled("Job:")
+    imgui.SameLine(100)
+    if shareJobWhenAnonymous or (charStatus and not charStatus.isAnonymous) then
+        local jobText = "Unknown"
+        -- Use the already-formatted job string from queryPlayerPresence()
+        if charStatus and charStatus.job and charStatus.job ~= "" then
+            jobText = charStatus.job
+        end
+        if isInvisible then
+            imgui.TextDisabled(jobText)
+        else
             imgui.Text(jobText)
+        end
+    else
+        if isInvisible then
+            imgui.TextDisabled("Hidden")
         else
             imgui.TextColored({0.4, 0.65, 0.85, 1.0}, "Hidden")
+            end
         end
         
         -- Nation/Rank
@@ -392,15 +401,30 @@ function M.RenderPresencePreview(prefs)
             local nationText = "Unknown"
             if charStatus and charStatus.nation then
                 local nationName = nations.getDisplayName(charStatus.nation, "Unknown")
-                if charStatus.rank and charStatus.rank > 0 then
-                    nationText = nationName .. " " .. tostring(charStatus.rank)
+                -- charStatus.rank is a formatted string like "Rank 10" or a number
+                if charStatus.rank then
+                    if type(charStatus.rank) == "string" and charStatus.rank ~= "" then
+                        nationText = nationName .. " " .. charStatus.rank
+                    elseif type(charStatus.rank) == "number" and charStatus.rank > 0 then
+                        nationText = nationName .. " Rank " .. tostring(charStatus.rank)
+                    else
+                        nationText = nationName
+                    end
                 else
                     nationText = nationName
                 end
             end
-            imgui.Text(nationText)
+            if isInvisible then
+                imgui.TextDisabled(nationText)
+            else
+                imgui.Text(nationText)
+            end
         else
-            imgui.TextColored({0.4, 0.65, 0.85, 1.0}, "Hidden")
+            if isInvisible then
+                imgui.TextDisabled("Hidden")
+            else
+                imgui.TextColored({0.4, 0.65, 0.85, 1.0}, "Hidden")
+            end
         end
         
         -- Zone
@@ -411,11 +435,18 @@ function M.RenderPresencePreview(prefs)
             if charStatus and charStatus.zone then
                 zoneText = tostring(charStatus.zone)
             end
-            imgui.Text(zoneText)
+            if isInvisible then
+                imgui.TextDisabled(zoneText)
+            else
+                imgui.Text(zoneText)
+            end
         else
-            imgui.TextColored({0.4, 0.65, 0.85, 1.0}, "Hidden")
+            if isInvisible then
+                imgui.TextDisabled("Hidden")
+            else
+                imgui.TextColored({0.4, 0.65, 0.85, 1.0}, "Hidden")
+            end
         end
-    end
 end
 
 function M._fetchCharacterStatus(app)

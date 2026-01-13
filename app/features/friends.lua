@@ -36,6 +36,24 @@ function M.Friends.new(deps)
     self.pendingZoneChange = nil
     self.zoneChangeScheduledAt = nil
     
+    -- Track anonymous status from packets (for change detection and data)
+    self.lastKnownAnonStatus = nil
+    
+    -- Track last sent presence to server (for deduplication)
+    self.lastSentZoneId = nil
+    self.lastSentMainJob = nil
+    self.lastSentMainJobLevel = nil
+    self.lastSentSubJob = nil
+    self.lastSentSubJobLevel = nil
+    self.lastSentIsAnonymous = nil
+    
+    -- Track presence changes for UI updates (Privacy tab auto-refresh)
+    self.presenceChangedAt = nil
+    
+    -- Track presence update state to prevent race conditions
+    self.presenceUpdateInFlight = false
+    self.hasPendingPresenceUpdate = false
+    
     -- Notification state tracking
     self.previousOnlineStatus = {}      -- table: lowercase name -> bool
     self.initialStatusScanComplete = false
@@ -49,6 +67,30 @@ local function getTime(self)
         return self.deps.time()
     end
     return os.time() * 1000
+end
+
+-- Helper: Read job data from memory (used when packet data is invalid)
+local function getJobDataFromMemory()
+    if not AshitaCore then
+        return nil, nil, nil, nil
+    end
+    
+    local memoryMgr = AshitaCore:GetMemoryManager()
+    if not memoryMgr then
+        return nil, nil, nil, nil
+    end
+    
+    local player = memoryMgr:GetPlayer()
+    if not player then
+        return nil, nil, nil, nil
+    end
+    
+    local playerData = player:GetRawStructure()
+    if not playerData then
+        return nil, nil, nil, nil
+    end
+    
+    return playerData.MainJob, playerData.MainJobLevel, playerData.SubJob, playerData.SubJobLevel
 end
 
 -- Helper: Format job string from server state (job, subJob, jobLevel, subJobLevel)
@@ -839,6 +881,54 @@ function M.Friends:scheduleZoneChange(packet)
     return true
 end
 
+function M.Friends:handlePCUpdate(packet)
+    if not packet or packet.type ~= "pc_update" then
+        return
+    end
+    
+    -- Track anonymous status from packet
+    local currentAnon = packet.isAnonymous
+    
+    if self.lastKnownAnonStatus ~= currentAnon then
+        self.lastKnownAnonStatus = currentAnon
+        print(string.format("[handlePCUpdate] Anon status changed: %s", tostring(currentAnon)))
+        
+        self.presenceChangedAt = getTime(self)
+        self:updatePresence()
+    end
+end
+
+function M.Friends:handleUpdateChar(packet)
+    if not packet or packet.type ~= "update_char" then
+        return
+    end
+    
+    -- Track anonymous status from packet
+    local currentAnon = packet.isAnonymous
+    
+    if self.lastKnownAnonStatus ~= currentAnon then
+        self.lastKnownAnonStatus = currentAnon
+        print(string.format("[handleUpdateChar] Anon status changed: %s", tostring(currentAnon)))
+        
+        self.presenceChangedAt = getTime(self)
+        self:updatePresence()
+    end
+end
+
+function M.Friends:handleCharUpdate(packet)
+    if not packet or packet.type ~= "char_update" then
+        return
+    end
+    
+    -- Packet detected job/level change - trigger update
+    -- Actual data will be read from memory in updatePresence()
+    -- (Packet data can be invalid when anonymous, so we ignore it)
+    print("[handleCharUpdate] Job/level change detected via packet")
+    
+    self.presenceChangedAt = getTime(self)
+    self:updatePresence()
+end
+
 function M.Friends:handleZoneChange(packet)
     if not packet or packet.type ~= "zone" then
         return false
@@ -857,10 +947,43 @@ function M.Friends:updatePresence()
         return false
     end
     
+    -- If an update is already in flight, mark that we have a pending update
+    -- The callback will retry once the current request completes
+    if self.presenceUpdateInFlight then
+        self.hasPendingPresenceUpdate = true
+        return true  -- Will be sent after current update completes
+    end
+    
     local presence = self:queryPlayerPresence()
     if not presence or not presence.characterName or presence.characterName == "" then
         return false
     end
+    
+    print(string.format("[updatePresence] Queried presence: mainJob=%s, mainJobLevel=%s, jobLevel=%s",
+        tostring(presence.mainJob), tostring(presence.mainJobLevel), tostring(presence.jobLevel)))
+    
+    -- Deduplicate: only send if something actually changed
+    -- Compare against what we're about to send (presence object), not cached values
+    -- This is important because queryPlayerPresence() might read from memory instead of cache
+    if self.lastSentZoneId == presence.zoneId and
+       self.lastSentMainJob == presence.mainJob and
+       self.lastSentMainJobLevel == presence.mainJobLevel and
+       self.lastSentSubJob == presence.subJob and
+       self.lastSentSubJobLevel == presence.subJobLevel and
+       self.lastSentIsAnonymous == presence.isAnonymous then
+        return true  -- No change, skip update
+    end
+    
+    -- Mark update as in-flight BEFORE sending
+    self.presenceUpdateInFlight = true
+    
+    -- Track what we're about to send
+    self.lastSentZoneId = presence.zoneId
+    self.lastSentMainJob = presence.mainJob
+    self.lastSentMainJobLevel = presence.mainJobLevel
+    self.lastSentSubJob = presence.subJob
+    self.lastSentSubJobLevel = presence.subJobLevel
+    self.lastSentIsAnonymous = presence.isAnonymous
     
     -- Use new server endpoint: POST /api/presence/update
     local requestBody = RequestEncoder.encodePresenceUpdate(presence)
@@ -879,8 +1002,17 @@ function M.Friends:updatePresence()
         headers = headers,
         body = requestBody,
         callback = function(success, response)
+            -- Clear in-flight flag
+            self.presenceUpdateInFlight = false
+            
             if not success and self.deps.logger and self.deps.logger.error then
                 self.deps.logger.error("[Friends] Failed to update presence: " .. tostring(response))
+            end
+            
+            -- If there was a pending update (job changed while request was in flight), send it now
+            if self.hasPendingPresenceUpdate then
+                self.hasPendingPresenceUpdate = false
+                self:updatePresence()
             end
         end
     })
@@ -1177,62 +1309,21 @@ function M.Friends:queryPlayerPresence()
     local party = memoryMgr:GetParty()
     local player = memoryMgr:GetPlayer()
     
-    local isAnonymous = false
-    if party then
-        local mainJob = party:GetMemberMainJob(0)
-        local mainJobLevel = party:GetMemberMainJobLevel(0)
-        if mainJob == 0 or mainJobLevel == 0 then
-            isAnonymous = true
-        end
-    end
+    -- Use anonymous status from packet detection (0x037)
+    local isAnonymous = self.lastKnownAnonStatus or false
     
-    if player then
-        local playerData = player:GetRawStructure()
-        if playerData then
-            local mainJob = playerData.MainJob
-            local mainJobLevel = playerData.MainJobLevel
-            local subJob = playerData.SubJob
-            local subJobLevel = playerData.SubJobLevel
-            
-            presence.job = self:formatJobString(mainJob, mainJobLevel, subJob, subJobLevel)
-            
-            -- Set separate fields for server (jobLevel, subJob, subJobLevel)
-            if mainJobLevel and mainJobLevel > 0 then
-                presence.jobLevel = mainJobLevel
-            end
-            if subJob and subJob > 0 and subJob < 23 then
-                local jobNames = {
-                    "NON", "WAR", "MNK", "WHM", "BLM", "RDM", "THF", "PLD", "DRK", "BST",
-                    "BRD", "RNG", "SAM", "NIN", "DRG", "SMN", "BLU", "COR", "PUP", "DNC",
-                    "SCH", "GEO", "RUN"
-                }
-                presence.subJob = jobNames[subJob + 1]
-                if subJobLevel and subJobLevel > 0 then
-                    presence.subJobLevel = subJobLevel
-                end
-            end
-            
-            local playerRank = playerData.Rank
-            if playerRank and playerRank > 0 then
-                presence.rank = "Rank " .. tostring(playerRank)
-            end
-            
-            presence.nation = playerData.Nation or 0
-            
-            if not isAnonymous and (mainJob == 0 or mainJobLevel == 0) then
-                isAnonymous = true
-            end
-        end
-    elseif party then
-        local mainJob = party:GetMemberMainJob(0)
-        local mainJobLevel = party:GetMemberMainJobLevel(0)
-        local subJob = party:GetMemberSubJob(0)
-        local subJobLevel = party:GetMemberSubJobLevel(0)
-        
+    -- Always read job data from memory for accuracy
+    local mainJob, mainJobLevel, subJob, subJobLevel = getJobDataFromMemory()
+    
+    if mainJob and mainJobLevel then
         presence.job = self:formatJobString(mainJob, mainJobLevel, subJob, subJobLevel)
         
-        -- Set separate fields for server (jobLevel, subJob, subJobLevel)
-        if mainJobLevel and mainJobLevel > 0 then
+        -- IMPORTANT: Set mainJob as numeric ID for server
+        presence.mainJob = mainJob
+        presence.mainJobLevel = mainJobLevel
+        
+        -- Set separate fields for server
+        if mainJobLevel > 0 then
             presence.jobLevel = mainJobLevel
         end
         if subJob and subJob > 0 and subJob < 23 then
@@ -1248,27 +1339,24 @@ function M.Friends:queryPlayerPresence()
         end
     end
     
+    if player then
+        local playerData = player:GetRawStructure()
+        if playerData then
+            local playerRank = playerData.Rank
+            if playerRank and playerRank > 0 then
+                presence.rank = "Rank " .. tostring(playerRank)
+            end
+            
+            presence.nation = playerData.Nation or 0
+        end
+    end
+    
     presence.isAnonymous = isAnonymous
     
     if party then
         local zoneId = party:GetMemberZone(0)
         if zoneId and zoneId > 0 then
             presence.zone = self:getZoneNameFromId(zoneId)
-        end
-    end
-    
-    if presence.zone == "" and player then
-        local resourceMgr = AshitaCore:GetResourceManager()
-        if resourceMgr and party then
-            local zoneId = party:GetMemberZone(0)
-            if zoneId and zoneId > 0 then
-                local zoneName = resourceMgr:GetString("zones.names", zoneId)
-                if zoneName and zoneName ~= "" then
-                    presence.zone = zoneName
-                else
-                    presence.zone = self:getZoneNameFromId(zoneId)
-                end
-            end
         end
     end
     

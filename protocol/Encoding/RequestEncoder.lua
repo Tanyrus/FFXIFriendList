@@ -478,19 +478,41 @@ end
 function M.encodePresenceUpdate(presence)
     local body = {}
     
-    -- Job: extract just the main job abbreviation (e.g., "WHM" from "WHM 75/BLM 37")
-    -- Server expects separate fields: job, subJob, jobLevel, subJobLevel
-    if presence.job and presence.job ~= "" then
-        local jobAbbr = presence.job:match("^(%u+)") or ""
-        if jobAbbr ~= "" then
-            body.job = jobAbbr
+    -- Only send job info if we have valid levels (>= 1)
+    local hasValidJob = (presence.mainJobLevel and presence.mainJobLevel > 0) or (presence.jobLevel and presence.jobLevel > 0)
+    
+    if hasValidJob then
+        -- Use mainJob numeric ID if available, otherwise extract from job string
+        if presence.mainJob then
+            -- Convert numeric job ID to abbreviation
+            local jobNames = {
+                "NON", "WAR", "MNK", "WHM", "BLM", "RDM", "THF", "PLD", "DRK", "BST",
+                "BRD", "RNG", "SAM", "NIN", "DRG", "SMN", "BLU", "COR", "PUP", "DNC",
+                "SCH", "GEO", "RUN"
+            }
+            body.job = jobNames[presence.mainJob + 1] or "NON"
+        elseif presence.job and presence.job ~= "" then
+            -- Fallback: extract from formatted string
+            local jobAbbr = presence.job:match("^(%u+)") or ""
+            if jobAbbr ~= "" then
+                body.job = jobAbbr
+            end
+        end
+        
+        -- Send job levels
+        if presence.mainJobLevel and presence.mainJobLevel > 0 then
+            body.jobLevel = presence.mainJobLevel
+        elseif presence.jobLevel and presence.jobLevel > 0 then
+            body.jobLevel = presence.jobLevel
+        end
+        
+        -- SubJob and level
+        if presence.subJob then body.subJob = presence.subJob end
+        if presence.subJobLevel and presence.subJobLevel > 0 then
+            body.subJobLevel = presence.subJobLevel
         end
     end
     
-    -- SubJob, jobLevel, subJobLevel are now passed as separate fields from queryPlayerPresence
-    if presence.subJob then body.subJob = presence.subJob end
-    if presence.jobLevel then body.jobLevel = presence.jobLevel end
-    if presence.subJobLevel then body.subJobLevel = presence.subJobLevel end
     if presence.zone then body.zone = presence.zone end
     
     -- Nation: convert number to string

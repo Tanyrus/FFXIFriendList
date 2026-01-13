@@ -8,19 +8,6 @@ function M.Render(state, dataModule, callbacks)
     M.RenderPrivacyControlsSection(state, callbacks)
     imgui.Spacing()
     M.RenderBlockedPlayersSection(state, dataModule, callbacks)
-    imgui.Spacing()
-    
-    -- Wrap visibility matrix in pcall to prevent errors from breaking the main window
-    local ok, err = pcall(function()
-        M.RenderVisibilityMatrixSection(state, callbacks)
-    end)
-    if not ok then
-        imgui.TextColored({1, 0, 0, 1}, 'Error in visibility matrix:')
-        imgui.TextWrapped(tostring(err))
-    end
-    
-    -- Old per-character visibility replaced by visibility matrix
-    -- M.RenderAltVisibilitySection(state, dataModule, callbacks)
 end
 
 function M.RenderMenuDetectionSection(state, callbacks)

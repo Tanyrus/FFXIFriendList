@@ -81,12 +81,4 @@ M.PRESENCE = {
     HEARTBEAT = "/api/presence/heartbeat"
 }
 
--- Characters endpoints (Per-Character Visibility)
--- Visibility Matrix endpoints (Per-Friend Per-Character Visibility)
-M.VISIBILITY_MATRIX = {
-    GET = "/api/visibility-matrix",
-    UPDATE_BATCH = "/api/visibility-matrix",
-    UPDATE_CELL = "/api/visibility-matrix/cell"
-}
-
 return M

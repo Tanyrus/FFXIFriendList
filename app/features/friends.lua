@@ -461,6 +461,7 @@ function M.Friends:addFriend(name)
             if not success then
                 -- Try to parse error from response
                 local errorMsg = "Failed to send friend request"
+                local errorCode = nil
                 local ok, envelope = Envelope.decode(response)
                 if ok == false and envelope == Envelope.DecodeError.ServerError then
                     -- errorMsg is in the third return value
@@ -474,8 +475,13 @@ function M.Friends:addFriend(name)
                         -- Try raw JSON parse for error
                         local Json = require("protocol.Json")
                         local jsonOk, jsonData = Json.decode(response)
-                        if jsonOk and jsonData.error and jsonData.error.message then
-                            errorMsg = jsonData.error.message
+                        if jsonOk and jsonData.error then
+                            if jsonData.error.message then
+                                errorMsg = jsonData.error.message
+                            end
+                            if jsonData.error.code then
+                                errorCode = jsonData.error.code
+                            end
                         end
                     end
                 end
@@ -483,8 +489,17 @@ function M.Friends:addFriend(name)
                 if self.deps.logger and self.deps.logger.warn then
                     self.deps.logger.warn("[Friends] Send request failed: " .. errorMsg)
                 end
-                if self.deps.logger and self.deps.logger.echo then
-                    self.deps.logger.echo("Friend request failed: " .. errorMsg)
+                
+                -- Friendly message for CHARACTER_NOT_FOUND error
+                if errorCode == "CHARACTER_NOT_FOUND" then
+                    if self.deps.logger and self.deps.logger.echo then
+                        self.deps.logger.echo("Player '" .. name .. "' doesn't have the addon installed.")
+                        self.deps.logger.echo("Tell them to get it at: github.com/Tanyrus/FFXIFriendList")
+                    end
+                else
+                    if self.deps.logger and self.deps.logger.echo then
+                        self.deps.logger.echo("Friend request failed: " .. errorMsg)
+                    end
                 end
             else
                 -- Success - parse response for real request ID and add to outgoing
@@ -562,6 +577,7 @@ function M.Friends:addFriendWithRealm(name, realmId)
             if not success then
                 -- Try to parse error from response
                 local errorMsg = "Failed to send cross-server friend request"
+                local errorCode = nil
                 local ok, envelope = Envelope.decode(response)
                 if ok == false and envelope == Envelope.DecodeError.ServerError then
                     local _, _, serverMsg = Envelope.decode(response)
@@ -573,8 +589,13 @@ function M.Friends:addFriendWithRealm(name, realmId)
                     if not decoded then
                         local Json = require("protocol.Json")
                         local jsonOk, jsonData = Json.decode(response)
-                        if jsonOk and jsonData.error and jsonData.error.message then
-                            errorMsg = jsonData.error.message
+                        if jsonOk and jsonData.error then
+                            if jsonData.error.message then
+                                errorMsg = jsonData.error.message
+                            end
+                            if jsonData.error.code then
+                                errorCode = jsonData.error.code
+                            end
                         end
                     end
                 end
@@ -582,8 +603,17 @@ function M.Friends:addFriendWithRealm(name, realmId)
                 if self.deps.logger and self.deps.logger.warn then
                     self.deps.logger.warn("[Friends] Cross-server request failed: " .. errorMsg)
                 end
-                if self.deps.logger and self.deps.logger.echo then
-                    self.deps.logger.echo("Cross-server friend request failed: " .. errorMsg)
+                
+                -- Friendly message for CHARACTER_NOT_FOUND error
+                if errorCode == "CHARACTER_NOT_FOUND" then
+                    if self.deps.logger and self.deps.logger.echo then
+                        self.deps.logger.echo("Player '" .. normalizedName .. "' on " .. realmId .. " doesn't have the addon installed.")
+                        self.deps.logger.echo("Tell them to get it at: github.com/Tanyrus/FFXIFriendList")
+                    end
+                else
+                    if self.deps.logger and self.deps.logger.echo then
+                        self.deps.logger.echo("Cross-server friend request failed: " .. errorMsg)
+                    end
                 end
             else
                 -- Success - parse response for real request ID and add to outgoing

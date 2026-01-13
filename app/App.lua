@@ -14,6 +14,7 @@ local Blocklist = require("app.features.blocklist")
 local WsClientAsync = require("platform.services.WsClientAsync")
 local WsConnectionManager = require("platform.services.WsConnectionManager")
 local WsEventHandler = require("app.features.wsEventHandler")
+local VersionCheck = require("app.features.versioncheck")
 
 local App = {}
 
@@ -29,7 +30,8 @@ function App.create(deps)
         initialized = false,
         _missingFeatureLogged = {},  -- Track missing features for logging
         _startupRefreshCompleted = false,  -- Track if startup refresh has run
-        _autoDetectAttempted = false  -- Track if auto-detect has been tried
+        _autoDetectAttempted = false,  -- Track if auto-detect has been tried
+        _versionCheckCompleted = false  -- Track if version check has run
     }
     
     -- Initialize features with deps (all use new(deps) signature)
@@ -46,6 +48,7 @@ function App.create(deps)
     app.features.notes = Notes.Notes.new(deps)
     app.features.tags = Tags.Tags.new(deps)
     app.features.blocklist = Blocklist.Blocklist.new(deps)
+    app.features.versionCheck = VersionCheck.VersionCheck.new(deps)
     
     -- Initialize non-blocking WebSocket client
     app.features.wsClient = WsClientAsync.WsClientAsync.new(deps)
@@ -196,6 +199,12 @@ function App.tick(app, dtSeconds)
     if not app._autoDetectAttempted and app.features.serverlist and app.features.serverlist.servers and #app.features.serverlist.servers > 0 then
         app._autoDetectAttempted = true
         local autoConnected = App.attemptAutoDetectAndConnect(app)
+        
+        -- Check for addon updates after server connection
+        if autoConnected and not app._versionCheckCompleted and app.features.versionCheck then
+            app._versionCheckCompleted = true
+            app.features.versionCheck:checkForUpdates()
+        end
         
         -- If auto-connect succeeded, sync connection module with selected server
         if autoConnected and app.features.connection and app.features.serverlist then

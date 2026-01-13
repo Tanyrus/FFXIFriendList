@@ -2,17 +2,10 @@ local imgui = require('imgui')
 
 local M = {}
 
--- State for character list section
-M.state = {
-    charactersExpanded = false,
-    hasFetched = false,
-    lastFetchedForCharacter = nil
-}
-
 function M.Render(state, dataModule, callbacks)
     M.RenderWelcomeSection()
     imgui.Spacing()
-    M.RenderAccountInfoSection()
+    M.RenderAccountInfoSection(dataModule)
     imgui.Spacing()
     M.RenderCommandsSection()
     imgui.Spacing()
@@ -30,7 +23,7 @@ function M.RenderWelcomeSection()
         "Stay connected with friends across different private servers, see when they're online, and send messages.")
 end
 
-function M.RenderAccountInfoSection()
+function M.RenderAccountInfoSection(dataModule)
     local isExpanded = imgui.CollapsingHeader("Your Characters")
     
     if isExpanded then
@@ -38,24 +31,39 @@ function M.RenderAccountInfoSection()
         
         local app = _G.FFXIFriendListApp
         local currentCharName = nil
+        local characters = dataModule and dataModule.GetCharacters and dataModule:GetCharacters() or {}
         
         -- Get current character name from connection
         if app and app.features and app.features.connection then
             currentCharName = app.features.connection:getCharacterName()
         end
         
-        -- Show current character
-        if currentCharName and currentCharName ~= "" then
+        -- Display characters from data module
+        if #characters > 0 then
+            for _, char in ipairs(characters) do
+                local displayName = char.characterName:sub(1, 1):upper() .. char.characterName:sub(2):lower()
+                
+                if char.isActive then
+                    imgui.TextColored({0.0, 1.0, 0.0, 1.0}, "* " .. displayName)
+                    imgui.SameLine()
+                    imgui.TextDisabled("(current)")
+                else
+                    imgui.Text("  " .. displayName)
+                end
+            end
+            imgui.Spacing()
+            imgui.TextDisabled("You are viewing the friend list for this character.")
+        elseif currentCharName and currentCharName ~= "" then
+            -- Show at least the current character if we can't fetch the full list
             local displayName = currentCharName:sub(1, 1):upper() .. currentCharName:sub(2):lower()
             imgui.TextColored({0.0, 1.0, 0.0, 1.0}, "* " .. displayName)
             imgui.SameLine()
             imgui.TextDisabled("(current)")
+            imgui.Spacing()
+            imgui.TextDisabled("You are viewing the friend list for this character.")
         else
             imgui.TextDisabled("Not connected")
         end
-        
-        imgui.Spacing()
-        imgui.TextDisabled("You are viewing the friend list for this character.")
         
         imgui.Unindent()
     end

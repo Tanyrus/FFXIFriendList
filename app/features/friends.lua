@@ -1464,4 +1464,53 @@ end
 function M.Friends:handleStatusUpdate(packet)
 end
 
+function M.Friends:_fetchCharacterList()
+    if not self.deps.net or not self.deps.connection then
+        return
+    end
+    
+    if not self.deps.connection:isConnected() then
+        return
+    end
+    
+    local url = self.deps.connection:getBaseUrl() .. Endpoints.FRIENDS.CHARACTER_AND_FRIENDS
+    
+    if self.deps.logger and self.deps.logger.debug then
+        self.deps.logger.debug("[Friends] Fetching character list from: " .. url)
+    end
+    
+    local requestId = self.deps.net.request({
+        url = url,
+        method = "GET",
+        headers = self.deps.connection:getHeaders(self:_getCharacterName()),
+        body = "",
+        callback = function(success, response)
+            self:_handleCharacterListResponse(success, response)
+        end
+    })
+end
+
+function M.Friends:_handleCharacterListResponse(success, response)
+    if not success then
+        return
+    end
+    
+    local ok, envelope, errorMsg = Envelope.decode(response)
+    if not ok then
+        return
+    end
+    
+    local result = envelope.data or {}
+    if result.characters then
+        -- Update data module with character list
+        local dataModule = require('modules.friendlist.data')
+        if dataModule and dataModule.SetCharacters then
+            dataModule.SetCharacters(result.characters)
+            if self.deps.logger and self.deps.logger.debug then
+                self.deps.logger.debug("[Friends] Set " .. tostring(#result.characters) .. " characters in data module")
+            end
+        end
+    end
+end
+
 return M

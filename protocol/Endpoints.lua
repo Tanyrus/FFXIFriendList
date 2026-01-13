@@ -77,6 +77,7 @@ M.PREFERENCES = "/api/preferences"
 
 -- Presence endpoints
 M.PRESENCE = {
+    ME = "/api/presence/me",
     UPDATE = "/api/presence/update",
     HEARTBEAT = "/api/presence/heartbeat"
 }

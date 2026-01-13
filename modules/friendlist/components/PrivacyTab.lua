@@ -4,6 +4,12 @@ local nations = require('core.nations')
 
 local M = {}
 
+-- Local state for fetching character status from server
+local state = {
+    characterStatus = nil,
+    lastFetchedCharacterId = nil
+}
+
 function M.Render(state, dataModule, callbacks)
     M.RenderPrivacyControlsSection(state, callbacks)
     imgui.Spacing()
@@ -290,17 +296,27 @@ end
 function M.RenderPresencePreview(prefs)
     local app = _G.FFXIFriendListApp
     
-    -- Get current player presence
-    local presence = nil
-    if app and app.features and app.features.friends then
-        presence = app.features.friends:queryPlayerPresence()
+    -- Get current character ID to check if we need to fetch
+    local currentCharId = nil
+    if app and app.features and app.features.connection then
+        currentCharId = app.features.connection.lastCharacterId
     end
     
+    -- Fetch character status from server if we haven't already or if character changed
+    if currentCharId and currentCharId ~= state.lastFetchedCharacterId then
+        state.lastFetchedCharacterId = currentCharId
+        M._fetchCharacterStatus(app)
+    end
+    
+    -- Use server's character status if available
+    local charStatus = state.characterStatus
+    
+    -- Use SERVER preferences - these are what matter to friends
     local presenceStatus = prefs.presenceStatus or "online"
     local shareLocation = prefs.shareLocation ~= false
     local shareJobWhenAnonymous = prefs.shareJobWhenAnonymous or false
     
-    imgui.TextDisabled("Preview: How friends see you")
+    imgui.TextDisabled("Preview: How friends see you (from server)")
     imgui.Separator()
     
     if presenceStatus == "invisible" then
@@ -311,87 +327,91 @@ function M.RenderPresencePreview(prefs)
         imgui.TextColored({0.5, 0.5, 0.5, 1.0}, "Offline")
         imgui.EndGroup()
         
-        imgui.TextDisabled("(You appear completely offline to friends)")
+        imgui.TextDisabled("(Server: You appear offline to all friends)")
     else
-        -- Online or Away
+        -- Online or Away (from server preferences)
         local statusColor = presenceStatus == "away" and {1.0, 0.7, 0.2, 1.0} or {0.4, 0.9, 0.4, 1.0}
         local statusText = presenceStatus == "away" and "Away" or "Online"
         
         imgui.BeginGroup()
-        imgui.TextDisabled("Status:")
-        imgui.SameLine(80)
+        imgui.TextDisabled("Status (from server):")
+        imgui.SameLine(120)
         imgui.TextColored(statusColor, statusText)
         imgui.EndGroup()
         
-        -- Character name
-        local charName = "Your Character"
-        if presence and presence.characterName and presence.characterName ~= "" then
-            charName = presence.characterName:sub(1,1):upper() .. presence.characterName:sub(2)
+        -- Character name (from server)
+        local charName = "Unknown"
+        if charStatus and charStatus.characterName and charStatus.characterName ~= "" then
+            charName = charStatus.characterName:sub(1,1):upper() .. charStatus.characterName:sub(2)
         end
         
-        imgui.TextDisabled("Name:")
-        imgui.SameLine(80)
+        imgui.TextDisabled("Character name:")
+        imgui.SameLine(120)
         imgui.Text(charName)
         
-        -- Job (depends on anonymous status and shareJobWhenAnonymous)
-        local jobVisible = true
-        local jobText = "Unknown"
-        if presence then
-            if presence.isAnonymous and not shareJobWhenAnonymous then
-                jobVisible = false
-                jobText = "Anonymous"
-            elseif presence.job and presence.job ~= "" then
-                jobText = presence.job
+        -- Job (from server state + preferences)
+        imgui.TextDisabled("Job (from server):")
+        imgui.SameLine(120)
+        if shareJobWhenAnonymous or (charStatus and not charStatus.isAnonymous) then
+            local jobText = "Unknown"
+            if charStatus and charStatus.job and charStatus.job ~= "" then
+                jobText = charStatus.job
             end
-        end
-        
-        imgui.TextDisabled("Job:")
-        imgui.SameLine(80)
-        if jobVisible then
             imgui.Text(jobText)
         else
-            imgui.TextColored({0.4, 0.65, 0.85, 1.0}, jobText)
+            imgui.TextColored({0.4, 0.65, 0.85, 1.0}, "Hidden (anonymous mode)")
         end
         
-        -- Nation/Rank (depends on anonymous status and shareJobWhenAnonymous)
-        local nationVisible = true
-        local nationText = "Unknown"
-        if presence then
-            if presence.isAnonymous and not shareJobWhenAnonymous then
-                nationVisible = false
-                nationText = "Anonymous"
-            else
-                local nationName = nations.getDisplayName(presence.nation, "Unknown")
-                local rankText = presence.rank or ""
+        -- Nation/Rank (from server state + preferences)
+        imgui.TextDisabled("Nation/Rank (from server):")
+        imgui.SameLine(120)
+        if shareJobWhenAnonymous or (charStatus and not charStatus.isAnonymous) then
+            local nationText = "Unknown"
+            if charStatus then
+                local nationName = nations.getDisplayName(charStatus.nation, "Unknown")
+                local rankText = charStatus.rank or ""
                 if rankText ~= "" then
                     nationText = nationName .. " " .. rankText
                 else
                     nationText = nationName
                 end
             end
-        end
-        
-        imgui.TextDisabled("Nation:")
-        imgui.SameLine(80)
-        if nationVisible then
             imgui.Text(nationText)
         else
-            imgui.TextColored({0.4, 0.65, 0.85, 1.0}, nationText)
+            imgui.TextColored({0.4, 0.65, 0.85, 1.0}, "Hidden (anonymous mode)")
         end
         
-        -- Zone (depends on shareLocation)
-        imgui.TextDisabled("Zone:")
-        imgui.SameLine(80)
+        -- Zone (from server state + shareLocation preference)
+        imgui.TextDisabled("Zone (from server):")
+        imgui.SameLine(120)
         if shareLocation then
             local zoneText = "Unknown"
-            if presence and presence.zone and presence.zone ~= "" then
-                zoneText = presence.zone
+            if charStatus and charStatus.zone and charStatus.zone ~= "" then
+                zoneText = charStatus.zone
             end
             imgui.Text(zoneText)
         else
-            imgui.TextColored({0.4, 0.65, 0.85, 1.0}, "Anonymous")
+            imgui.TextColored({0.4, 0.65, 0.85, 1.0}, "Hidden (location sharing off)")
         end
     end
+end
+
+function M._fetchCharacterStatus(app)
+    if not app or not app.deps or not app.deps.net then
+        return
+    end
+    
+    local Endpoints = require('protocol.Endpoints')
+    app.deps.net.request({
+        url = Endpoints.PRESENCE.ME,
+        method = 'GET',
+        callback = function(success, response)
+            if success and response and response.data then
+                state.characterStatus = response.data
+            end
+        end
+    })
+end
 end
 
 function M.RenderBlockedPlayersSection(state, dataModule, callbacks)

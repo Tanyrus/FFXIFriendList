@@ -3,6 +3,7 @@ local RequestEncoder = require("protocol.Encoding.RequestEncoder")
 local Envelope = require("protocol.Envelope")
 local Endpoints = require("protocol.Endpoints")
 local ServerConfig = require("core.ServerConfig")
+local VersionCore = require("core.versioncore")
 
 M.ConnectionState = {
     Disconnected = "Disconnected",
@@ -386,7 +387,7 @@ end
 -- Optional: X-Character-Name, X-Realm-Id (for endpoints requiring character context)
 function M.Connection:getHeaders(characterName)
     characterName = characterName or ""
-    local addonVersion = addon and addon.version or "0.9.96"
+    local addonVersion = addon and addon.version or VersionCore.ADDON_VERSION
     
     local headers = {
         ["Content-Type"] = "application/json",
@@ -484,7 +485,7 @@ function M.Connection:autoConnect(characterName)
             requestBody = RequestEncoder.encodeRegister(normalizedName, realmId)
         end
         
-        local addonVersion = addon and addon.version or "0.9.96"
+        local addonVersion = addon and addon.version or VersionCore.ADDON_VERSION
         local headers = {
             ["Content-Type"] = "application/json",
             ["User-Agent"] = "FFXIFriendList/" .. addonVersion,
@@ -638,7 +639,7 @@ function M.Connection:setActiveCharacter(characterId, characterName, apiKey)
     local url = baseUrl .. Endpoints.AUTH.SET_ACTIVE
     local requestBody = RequestEncoder.encodeSetActiveCharacter(characterId)
     
-    local addonVersion = addon and addon.version or "0.9.96"
+    local addonVersion = addon and addon.version or VersionCore.ADDON_VERSION
     local headers = {
         ["Content-Type"] = "application/json",
         ["User-Agent"] = "FFXIFriendList/" .. addonVersion,

@@ -4,9 +4,11 @@
 * Follows plan: config loading, module registry, packet routing, network polling
 ]]--
 
+local VersionCore = require('core.versioncore')
+
 addon.name = 'FFXIFriendList'
 addon.author = 'Tanyrus'
-addon.version = '0.9.96'
+addon.version = VersionCore.ADDON_VERSION
 addon.desc = 'Friend list addon for FFXI'
 
 -- Set up package.path (absolute requires only)

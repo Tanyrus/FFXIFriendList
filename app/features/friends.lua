@@ -47,8 +47,14 @@ function M.Friends.new(deps)
     self.lastSentSubJobLevel = nil
     self.lastSentIsAnonymous = nil
     
+    -- Track zone-only updates to prevent immediate full updates
+    self.lastZoneOnlyUpdateAt = nil
+    
     -- Track presence changes for UI updates (Privacy tab auto-refresh)
     self.presenceChangedAt = nil
+    
+    -- Cache last valid presence for UI display (prevents "Unknown" during zone transitions)
+    self.lastValidPresence = nil
     
     -- Track presence update state to prevent race conditions
     self.presenceUpdateInFlight = false
@@ -834,6 +840,14 @@ function M.Friends:handlePCUpdate(packet)
         return
     end
     
+    -- Skip during zone cooldown
+    if self.lastZoneOnlyUpdateAt then
+        local timeSinceZoneUpdate = getTime(self) - self.lastZoneOnlyUpdateAt
+        if timeSinceZoneUpdate < 4000 then
+            return  -- Skip during zone cooldown
+        end
+    end
+    
     -- Track anonymous status from packet
     local currentAnon = packet.isAnonymous
     
@@ -848,6 +862,14 @@ end
 function M.Friends:handleUpdateChar(packet)
     if not packet or packet.type ~= "update_char" then
         return
+    end
+    
+    -- Skip during zone cooldown
+    if self.lastZoneOnlyUpdateAt then
+        local timeSinceZoneUpdate = getTime(self) - self.lastZoneOnlyUpdateAt
+        if timeSinceZoneUpdate < 4000 then
+            return  -- Skip during zone cooldown
+        end
     end
     
     -- Track anonymous status from packet
@@ -866,6 +888,14 @@ function M.Friends:handleCharUpdate(packet)
         return
     end
     
+    -- Skip during zone cooldown
+    if self.lastZoneOnlyUpdateAt then
+        local timeSinceZoneUpdate = getTime(self) - self.lastZoneOnlyUpdateAt
+        if timeSinceZoneUpdate < 4000 then
+            return  -- Skip during zone cooldown
+        end
+    end
+    
     -- Packet detected job/level change - trigger update
     -- Actual data will be read from memory in updatePresence()
     self.presenceChangedAt = getTime(self)
@@ -877,7 +907,77 @@ function M.Friends:handleZoneChange(packet)
         return false
     end
     
-    self:updatePresence()
+    -- Only send zone update, not job/nation/anonymous status
+    -- This prevents sending stale or unchanged data
+    self:updateZoneOnly()
+    return true
+end
+
+function M.Friends:updateZoneOnly()
+    if not self.deps.net or not self.deps.connection then
+        return false
+    end
+    
+    if not self.deps.connection:isConnected() then
+        return false
+    end
+    
+    -- Get current zone from memory
+    local memoryMgr = AshitaCore:GetMemoryManager()
+    if not memoryMgr then
+        return false
+    end
+    
+    local party = memoryMgr:GetParty()
+    if not party then
+        return false
+    end
+    
+    local zoneId = party:GetMemberZone(0)
+    if not zoneId or zoneId == 0 then
+        return false
+    end
+    
+    -- Don't update if zone hasn't actually changed
+    if self.lastSentZoneId == zoneId then
+        return true
+    end
+    
+    local zoneName = self:getZoneNameFromId(zoneId)
+    if not zoneName then
+        return false
+    end
+    
+    -- Track what we sent
+    self.lastSentZoneId = zoneId
+    self.lastZoneOnlyUpdateAt = getTime(self)
+    
+    -- Send zone-only update to server
+    local body = RequestEncoder.encodePresenceUpdate({
+        zone = zoneName
+    })
+    
+    local url = self.deps.connection:getBaseUrl() .. Endpoints.PRESENCE.UPDATE
+    
+    local characterName = ""
+    if self.deps.connection.getCharacterName then
+        characterName = self.deps.connection:getCharacterName()
+    end
+    
+    local headers = self.deps.connection:getHeaders(characterName)
+    
+    self.deps.net.request({
+        url = url,
+        method = "POST",
+        headers = headers,
+        body = body,
+        callback = function(success, response)
+            if not success and self.deps.logger and self.deps.logger.error then
+                self.deps.logger.error("[Friends] Failed to update zone: " .. tostring(response))
+            end
+        end
+    })
+    
     return true
 end
 
@@ -888,6 +988,15 @@ function M.Friends:updatePresence()
     
     if not self.deps.connection:isConnected() then
         return false
+    end
+    
+    -- Skip full update if we just sent a zone-only update (within 4 seconds)
+    -- This prevents PC_UPDATE packets from overwriting with stale data
+    if self.lastZoneOnlyUpdateAt then
+        local timeSinceZoneUpdate = getTime(self) - self.lastZoneOnlyUpdateAt
+        if timeSinceZoneUpdate < 4000 then
+            return true  -- Skip this update
+        end
     end
     
     -- If an update is already in flight, mark that we have a pending update
@@ -950,9 +1059,22 @@ function M.Friends:updatePresence()
             end
             
             -- If there was a pending update (job changed while request was in flight), send it now
+            -- But still respect zone cooldown
             if self.hasPendingPresenceUpdate then
                 self.hasPendingPresenceUpdate = false
-                self:updatePresence()
+                
+                -- Check zone cooldown before retrying
+                local canUpdate = true
+                if self.lastZoneOnlyUpdateAt then
+                    local timeSinceZoneUpdate = getTime(self) - self.lastZoneOnlyUpdateAt
+                    if timeSinceZoneUpdate < 4000 then
+                        canUpdate = false
+                    end
+                end
+                
+                if canUpdate then
+                    self:updatePresence()
+                end
             end
         end
     })
@@ -1266,6 +1388,23 @@ function M.Friends:queryPlayerPresence()
         if zoneId and zoneId > 0 then
             presence.zone = self:getZoneNameFromId(zoneId)
         end
+    end
+    
+    -- Cache this as last valid presence if it has meaningful data
+    if presence.characterName ~= "" and presence.job ~= "" then
+        self.lastValidPresence = presence
+    elseif self.lastValidPresence then
+        -- During zone transitions, memory may return empty values
+        -- Fall back to last valid presence but update zone if available
+        local cachedPresence = {}
+        for k, v in pairs(self.lastValidPresence) do
+            cachedPresence[k] = v
+        end
+        if presence.zone ~= "" then
+            cachedPresence.zone = presence.zone
+        end
+        cachedPresence.timestamp = getTime(self)
+        return cachedPresence
     end
     
     return presence

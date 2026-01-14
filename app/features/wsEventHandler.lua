@@ -165,17 +165,27 @@ function M.WsEventHandler:_handleFriendOnline(payload)
         end
     end
     
-    -- Update friend status
-    local status = FriendList.FriendStatus.new()
-    status.characterName = string.lower(characterName or "")
+    -- Update friend status - preserve existing status instead of creating new
+    local status = friends.friendList:getFriendStatus(string.lower(characterName or ""))
+    if not status then
+        status = FriendList.FriendStatus.new()
+        status.characterName = string.lower(characterName or "")
+    end
+    
     status.isOnline = true
     status.isAway = isAway
     
+    -- Only update fields that are present in state
     if state then
-        status.job = formatJobFromState(state)
-        status.zone = state.zone or ""
-        status.nation = state.nation
-        status.rank = state.rank
+        if state.job ~= nil or state.subJob ~= nil or state.jobLevel ~= nil or state.subJobLevel ~= nil then
+            local formattedJob = formatJobFromState(state)
+            if formattedJob ~= "" then
+                status.job = formattedJob
+            end
+        end
+        if state.zone ~= nil then status.zone = state.zone end
+        if state.nation ~= nil then status.nation = state.nation end
+        if state.rank ~= nil then status.rank = state.rank end
     end
     
     friends.friendList:updateFriendStatus(status)
@@ -231,12 +241,21 @@ function M.WsEventHandler:_handleFriendStateChanged(payload)
         if friend.friendAccountId == accountId then
             local status = friends.friendList:getFriendStatus(friend.name)
             if status then
-                -- Format job from state fields (job, subJob, jobLevel, subJobLevel)
-                local formattedJob = formatJobFromState(state)
-                if formattedJob ~= "" then status.job = formattedJob end
-                if state.zone then status.zone = state.zone end
-                if state.nation then status.nation = state.nation end
-                if state.rank then status.rank = state.rank end
+                -- Only update fields that are actually present in the partial state
+                -- This prevents zone-only updates from wiping job/nation data
+                
+                -- Check if ANY job field is present before formatting
+                if state.job ~= nil or state.subJob ~= nil or state.jobLevel ~= nil or state.subJobLevel ~= nil then
+                    local formattedJob = formatJobFromState(state)
+                    if formattedJob ~= "" then 
+                        status.job = formattedJob 
+                    end
+                end
+                
+                if state.zone ~= nil then status.zone = state.zone end
+                if state.nation ~= nil then status.nation = state.nation end
+                if state.rank ~= nil then status.rank = state.rank end
+                
                 friends.friendList:updateFriendStatus(status)
             end
             break

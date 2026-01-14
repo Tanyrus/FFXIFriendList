@@ -111,6 +111,8 @@ function M.Preferences.new()
     self.controllerCloseButton = 0x2000
     self.windowsLocked = false
     self.windowsPositionLocked = false
+    self.useIconsForTabs = false
+    self.tabIconTint = nil
     self.notificationSoundsEnabled = true
     self.soundOnFriendOnline = true
     self.soundOnFriendRequest = true

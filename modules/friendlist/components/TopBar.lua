@@ -56,7 +56,15 @@ function M.Render(state, dataModule, onRefresh, onLockChanged, onViewToggle, sho
         imgui.PushStyleColor(ImGuiCol_ButtonActive, {0.3, 0.3, 0.3, 1.0})
     end
     
-    if imgui.Button("Refresh") then
+    -- Refresh button - always use icon
+    local refreshIconSize = s(21)
+    local refreshClicked = icons.RenderIconButton("refresh", refreshIconSize, refreshIconSize, "Refresh")
+    if refreshClicked == nil then
+        -- Fallback to text button
+        refreshClicked = imgui.Button("Refresh")
+    end
+    
+    if refreshClicked then
         if isConnected and onRefresh then
             onRefresh()
         end
@@ -68,13 +76,21 @@ function M.Render(state, dataModule, onRefresh, onLockChanged, onViewToggle, sho
     
     imgui.SameLine(0, s(8))
     
-    if imgui.Button("Condensed") then
+    -- Condensed button - always use collapse icon
+    local collapseIconSize = s(21)
+    local collapseClicked = icons.RenderIconButton("collapse", collapseIconSize, collapseIconSize, "Switch to condensed view (Compact Friend List)")
+    if collapseClicked == nil then
+        -- Fallback to text button
+        collapseClicked = imgui.Button("Condensed")
+        if imgui.IsItemHovered() then
+            imgui.SetTooltip("Switch to condensed view (Compact Friend List)")
+        end
+    end
+    
+    if collapseClicked then
         if onViewToggle then
             onViewToggle()
         end
-    end
-    if imgui.IsItemHovered() then
-        imgui.SetTooltip("Switch to condensed view (Compact Friend List)")
     end
     
     local iconSize = s(24)

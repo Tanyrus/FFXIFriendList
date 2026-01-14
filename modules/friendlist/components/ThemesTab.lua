@@ -29,6 +29,8 @@ function M.Render(state, dataModule, callbacks)
         state.themeLastThemeIndex = currentThemeIndex
     end
     
+    M.RenderIconTabSettings(state)
+    imgui.Spacing()
     M.RenderThemeSelection(state, themesDataModule)
     imgui.Spacing()
     M.RenderThemeManagement(state, themesDataModule)
@@ -123,6 +125,72 @@ function M.SyncThemeBuffersToColors(state)
     }
     
     themesFeature:updateCurrentThemeColors(colors)
+end
+
+function M.RenderIconTabSettings(state)
+    if imgui.CollapsingHeader("Icon Tab Settings", state.iconTabSettingsExpanded and ImGuiTreeNodeFlags_DefaultOpen or 0) then
+        state.iconTabSettingsExpanded = true
+        
+        local app = _G.FFXIFriendListApp
+        local prefs = nil
+        if app and app.features and app.features.preferences then
+            prefs = app.features.preferences:getPrefs()
+        end
+        
+        if not prefs then
+            imgui.Text("Preferences not available")
+            return
+        end
+        
+        local useIconsForTabs = {prefs.useIconsForTabs or false}
+        if imgui.Checkbox("Use Icons for Tabs", useIconsForTabs) then
+            if app and app.features and app.features.preferences then
+                app.features.preferences:setPref("useIconsForTabs", useIconsForTabs[1])
+                app.features.preferences:save()
+            end
+        end
+        if imgui.IsItemHovered() then
+            imgui.SetTooltip("When enabled, navigation tabs will show icons instead of text labels.")
+        end
+        
+        imgui.Spacing()
+        
+        -- Tab Icon Color customization
+        imgui.Text("Icon Color:")
+        
+        -- Initialize color buffer if needed
+        if not state.themeColorBuffers.tabIcon then
+            if prefs.tabIconTint then
+                state.themeColorBuffers.tabIcon = {prefs.tabIconTint.r, prefs.tabIconTint.g, prefs.tabIconTint.b, prefs.tabIconTint.a}
+            else
+                state.themeColorBuffers.tabIcon = {1.0, 1.0, 1.0, 1.0}
+            end
+        end
+        
+        if imgui.ColorEdit4("##tab_icon_color", state.themeColorBuffers.tabIcon) then
+            local color = state.themeColorBuffers.tabIcon
+            if app and app.features and app.features.preferences then
+                app.features.preferences:setPref("tabIconTint", {
+                    r = color[1],
+                    g = color[2],
+                    b = color[3],
+                    a = color[4]
+                })
+                app.features.preferences:save()
+            end
+        end
+        
+        imgui.SameLine()
+        if imgui.Button("Reset to White##tab_icon") then
+            state.themeColorBuffers.tabIcon = {1.0, 1.0, 1.0, 1.0}
+            if app and app.features and app.features.preferences then
+                app.features.preferences:setPref("tabIconTint", nil)
+                app.features.preferences:save()
+            end
+        end
+    else
+        state.iconTabSettingsExpanded = false
+    end
 end
 
 function M.RenderThemeSelection(state, dataModule)

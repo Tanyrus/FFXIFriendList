@@ -46,6 +46,7 @@ local state = {
     closeKeyExpanded = false,
     controllerExpanded = false,
     themeSettingsExpanded = true,
+    iconTabSettingsExpanded = true,
     themeSelectionExpanded = true,
     customColorsExpanded = false,
     themeManagementExpanded = false,
@@ -550,7 +551,15 @@ function M.RenderContent(dataModule)
     
     imgui.Spacing()
     
-    local sidebarWidth = FontManager.scaled(UIConstants.SIDEBAR_WIDTH)
+    -- Adjust sidebar width based on icon mode
+    local app = _G.FFXIFriendListApp
+    local useIcons = false
+    if app and app.features and app.features.preferences then
+        local prefs = app.features.preferences:getPrefs()
+        useIcons = prefs.useIconsForTabs or false
+    end
+    
+    local sidebarWidth = useIcons and FontManager.scaled(35) or FontManager.scaled(UIConstants.SIDEBAR_WIDTH)
     imgui.BeginChild("Sidebar", {sidebarWidth, 0}, false)
     Sidebar.Render(state, dataModule, M.SaveWindowState)
     imgui.EndChild()

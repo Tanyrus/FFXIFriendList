@@ -433,7 +433,18 @@ function M.RenderTopBar(dataModule)
         imgui.PushStyleColor(ImGuiCol_ButtonActive, Colors.BUTTON.DISABLED)
     end
     
-    if imgui.Button("Refresh") then
+    -- Refresh button - always use icon
+    local refreshIconSize = s(21)
+    local refreshClicked = icons.RenderIconButton("refresh", refreshIconSize, refreshIconSize, "Refresh friend list")
+    if refreshClicked == nil then
+        -- Fallback to text button
+        refreshClicked = imgui.Button("Refresh")
+        if imgui.IsItemHovered() then
+            imgui.SetTooltip("Refresh friend list")
+        end
+    end
+    
+    if refreshClicked then
         if isConnected then
             local app = _G.FFXIFriendListApp
             if app and app.features and app.features.friends then
@@ -446,13 +457,20 @@ function M.RenderTopBar(dataModule)
         imgui.PopStyleColor(3)
     end
     
-    if imgui.IsItemHovered() then
-        imgui.SetTooltip("Refresh friend list")
-    end
-    
     imgui.SameLine(0, s(8))
     
-    if imgui.Button("Full") then
+    -- Full button - always use expand icon
+    local expandIconSize = s(21)
+    local expandClicked = icons.RenderIconButton("expand", expandIconSize, expandIconSize, "Switch to full view (Main Window)")
+    if expandClicked == nil then
+        -- Fallback to text button
+        expandClicked = imgui.Button("Full")
+        if imgui.IsItemHovered() then
+            imgui.SetTooltip("Switch to full view (Main Window)")
+        end
+    end
+    
+    if expandClicked then
         if gConfig then
             local posX, posY = imgui.GetWindowPos()
             
@@ -470,9 +488,6 @@ function M.RenderTopBar(dataModule)
                 settings.save()
             end
         end
-    end
-    if imgui.IsItemHovered() then
-        imgui.SetTooltip("Switch to full view (Main Window)")
     end
     
     imgui.PopStyleVar(2)

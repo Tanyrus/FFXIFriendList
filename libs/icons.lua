@@ -57,6 +57,22 @@ local iconFiles = {
     nation_sandoria = "sandy_icon",
     nation_bastok = "bastok_icon",
     nation_windurst = "windy_icon",
+    
+    -- Tab icons
+    tab_friends = "friends",
+    tab_requests = "requests",
+    tab_notifications = "notifications",
+    tab_privacy = "privacy",
+    tab_view = "view",
+    tab_tags = "tags",
+    tab_help = "help",
+    tab_themes = "theme",
+    add_friend = "add-friend",
+    
+    -- UI action icons
+    refresh = "refresh",
+    collapse = "collapse",
+    expand = "expand",
 };
 
 -- ========================================
@@ -169,7 +185,7 @@ end
 
 -- Render an icon button using imgui.ImageButton with theme styling
 -- Returns true if clicked, false if not clicked, nil if icon not available
-function M.RenderIconButton(iconName, width, height, tooltip)
+function M.RenderIconButton(iconName, width, height, tooltip, tintColor)
     local texture = M.GetIcon(iconName);
     if texture == nil or texture.image == nil then
         return nil;
@@ -203,6 +219,9 @@ function M.RenderIconButton(iconName, width, height, tooltip)
         end
     end
     
+    -- Use provided tint color or default to white
+    local tint = tintColor or {1, 1, 1, 1};
+    
     -- Push button colors and unique ID
     imgui.PushID("icon_btn_" .. iconName);
     imgui.PushStyleColor(ImGuiCol_Button, btnColor);
@@ -212,7 +231,7 @@ function M.RenderIconButton(iconName, width, height, tooltip)
     imgui.PushStyleVar(ImGuiStyleVar_FrameRounding, 4);
     
     -- ImageButton: textureId, size, uv0, uv1, frame_padding, bg_color, tint_color
-    local clicked = imgui.ImageButton(textureId, {w, h}, {0, 0}, {1, 1}, -1, {0, 0, 0, 0}, {1, 1, 1, 1});
+    local clicked = imgui.ImageButton(textureId, {w, h}, {0, 0}, {1, 1}, -1, {0, 0, 0, 0}, tint);
     
     -- Pop styles and ID
     imgui.PopStyleVar(2);

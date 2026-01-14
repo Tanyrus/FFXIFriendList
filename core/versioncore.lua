@@ -1,7 +1,7 @@
 local M = {}
 
 -- Addon version constant
-M.ADDON_VERSION = "0.9.987"
+M.ADDON_VERSION = "1.0.0"
 
 M.Version = {}
 M.Version.__index = M.Version

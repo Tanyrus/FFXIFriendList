@@ -242,6 +242,19 @@ function M.Render(state, dataModule, callbacks)
     
     imgui.Spacing()
     
+    local showProgressBar = {prefs.notificationShowProgressBar ~= false}
+    if imgui.Checkbox("Show notification progress bar", showProgressBar) then
+        if app and app.features and app.features.preferences then
+            app.features.preferences:setPref("notificationShowProgressBar", showProgressBar[1])
+            app.features.preferences:save()
+        end
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("Show a progress bar at the bottom of notifications indicating time remaining.")
+    end
+    
+    imgui.Spacing()
+    
     local showTestPreview = {prefs.notificationShowTestPreview or false}
     if imgui.Checkbox("Show test notification", showTestPreview) then
         if app and app.features and app.features.preferences then

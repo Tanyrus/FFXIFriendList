@@ -355,6 +355,27 @@ function M.DrawWindow(settings, dataModule)
                 childFlags = bit.bor(childFlags, ImGuiWindowFlags_NoInputs)
             end
             imgui.BeginChild("##quick_online_body", {0, 0}, false, childFlags)
+            
+            -- Context menu for window options
+            if imgui.BeginPopupContextWindow("##quick_online_context") then
+                local hideTopBar = gConfig and gConfig.quickOnlineSettings and gConfig.quickOnlineSettings.hideTopBar or false
+                local hideTopBarBuf = {hideTopBar}
+                if imgui.Checkbox("Hide Top Bar", hideTopBarBuf) then
+                    if gConfig then
+                        if not gConfig.quickOnlineSettings then
+                            gConfig.quickOnlineSettings = {}
+                        end
+                        gConfig.quickOnlineSettings.hideTopBar = hideTopBarBuf[1]
+                        M.SaveWindowState()
+                        local settings = require('libs.settings')
+                        if settings and settings.save then
+                            settings.save()
+                        end
+                    end
+                end
+                imgui.EndPopup()
+            end
+            
             if overlayEnabled then
                 imgui.PushStyleColor(ImGuiCol_ChildBg, Colors.TRANSPARENT)
             end
@@ -396,14 +417,29 @@ function M.RenderTopBar(dataModule)
     local isConnected = dataModule.IsConnected()
     local s = FontManager.scaled
     
+    -- Get UI icon colors from preferences
+    local app = _G.FFXIFriendListApp
+    local uiIconColors = {}
+    if app and app.features and app.features.preferences then
+        local prefs = app.features.preferences:getPrefs()
+        if prefs.uiIconColors then
+            for key, color in pairs(prefs.uiIconColors) do
+                if color then
+                    uiIconColors[key] = {color.r, color.g, color.b, color.a}
+                end
+            end
+        end
+    end
+    
     imgui.PushStyleVar(ImGuiStyleVar_FramePadding, {s(6), s(6)})
     imgui.PushStyleVar(ImGuiStyleVar_FrameRounding, s(4))
     
     local lockIconName = state.locked and "lock" or "unlock"
     local lockTooltip = state.locked and "Window locked (click to unlock)" or "Lock window position"
+    local lockColor = uiIconColors[lockIconName] or {1, 1, 1, 1}
     
-    local lockIconSize = s(21)
-    local clicked = icons.RenderIconButton(lockIconName, lockIconSize, lockIconSize, lockTooltip)
+    local lockIconSize = s(UIConst.ICON_SIZES.ACTION_ICON_BUTTON)
+    local clicked = icons.RenderIconButtonWithSize(lockIconName, lockIconSize, lockIconSize, lockTooltip, lockColor)
     if clicked == nil then
         local lockLabel = state.locked and "Locked" or "Unlocked"
         clicked = imgui.Button(lockLabel .. "##lock_btn")
@@ -425,7 +461,7 @@ function M.RenderTopBar(dataModule)
         end
     end
     
-    imgui.SameLine(0, s(8))
+    imgui.SameLine(0, s(4))
     
     if not isConnected then
         imgui.PushStyleColor(ImGuiCol_Button, Colors.BUTTON.DISABLED)
@@ -433,7 +469,19 @@ function M.RenderTopBar(dataModule)
         imgui.PushStyleColor(ImGuiCol_ButtonActive, Colors.BUTTON.DISABLED)
     end
     
-    if imgui.Button("Refresh") then
+    -- Refresh button - always use icon
+    local refreshIconSize = s(UIConst.ICON_SIZES.ACTION_ICON_BUTTON)
+    local refreshColor = uiIconColors.refresh or {1, 1, 1, 1}
+    local refreshClicked = icons.RenderIconButtonWithSize("refresh", refreshIconSize, refreshIconSize, "Refresh friend list", refreshColor)
+    if refreshClicked == nil then
+        -- Fallback to text button
+        refreshClicked = imgui.Button("Refresh")
+        if imgui.IsItemHovered() then
+            imgui.SetTooltip("Refresh friend list")
+        end
+    end
+    
+    if refreshClicked then
         if isConnected then
             local app = _G.FFXIFriendListApp
             if app and app.features and app.features.friends then
@@ -446,13 +494,21 @@ function M.RenderTopBar(dataModule)
         imgui.PopStyleColor(3)
     end
     
-    if imgui.IsItemHovered() then
-        imgui.SetTooltip("Refresh friend list")
+    imgui.SameLine(0, s(4))
+    
+    -- Full button - always use expand icon
+    local expandIconSize = s(UIConst.ICON_SIZES.ACTION_ICON_BUTTON)
+    local expandColor = uiIconColors.expand or {1, 1, 1, 1}
+    local expandClicked = icons.RenderIconButtonWithSize("expand", expandIconSize, expandIconSize, "Switch to full view (Main Window)", expandColor)
+    if expandClicked == nil then
+        -- Fallback to text button
+        expandClicked = imgui.Button("Full")
+        if imgui.IsItemHovered() then
+            imgui.SetTooltip("Switch to full view (Main Window)")
+        end
     end
     
-    imgui.SameLine(0, s(8))
-    
-    if imgui.Button("Full") then
+    if expandClicked then
         if gConfig then
             local posX, posY = imgui.GetWindowPos()
             
@@ -471,11 +527,33 @@ function M.RenderTopBar(dataModule)
             end
         end
     end
-    if imgui.IsItemHovered() then
-        imgui.SetTooltip("Switch to full view (Main Window)")
-    end
+    
+    -- Invisible button to fill remaining space and capture right-clicks
+    imgui.SameLine()
+    local availWidth, availHeight = imgui.GetContentRegionAvail()
+    imgui.InvisibleButton("##topbar_space", {availWidth, s(24)})
     
     imgui.PopStyleVar(2)
+    
+    -- Context menu for top bar options (triggers on any item in the top bar)
+    if imgui.BeginPopupContextItem("##quick_online_topbar_context", ImGuiPopupFlags_MouseButtonRight) then
+        local hideTopBar = gConfig and gConfig.quickOnlineSettings and gConfig.quickOnlineSettings.hideTopBar or false
+        local hideTopBarBuf = {hideTopBar}
+        if imgui.Checkbox("Hide Top Bar", hideTopBarBuf) then
+            if gConfig then
+                if not gConfig.quickOnlineSettings then
+                    gConfig.quickOnlineSettings = {}
+                end
+                gConfig.quickOnlineSettings.hideTopBar = hideTopBarBuf[1]
+                M.SaveWindowState()
+                local settings = require('libs.settings')
+                if settings and settings.save then
+                    settings.save()
+                end
+            end
+        end
+        imgui.EndPopup()
+    end
 end
 
 function M.RenderFriendsTable(dataModule, overlayEnabled, disableInteraction, tooltipBgEnabled)

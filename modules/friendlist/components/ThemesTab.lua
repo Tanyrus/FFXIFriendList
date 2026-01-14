@@ -29,6 +29,8 @@ function M.Render(state, dataModule, callbacks)
         state.themeLastThemeIndex = currentThemeIndex
     end
     
+    M.RenderIconSettings(state)
+    imgui.Spacing()
     M.RenderThemeSelection(state, themesDataModule)
     imgui.Spacing()
     M.RenderThemeManagement(state, themesDataModule)
@@ -123,6 +125,339 @@ function M.SyncThemeBuffersToColors(state)
     }
     
     themesFeature:updateCurrentThemeColors(colors)
+end
+
+function M.RenderIconSettings(state)
+    if imgui.CollapsingHeader("Icon Settings", state.iconSettingsExpanded and ImGuiTreeNodeFlags_DefaultOpen or 0) then
+        state.iconSettingsExpanded = true
+        
+        local app = _G.FFXIFriendListApp
+        local prefs = nil
+        if app and app.features and app.features.preferences then
+            prefs = app.features.preferences:getPrefs()
+        end
+        
+        if not prefs then
+            imgui.Text("Preferences not available")
+            return
+        end
+        
+        -- Tab Icon Settings Section
+        imgui.TextColored({0.9, 0.7, 0.4, 1.0}, "Navigation Tab Icons")
+        imgui.Separator()
+        imgui.Spacing()
+        
+        local useIconsForTabs = {prefs.useIconsForTabs or false}
+        if imgui.Checkbox("Use Icons for Tabs", useIconsForTabs) then
+            if app and app.features and app.features.preferences then
+                app.features.preferences:setPref("useIconsForTabs", useIconsForTabs[1])
+                app.features.preferences:save()
+            end
+        end
+        if imgui.IsItemHovered() then
+            imgui.SetTooltip("When enabled, navigation tabs will show icons instead of text labels.")
+        end
+        
+        imgui.Spacing()
+        imgui.Separator()
+        imgui.Spacing()
+        
+        -- Initialize global color buffer first (before any buttons/widgets use it)
+        if not state.themeColorBuffers.tabIcon then
+            if prefs.tabIconTint then
+                state.themeColorBuffers.tabIcon = {prefs.tabIconTint.r, prefs.tabIconTint.g, prefs.tabIconTint.b, prefs.tabIconTint.a}
+            else
+                state.themeColorBuffers.tabIcon = {1.0, 1.0, 1.0, 1.0}
+            end
+        end
+        
+        -- Global Icon Color (default for all)
+        imgui.TextColored({0.7, 0.9, 1.0, 1.0}, "Global Icon Color:")
+        imgui.SameLine()
+        if imgui.SmallButton("Apply to All##global") then
+            -- Apply global color to all individual icons
+            local globalColor = {
+                r = state.themeColorBuffers.tabIcon[1],
+                g = state.themeColorBuffers.tabIcon[2],
+                b = state.themeColorBuffers.tabIcon[3],
+                a = state.themeColorBuffers.tabIcon[4]
+            }
+            if app and app.features and app.features.preferences then
+                -- Save the global color itself
+                app.features.preferences:setPref("tabIconTint", globalColor)
+                -- Apply to all individual icons
+                local tabIconColors = prefs.tabIconColors or {}
+                for _, key in ipairs({"friends", "requests", "view", "privacy", "tags", "notifications", "themes", "help"}) do
+                    tabIconColors[key] = {r = globalColor.r, g = globalColor.g, b = globalColor.b, a = globalColor.a}
+                    -- Update buffers too
+                    state.themeColorBuffers["tabIcon_" .. key] = {globalColor.r, globalColor.g, globalColor.b, globalColor.a}
+                end
+                app.features.preferences:setPref("tabIconColors", tabIconColors)
+                app.features.preferences:save()
+            end
+        end
+        if imgui.IsItemHovered() then
+            imgui.SetTooltip("Apply this color to all tab icons")
+        end
+        
+        if imgui.ColorEdit4("##tab_icon_global", state.themeColorBuffers.tabIcon) then
+            local color = state.themeColorBuffers.tabIcon
+            if app and app.features and app.features.preferences then
+                app.features.preferences:setPref("tabIconTint", {
+                    r = color[1],
+                    g = color[2],
+                    b = color[3],
+                    a = color[4]
+                })
+                app.features.preferences:save()
+            end
+        end
+        
+        imgui.SameLine()
+        if imgui.Button("Reset##global") then
+            state.themeColorBuffers.tabIcon = nil
+            if app and app.features and app.features.preferences then
+                app.features.preferences:setPref("tabIconTint", {r = 1.0, g = 1.0, b = 1.0, a = 1.0})
+                app.features.preferences:save()
+            end
+        end
+        
+        imgui.Spacing()
+        imgui.Separator()
+        imgui.Spacing()
+        
+        -- Individual Icon Colors
+        imgui.TextColored({0.7, 0.9, 1.0, 1.0}, "Individual Icon Colors:")
+        imgui.SameLine()
+        if imgui.SmallButton("Clear All##individual") then
+            -- Clear all individual icon colors (revert to global)
+            if app and app.features and app.features.preferences then
+                for _, key in ipairs({"friends", "requests", "view", "privacy", "tags", "notifications", "themes", "help"}) do
+                    state.themeColorBuffers["tabIcon_" .. key] = nil
+                end
+                app.features.preferences:setPref("tabIconColors", nil)
+                app.features.preferences:save()
+            end
+        end
+        if imgui.IsItemHovered() then
+            imgui.SetTooltip("Clear all individual colors and use global color")
+        end
+        
+        imgui.Spacing()
+        
+        local iconNames = {
+            {key = "friends", label = "Friends"},
+            {key = "requests", label = "Requests"},
+            {key = "view", label = "View"},
+            {key = "privacy", label = "Privacy"},
+            {key = "tags", label = "Tags"},
+            {key = "notifications", label = "Notifications"},
+            {key = "themes", label = "Themes"},
+            {key = "help", label = "Help"}
+        }
+        
+        for _, iconData in ipairs(iconNames) do
+            local key = iconData.key
+            local label = iconData.label
+            local bufferKey = "tabIcon_" .. key
+            
+            -- Initialize color buffer if needed
+            if not state.themeColorBuffers[bufferKey] then
+                if prefs.tabIconColors and prefs.tabIconColors[key] then
+                    local c = prefs.tabIconColors[key]
+                    state.themeColorBuffers[bufferKey] = {c.r, c.g, c.b, c.a}
+                else
+                    -- Use global color as default
+                    local globalColor = state.themeColorBuffers.tabIcon or {1.0, 1.0, 1.0, 1.0}
+                    state.themeColorBuffers[bufferKey] = {globalColor[1], globalColor[2], globalColor[3], globalColor[4]}
+                end
+            end
+            
+            imgui.Text(label .. ":")
+            imgui.SameLine(100)
+            imgui.PushItemWidth(180)
+            if imgui.ColorEdit4("##" .. bufferKey, state.themeColorBuffers[bufferKey]) then
+                local color = state.themeColorBuffers[bufferKey]
+                if app and app.features and app.features.preferences then
+                    local tabIconColors = prefs.tabIconColors or {}
+                    tabIconColors[key] = {
+                        r = color[1],
+                        g = color[2],
+                        b = color[3],
+                        a = color[4]
+                    }
+                    app.features.preferences:setPref("tabIconColors", tabIconColors)
+                    app.features.preferences:save()
+                end
+            end
+            imgui.PopItemWidth()
+            
+            imgui.SameLine()
+            if imgui.SmallButton("Clear##" .. key) then
+                if app and app.features and app.features.preferences then
+                    local tabIconColors = prefs.tabIconColors or {}
+                    tabIconColors[key] = nil
+                    -- Remove the key entirely if setting to nil
+                    if next(tabIconColors) == nil then
+                        -- Empty table, set whole preference to nil
+                        app.features.preferences:setPref("tabIconColors", nil)
+                    else
+                        app.features.preferences:setPref("tabIconColors", tabIconColors)
+                    end
+                    state.themeColorBuffers[bufferKey] = nil
+                    app.features.preferences:save()
+                end
+            end
+            if imgui.IsItemHovered() then
+                imgui.SetTooltip("Clear this icon's color (use global)")
+            end
+        end
+        
+        imgui.Spacing()
+        imgui.Spacing()
+        
+        -- UI Icon Settings Section
+        imgui.TextColored({0.9, 0.7, 0.4, 1.0}, "UI Action Icons")
+        imgui.Separator()
+        imgui.Spacing()
+        
+        -- Global UI Icon Color (default for all)
+        imgui.TextColored({0.7, 0.9, 1.0, 1.0}, "Global UI Icon Color:")
+        imgui.SameLine()
+        if imgui.SmallButton("Apply to All##uiglobal") then
+            -- Apply global color to all individual UI icons
+            if not state.themeColorBuffers.uiIcon then
+                state.themeColorBuffers.uiIcon = {1.0, 1.0, 1.0, 1.0}
+            end
+            local globalColor = {
+                r = state.themeColorBuffers.uiIcon[1],
+                g = state.themeColorBuffers.uiIcon[2],
+                b = state.themeColorBuffers.uiIcon[3],
+                a = state.themeColorBuffers.uiIcon[4]
+            }
+            if app and app.features and app.features.preferences then
+                -- Apply to all individual icons
+                local uiIconColors = prefs.uiIconColors or {}
+                for _, key in ipairs({"lock", "unlock", "refresh", "collapse", "expand", "discord", "github", "heart"}) do
+                    uiIconColors[key] = {r = globalColor.r, g = globalColor.g, b = globalColor.b, a = globalColor.a}
+                    -- Update buffers too
+                    state.themeColorBuffers["uiIcon_" .. key] = {globalColor.r, globalColor.g, globalColor.b, globalColor.a}
+                end
+                app.features.preferences:setPref("uiIconColors", uiIconColors)
+                app.features.preferences:save()
+            end
+        end
+        if imgui.IsItemHovered() then
+            imgui.SetTooltip("Apply this color to all UI icons")
+        end
+        
+        -- Initialize global color buffer if needed
+        if not state.themeColorBuffers.uiIcon then
+            state.themeColorBuffers.uiIcon = {1.0, 1.0, 1.0, 1.0}
+        end
+        
+        if imgui.ColorEdit4("##ui_icon_global", state.themeColorBuffers.uiIcon) then
+            -- This is just a reference color, not saved to preferences
+            -- Individual colors are saved separately
+        end
+        
+        imgui.SameLine()
+        if imgui.Button("Reset##uiglobal") then
+            state.themeColorBuffers.uiIcon = {1.0, 1.0, 1.0, 1.0}
+        end
+        
+        imgui.Spacing()
+        imgui.Separator()
+        imgui.Spacing()
+        
+        -- Individual UI Icon Colors
+        imgui.TextColored({0.7, 0.9, 1.0, 1.0}, "Individual UI Icon Colors:")
+        imgui.SameLine()
+        if imgui.SmallButton("Clear All##uiindividual") then
+            -- Clear all individual UI icon colors (revert to white)
+            if app and app.features and app.features.preferences then
+                for _, key in ipairs({"lock", "unlock", "refresh", "collapse", "expand", "discord", "github", "heart"}) do
+                    state.themeColorBuffers["uiIcon_" .. key] = nil
+                end
+                app.features.preferences:setPref("uiIconColors", nil)
+                app.features.preferences:save()
+            end
+        end
+        if imgui.IsItemHovered() then
+            imgui.SetTooltip("Clear all individual UI icon colors and use default white")
+        end
+        
+        imgui.Spacing()
+        
+        local uiIconNames = {
+            {key = "lock", label = "Lock"},
+            {key = "unlock", label = "Unlock"},
+            {key = "refresh", label = "Refresh"},
+            {key = "collapse", label = "Collapse"},
+            {key = "expand", label = "Expand"},
+            {key = "discord", label = "Discord"},
+            {key = "github", label = "GitHub"},
+            {key = "heart", label = "About"}
+        }
+        
+        for _, iconData in ipairs(uiIconNames) do
+            local key = iconData.key
+            local label = iconData.label
+            local bufferKey = "uiIcon_" .. key
+            
+            -- Initialize color buffer if needed
+            if not state.themeColorBuffers[bufferKey] then
+                if prefs.uiIconColors and prefs.uiIconColors[key] then
+                    local c = prefs.uiIconColors[key]
+                    state.themeColorBuffers[bufferKey] = {c.r, c.g, c.b, c.a}
+                else
+                    -- Use white as default
+                    state.themeColorBuffers[bufferKey] = {1.0, 1.0, 1.0, 1.0}
+                end
+            end
+            
+            imgui.Text(label .. ":")
+            imgui.SameLine(100)
+            imgui.PushItemWidth(180)
+            if imgui.ColorEdit4("##" .. bufferKey, state.themeColorBuffers[bufferKey]) then
+                local color = state.themeColorBuffers[bufferKey]
+                if app and app.features and app.features.preferences then
+                    local uiIconColors = prefs.uiIconColors or {}
+                    uiIconColors[key] = {
+                        r = color[1],
+                        g = color[2],
+                        b = color[3],
+                        a = color[4]
+                    }
+                    app.features.preferences:setPref("uiIconColors", uiIconColors)
+                    app.features.preferences:save()
+                end
+            end
+            imgui.PopItemWidth()
+            
+            imgui.SameLine()
+            if imgui.SmallButton("Clear##" .. key) then
+                if app and app.features and app.features.preferences then
+                    local uiIconColors = prefs.uiIconColors or {}
+                    uiIconColors[key] = nil
+                    -- Remove the key entirely if setting to nil
+                    if next(uiIconColors) == nil then
+                        -- Empty table, set whole preference to nil
+                        app.features.preferences:setPref("uiIconColors", nil)
+                    else
+                        app.features.preferences:setPref("uiIconColors", uiIconColors)
+                    end
+                    state.themeColorBuffers[bufferKey] = nil
+                    app.features.preferences:save()
+                end
+            end
+            if imgui.IsItemHovered() then
+                imgui.SetTooltip("Clear this icon's color (use default white)")
+            end
+        end
+    else
+        state.iconSettingsExpanded = false
+    end
 end
 
 function M.RenderThemeSelection(state, dataModule)

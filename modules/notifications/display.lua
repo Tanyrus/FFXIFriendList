@@ -373,6 +373,7 @@ local function renderToast(toast, targetY, isFirstToast)
     end
     
     imgui.SetNextWindowPos({posX, posY}, ImGuiCond_Always)
+    imgui.SetNextWindowSize({300, 0}, ImGuiCond_Always)
     
     local alpha = toast.alpha or 1.0
     if isFirstFrame then
@@ -457,8 +458,14 @@ local function renderToast(toast, targetY, isFirstToast)
         imgui.Text(toast.title or "")
         imgui.PopStyleColor()
         
+        -- For FriendRequestReceived, show add-friend icon next to the message
+        if toast.type == ToastType.FriendRequestReceived then
+            local icons = require('libs.icons')
+            if icons.RenderIcon("add_friend", 14, 14, {1.0, 1.0, 1.0, alpha}) then
+                imgui.SameLine()
+            end
         -- For FriendRequestAccepted, show online/offline status icon next to the message
-        if toast.type == ToastType.FriendRequestAccepted and toast.isOnline ~= nil then
+        elseif toast.type == ToastType.FriendRequestAccepted and toast.isOnline ~= nil then
             local icons = require('libs.icons')
             if icons.RenderStatusIcon(toast.isOnline, false, 12, false) then
                 imgui.SameLine()
@@ -466,7 +473,7 @@ local function renderToast(toast, targetY, isFirstToast)
         end
         
         imgui.PushStyleColor(ImGuiCol_Text, {1.0, 1.0, 1.0, alpha * 0.9})
-        imgui.Text(toast.message or "")
+        imgui.TextWrapped(toast.message or "")
         imgui.PopStyleColor()
         
         local _, height = imgui.GetWindowSize()
@@ -477,49 +484,60 @@ local function renderToast(toast, targetY, isFirstToast)
         toast.lastHeight = windowHeight
     end)
     
-    -- Draw progress bar at the bottom
-    local currentTime = getCurrentTimeMs()
-    local progress = 1.0
-    
-    if toast.state == ToastState.VISIBLE then
-        local elapsed = currentTime - (toast.createdAt or currentTime)
-        local duration = toast.duration or DEFAULT_DURATION_MS
-        progress = math.max(0, 1.0 - (elapsed / duration))
-    elseif toast.state == ToastState.ENTERING then
-        progress = 1.0
-    elseif toast.state == ToastState.EXITING then
-        progress = 0
+    -- Draw progress bar at the bottom (if enabled)
+    local app = _G.FFXIFriendListApp
+    local showProgressBar = true
+    if app and app.features and app.features.preferences then
+        local prefs = app.features.preferences:getPrefs()
+        if prefs then
+            showProgressBar = prefs.notificationShowProgressBar ~= false
+        end
     end
     
-    -- Get window position and size for progress bar
-    local windowPosX, windowPosY = imgui.GetWindowPos()
-    local windowSizeX, windowSizeY = imgui.GetWindowSize()
-    
-    local barHeight = 4
-    local barX = windowPosX
-    local barY = windowPosY + windowSizeY - barHeight
-    local barWidth = windowSizeX * progress
-    
-    -- Get colors for this notification type
-    local barColors = getProgressBarColors(toast.type or ToastType.Info)
-    local color1 = barColors[1]
-    local color2 = barColors[2]
-    
-    -- Apply alpha from toast fade
-    local barColor1R, barColor1G, barColor1B, barColor1A = color1[1], color1[2], color1[3], color1[4] * alpha
-    local barColor2R, barColor2G, barColor2B, barColor2A = color2[1], color2[2], color2[3], color2[4] * alpha
-    
-    -- Draw the progress bar using ImGui draw list
-    if barWidth > 0 then
-        local drawList = imgui.GetWindowDrawList()
-        drawList:AddRectFilledMultiColor(
-            {barX, barY},
-            {barX + barWidth, barY + barHeight},
-            imgui.GetColorU32({barColor1R, barColor1G, barColor1B, barColor1A}),
-            imgui.GetColorU32({barColor2R, barColor2G, barColor2B, barColor2A}),
-            imgui.GetColorU32({barColor2R, barColor2G, barColor2B, barColor2A}),
-            imgui.GetColorU32({barColor1R, barColor1G, barColor1B, barColor1A})
-        )
+    if showProgressBar then
+        local currentTime = getCurrentTimeMs()
+        local progress = 1.0
+        
+        if toast.state == ToastState.VISIBLE then
+            local elapsed = currentTime - (toast.createdAt or currentTime)
+            local duration = toast.duration or DEFAULT_DURATION_MS
+            progress = math.max(0, 1.0 - (elapsed / duration))
+        elseif toast.state == ToastState.ENTERING then
+            progress = 1.0
+        elseif toast.state == ToastState.EXITING then
+            progress = 0
+        end
+        
+        -- Get window position and size for progress bar
+        local windowPosX, windowPosY = imgui.GetWindowPos()
+        local windowSizeX, windowSizeY = imgui.GetWindowSize()
+        
+        local barHeight = 4
+        local barX = windowPosX
+        local barY = windowPosY + windowSizeY - barHeight
+        local barWidth = windowSizeX * progress
+        
+        -- Get colors for this notification type
+        local barColors = getProgressBarColors(toast.type or ToastType.Info)
+        local color1 = barColors[1]
+        local color2 = barColors[2]
+        
+        -- Apply alpha from toast fade
+        local barColor1R, barColor1G, barColor1B, barColor1A = color1[1], color1[2], color1[3], color1[4] * alpha
+        local barColor2R, barColor2G, barColor2B, barColor2A = color2[1], color2[2], color2[3], color2[4] * alpha
+        
+        -- Draw the progress bar using ImGui draw list
+        if barWidth > 0 then
+            local drawList = imgui.GetWindowDrawList()
+            drawList:AddRectFilledMultiColor(
+                {barX, barY},
+                {barX + barWidth, barY + barHeight},
+                imgui.GetColorU32({barColor1R, barColor1G, barColor1B, barColor1A}),
+                imgui.GetColorU32({barColor2R, barColor2G, barColor2B, barColor2A}),
+                imgui.GetColorU32({barColor2R, barColor2G, barColor2B, barColor2A}),
+                imgui.GetColorU32({barColor1R, barColor1G, barColor1B, barColor1A})
+            )
+        end
     end
     
     imgui.End()

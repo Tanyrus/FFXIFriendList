@@ -85,6 +85,44 @@ function M.Preferences:load()
     self.prefs.controllerCloseButton = getVal(prefs.controllerCloseButton, UIConstants.CONTROLLER_CLOSE_BUTTON)
     self.prefs.windowsLocked = getVal(prefs.windowsLocked, false)
     self.prefs.windowsPositionLocked = getVal(prefs.windowsPositionLocked, false)
+    self.prefs.useIconsForTabs = getVal(prefs.useIconsForTabs, false)
+    -- Tab icon tint color (nil = use default white)
+    if prefs.tabIconTint and type(prefs.tabIconTint) == "table" then
+        self.prefs.tabIconTint = {
+            r = prefs.tabIconTint.r or 1.0,
+            g = prefs.tabIconTint.g or 1.0,
+            b = prefs.tabIconTint.b or 1.0,
+            a = prefs.tabIconTint.a or 1.0
+        }
+    else
+        self.prefs.tabIconTint = nil
+    end
+    -- Individual tab icon colors
+    if prefs.tabIconColors and type(prefs.tabIconColors) == "table" then
+        for key, colorData in pairs(prefs.tabIconColors) do
+            if colorData and type(colorData) == "table" then
+                self.prefs.tabIconColors[key] = {
+                    r = colorData.r or 1.0,
+                    g = colorData.g or 1.0,
+                    b = colorData.b or 1.0,
+                    a = colorData.a or 1.0
+                }
+            end
+        end
+    end
+    -- UI icon colors
+    if prefs.uiIconColors and type(prefs.uiIconColors) == "table" then
+        for key, colorData in pairs(prefs.uiIconColors) do
+            if colorData and type(colorData) == "table" then
+                self.prefs.uiIconColors[key] = {
+                    r = colorData.r or 1.0,
+                    g = colorData.g or 1.0,
+                    b = colorData.b or 1.0,
+                    a = colorData.a or 1.0
+                }
+            end
+        end
+    end
     self.prefs.notificationSoundsEnabled = getVal(prefs.notificationSoundsEnabled, true)
     self.prefs.soundOnFriendOnline = getVal(prefs.soundOnFriendOnline, true)
     self.prefs.soundOnFriendRequest = getVal(prefs.soundOnFriendRequest, true)
@@ -149,6 +187,10 @@ function M.Preferences:save()
         controllerCloseButton = self.prefs.controllerCloseButton,
         windowsLocked = self.prefs.windowsLocked,
         windowsPositionLocked = self.prefs.windowsPositionLocked,
+        useIconsForTabs = self.prefs.useIconsForTabs,
+        tabIconTint = self.prefs.tabIconTint,
+        tabIconColors = self.prefs.tabIconColors,
+        uiIconColors = self.prefs.uiIconColors,
         notificationSoundsEnabled = self.prefs.notificationSoundsEnabled,
         soundOnFriendOnline = self.prefs.soundOnFriendOnline,
         soundOnFriendRequest = self.prefs.soundOnFriendRequest,

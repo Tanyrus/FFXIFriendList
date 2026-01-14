@@ -42,6 +42,21 @@ M.ICONS = {
     NATION_SANDORIA = "sandy_icon",
     NATION_BASTOK = "bastok_icon",
     NATION_WINDURST = "windy_icon",
+    
+    -- Tab icons
+    TAB_FRIENDS = "friends",
+    TAB_REQUESTS = "requests",
+    TAB_NOTIFICATIONS = "notifications",
+    TAB_PRIVACY = "privacy",
+    TAB_VIEW = "view",
+    TAB_TAGS = "tags",
+    TAB_HELP = "help",
+    TAB_THEMES = "theme",
+    
+    -- UI action icons
+    REFRESH = "refresh",
+    COLLAPSE = "collapse",
+    EXPAND = "expand",
 }
 
 --------------------------------------------------------------------------------

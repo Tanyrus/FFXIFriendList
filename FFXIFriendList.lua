@@ -588,21 +588,15 @@ local function M_playSoundTest(soundType)
     
     if soundType == "all" then
         for name, file in pairs(sounds) do
-            print("[FFXIFriendList] Playing sound: " .. name .. " -> " .. file)
             SoundPlayer.playSound(file, 1.0, nil)
         end
         return
     end
     
     local soundFile = sounds[soundType]
-    if not soundFile then
-        print("[FFXIFriendList] Unknown sound type: " .. tostring(soundType))
-        print("[FFXIFriendList] Available: online, request, all")
-        return
+    if soundFile then
+        SoundPlayer.playSound(soundFile, 1.0, nil)
     end
-    
-    print("[FFXIFriendList] Playing sound: " .. soundType .. " -> " .. soundFile)
-    SoundPlayer.playSound(soundFile, 1.0, nil)
 end
 
 ashita.events.register('command', 'ffxifriendlist_command', function(e)
@@ -622,7 +616,6 @@ ashita.events.register('command', 'ffxifriendlist_command', function(e)
         
         -- Only proceed if initialized
         if not initialized then
-            print("[FFXIFriendList] Not initialized yet - addon still loading")
             return
         end
         
@@ -665,7 +658,6 @@ ashita.events.register('command', 'ffxifriendlist_command', function(e)
                 if gConfig then
                     gConfig.showFriendList = not gConfig.showFriendList
                     moduleRegistry.CheckVisibility(gConfig)
-                    print("[FFXIFriendList] Window " .. (gConfig.showFriendList and "opened" or "closed") .. " via menutoggle")
                 end
                 return
             end
@@ -748,6 +740,8 @@ ashita.events.register('command', 'ffxifriendlist_command', function(e)
                 print("  /fl menudebug <on|off|status|dump|hexdump> - Menu detection debug")
                 print("  /fl notify - Show test notification")
                 print("  /fl soundtest <type> - Test sounds (online, request, all)")
+                print("  /fl accept <name> - Accept a friend request")
+                print("  /fl deny <name> - Deny/reject a friend request")
                 print("  /fl block <name> - Block a player from sending friend requests")
                 print("  /fl unblock <name> - Unblock a player")
                 print("  /fl blocked - List all blocked players")
@@ -765,7 +759,7 @@ ashita.events.register('command', 'ffxifriendlist_command', function(e)
                     end
                     diagRunner:handleCommand(diagArgs)
                 else
-                    print("[FFXIFriendList] Diagnostics not available")
+                    -- Diagnostics not available - silent fail
                 end
                 return
             end
@@ -808,24 +802,19 @@ ashita.events.register('command', 'ffxifriendlist_command', function(e)
             if subcmd == "block" then
                 local targetName = command_args[3]
                 if not targetName or targetName == "" then
-                    print("[FFXIFriendList] Usage: /fl block <name>")
                     return
                 end
                 
                 if app and app.features and app.features.blocklist then
                     app.features.blocklist:block(targetName, function(success, result)
-                        if success then
+                        if success and app.deps and app.deps.logger then
                             if result and result.alreadyBlocked then
-                                print("[FFXIFriendList] " .. targetName .. " was already blocked")
+                                app.deps.logger.echo(targetName .. " was already blocked")
                             else
-                                print("[FFXIFriendList] Blocked " .. targetName)
+                                app.deps.logger.echo("Blocked " .. targetName)
                             end
-                        else
-                            print("[FFXIFriendList] Failed to block " .. targetName .. ": " .. tostring(result))
                         end
                     end)
-                else
-                    print("[FFXIFriendList] Blocklist feature not available")
                 end
                 return
             end
@@ -833,35 +822,30 @@ ashita.events.register('command', 'ffxifriendlist_command', function(e)
             if subcmd == "unblock" then
                 local targetName = command_args[3]
                 if not targetName or targetName == "" then
-                    print("[FFXIFriendList] Usage: /fl unblock <name>")
                     return
                 end
                 
                 if app and app.features and app.features.blocklist then
                     app.features.blocklist:unblockByName(targetName, function(success, result)
-                        if success then
+                        if success and app.deps and app.deps.logger then
                             if result and not result.wasBlocked then
-                                print("[FFXIFriendList] " .. targetName .. " was not blocked")
+                                app.deps.logger.echo(targetName .. " was not blocked")
                             else
-                                print("[FFXIFriendList] Unblocked " .. targetName)
+                                app.deps.logger.echo("Unblocked " .. targetName)
                             end
-                        else
-                            print("[FFXIFriendList] Failed to unblock " .. targetName .. ": " .. tostring(result))
                         end
                     end)
-                else
-                    print("[FFXIFriendList] Blocklist feature not available")
                 end
                 return
             end
             
             if subcmd == "blocked" then
-                if app and app.features and app.features.blocklist then
+                if app and app.features and app.features.blocklist and app.deps and app.deps.logger then
                     local blocked = app.features.blocklist:getBlockedList()
                     if #blocked == 0 then
-                        print("[FFXIFriendList] No blocked players")
+                        app.deps.logger.echo("No blocked players")
                     else
-                        print("[FFXIFriendList] Blocked players (" .. #blocked .. "):")
+                        app.deps.logger.echo("Blocked players (" .. #blocked .. "):")
                         for _, entry in ipairs(blocked) do
                             local name = entry.displayName or "Unknown"
                             if #name > 0 then
@@ -870,8 +854,64 @@ ashita.events.register('command', 'ffxifriendlist_command', function(e)
                             print("  - " .. name)
                         end
                     end
-                else
-                    print("[FFXIFriendList] Blocklist feature not available")
+                end
+                return
+            end
+            
+            if subcmd == "accept" then
+                local targetName = command_args[3]
+                if not targetName or targetName == "" then
+                    return
+                end
+                
+                -- Find request by name (case-insensitive)
+                if app and app.features and app.features.friends and app.deps and app.deps.logger then
+                    local friendlistData = require('modules.friendlist.data')
+                    local requests = friendlistData.GetIncomingRequests()
+                    local foundRequest = nil
+                    
+                    for _, request in ipairs(requests) do
+                        if request.name and string.lower(request.name) == string.lower(targetName) then
+                            foundRequest = request
+                            break
+                        end
+                    end
+                    
+                    if foundRequest then
+                        app.features.friends:acceptRequest(foundRequest.id)
+                        app.deps.logger.echo("Accepted friend request from " .. foundRequest.name)
+                    else
+                        app.deps.logger.echo("No pending friend request from " .. targetName)
+                    end
+                end
+                return
+            end
+            
+            if subcmd == "deny" then
+                local targetName = command_args[3]
+                if not targetName or targetName == "" then
+                    return
+                end
+                
+                -- Find request by name (case-insensitive)
+                if app and app.features and app.features.friends and app.deps and app.deps.logger then
+                    local friendlistData = require('modules.friendlist.data')
+                    local requests = friendlistData.GetIncomingRequests()
+                    local foundRequest = nil
+                    
+                    for _, request in ipairs(requests) do
+                        if request.name and string.lower(request.name) == string.lower(targetName) then
+                            foundRequest = request
+                            break
+                        end
+                    end
+                    
+                    if foundRequest then
+                        app.features.friends:rejectRequest(foundRequest.id)
+                        app.deps.logger.echo("Denied friend request from " .. foundRequest.name)
+                    else
+                        app.deps.logger.echo("No pending friend request from " .. targetName)
+                    end
                 end
                 return
             end

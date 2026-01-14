@@ -158,6 +158,30 @@ function M.Notifications:push(type, payload)
     local message = payload.message or ""
     local dedupeKey = payload.dedupeKey
     
+    -- Check if this notification type is enabled
+    local prefs = nil
+    if self.deps and self.deps.preferences and self.deps.preferences.getPrefs then
+        prefs = self.deps.preferences:getPrefs()
+    end
+    
+    if prefs then
+        if type == M.ToastType.FriendOnline and prefs.notificationShowFriendOnline == false then
+            return
+        end
+        if type == M.ToastType.FriendOffline and prefs.notificationShowFriendOffline == false then
+            return
+        end
+        if type == M.ToastType.FriendRequestReceived and prefs.notificationShowFriendRequest == false then
+            return
+        end
+        if type == M.ToastType.FriendRequestAccepted and prefs.notificationShowRequestAccepted == false then
+            return
+        end
+        if type == M.ToastType.FriendRequestRejected and prefs.notificationShowRequestRejected == false then
+            return
+        end
+    end
+    
     -- Clean up dismissed/completed toasts before checking for duplicates
     self:cleanup()
     
@@ -253,6 +277,44 @@ function M.Notifications:showTestFriendRequest(friendName)
         duration = duration,
         characterName = name
     })
+end
+
+-- Show 5 unique test notifications 0.5 seconds apart for testing
+function M.Notifications:showTestMultipleNotifications()
+    local prefs = nil
+    if self.deps and self.deps.preferences and self.deps.preferences.getPrefs then
+        prefs = self.deps.preferences:getPrefs()
+    end
+
+    local duration = TimingConstants.NOTIFICATION_DEFAULT_DURATION_MS
+    if prefs and prefs.notificationDuration then
+        local prefDuration = tonumber(prefs.notificationDuration)
+        if prefDuration and prefDuration > 0 then
+            duration = prefDuration * 1000
+        end
+    end
+
+    local testMessages = {
+        {type = M.ToastType.FriendOnline, title = "Friend Online", message = "Warrior is now online", isOnline = true, characterName = "Warrior"},
+        {type = M.ToastType.FriendOffline, title = "Friend Offline", message = "Mage went offline", isOnline = false, characterName = "Mage"},
+        {type = M.ToastType.FriendRequestReceived, title = "Friend Request", message = "Healer sent you a friend request", characterName = "Healer"},
+        {type = M.ToastType.FriendRequestAccepted, title = "Request Accepted", message = "Ranger accepted your friend request", isOnline = true, characterName = "Ranger"},
+        {type = M.ToastType.FriendRequestRejected, title = "Request Declined", message = "Thief declined your friend request", characterName = "Thief"}
+    }
+
+    -- Use Ashita's scheduler to queue notifications
+    for i, msg in ipairs(testMessages) do
+        local delay = (i - 1) * 0.5
+        ashita.tasks.once(delay, function()
+            pushTestToast(self, msg.type, {
+                title = msg.title,
+                message = msg.message,
+                duration = duration,
+                isOnline = msg.isOnline,
+                characterName = msg.characterName
+            })
+        end)
+    end
 end
 
 -- Remove dismissed/completed toasts from the queue to prevent unbounded growth

@@ -45,7 +45,6 @@ local ToastType = {
     FriendRequestReceived = "FriendRequestReceived",
     FriendRequestAccepted = "FriendRequestAccepted",
     FriendRequestRejected = "FriendRequestRejected",
-    MailReceived = "MailReceived",
     Error = "Error",
     Info = "Info",
     Warning = "Warning",
@@ -138,8 +137,6 @@ local function getToastColor(toastType)
         return {0.2, 0.6, 1.0, 1.0}
     elseif toastType == ToastType.FriendRequestRejected then
         return {1.0, 0.6, 0.2, 1.0}
-    elseif toastType == ToastType.MailReceived then
-        return {1.0, 0.8, 0.2, 1.0}
     elseif toastType == ToastType.Error then
         return {1.0, 0.2, 0.2, 1.0}
     elseif toastType == ToastType.Warning then
@@ -148,6 +145,25 @@ local function getToastColor(toastType)
         return {0.2, 0.8, 0.2, 1.0}
     else
         return {0.8, 0.8, 1.0, 1.0}
+    end
+end
+
+local function getProgressBarColors(toastType)
+    -- Returns two colors for gradient effect: {color1, color2}
+    if toastType == ToastType.FriendOnline then
+        return {{0.29, 0.57, 0.21, 1.0}, {0.42, 0.75, 0.35, 1.0}}  -- Green
+    elseif toastType == ToastType.FriendOffline then
+        return {{0.65, 0.35, 0.35, 1.0}, {0.75, 0.45, 0.45, 1.0}}  -- Red
+    elseif toastType == ToastType.FriendRequestReceived then
+        return {{0.60, 0.40, 0.80, 1.0}, {0.73, 0.60, 0.87, 1.0}}  -- Purple
+    elseif toastType == ToastType.FriendRequestAccepted then
+        return {{0.30, 0.69, 0.31, 1.0}, {0.51, 0.78, 0.52, 1.0}}  -- Green
+    elseif toastType == ToastType.FriendRequestRejected then
+        return {{0.83, 0.22, 0.22, 1.0}, {0.93, 0.42, 0.42, 1.0}}  -- Red
+    elseif toastType == ToastType.Error then
+        return {{0.83, 0.22, 0.22, 1.0}, {0.93, 0.42, 0.42, 1.0}}  -- Red
+    else
+        return {{0.29, 0.56, 0.85, 1.0}, {0.42, 0.70, 0.94, 1.0}}  -- Default Blue
     end
 end
 
@@ -461,6 +477,51 @@ local function renderToast(toast, targetY, isFirstToast)
         toast.lastHeight = windowHeight
     end)
     
+    -- Draw progress bar at the bottom
+    local currentTime = getCurrentTimeMs()
+    local progress = 1.0
+    
+    if toast.state == ToastState.VISIBLE then
+        local elapsed = currentTime - (toast.createdAt or currentTime)
+        local duration = toast.duration or DEFAULT_DURATION_MS
+        progress = math.max(0, 1.0 - (elapsed / duration))
+    elseif toast.state == ToastState.ENTERING then
+        progress = 1.0
+    elseif toast.state == ToastState.EXITING then
+        progress = 0
+    end
+    
+    -- Get window position and size for progress bar
+    local windowPosX, windowPosY = imgui.GetWindowPos()
+    local windowSizeX, windowSizeY = imgui.GetWindowSize()
+    
+    local barHeight = 4
+    local barX = windowPosX
+    local barY = windowPosY + windowSizeY - barHeight
+    local barWidth = windowSizeX * progress
+    
+    -- Get colors for this notification type
+    local barColors = getProgressBarColors(toast.type or ToastType.Info)
+    local color1 = barColors[1]
+    local color2 = barColors[2]
+    
+    -- Apply alpha from toast fade
+    local barColor1R, barColor1G, barColor1B, barColor1A = color1[1], color1[2], color1[3], color1[4] * alpha
+    local barColor2R, barColor2G, barColor2B, barColor2A = color2[1], color2[2], color2[3], color2[4] * alpha
+    
+    -- Draw the progress bar using ImGui draw list
+    if barWidth > 0 then
+        local drawList = imgui.GetWindowDrawList()
+        drawList:AddRectFilledMultiColor(
+            {barX, barY},
+            {barX + barWidth, barY + barHeight},
+            imgui.GetColorU32({barColor1R, barColor1G, barColor1B, barColor1A}),
+            imgui.GetColorU32({barColor2R, barColor2G, barColor2B, barColor2A}),
+            imgui.GetColorU32({barColor2R, barColor2G, barColor2B, barColor2A}),
+            imgui.GetColorU32({barColor1R, barColor1G, barColor1B, barColor1A})
+        )
+    end
+    
     imgui.End()
     imgui.PopStyleColor(1)
     imgui.PopStyleVar(3)
@@ -594,14 +655,49 @@ function M.DrawWindow(settings, dataModule)
         end
     end
     
+    -- Check if we should stack from bottom
+    local stackFromBottom = false
+    if prefs and prefs.notificationStackFromBottom then
+        stackFromBottom = true
+    end
+    
     local targetY = state.positionY
-    for i = 1, #activeToasts do
-        local toast = activeToasts[i]
-        local toastHeight = toast.lastHeight or 60
-        local isFirstToast = (i == 1)
-        renderToast(toast, targetY, isFirstToast)
-        if toast.state ~= ToastState.EXITING then
-            targetY = targetY + toastHeight + TOAST_SPACING
+    
+    if stackFromBottom then
+        -- Calculate total height of all toasts (excluding exiting ones)
+        local totalHeight = 0
+        for i = 1, #activeToasts do
+            local toast = activeToasts[i]
+            local toastHeight = toast.lastHeight or 60
+            if toast.state ~= ToastState.EXITING then
+                if i > 1 then
+                    totalHeight = totalHeight + TOAST_SPACING
+                end
+                totalHeight = totalHeight + toastHeight
+            end
+        end
+        
+        -- Render from bottom to top (reverse order, starting from position - totalHeight)
+        targetY = state.positionY - totalHeight
+        for i = #activeToasts, 1, -1 do
+            local toast = activeToasts[i]
+            local toastHeight = toast.lastHeight or 60
+            local isFirstToast = (i == #activeToasts)  -- First is now the bottom-most
+            renderToast(toast, targetY, isFirstToast)
+            if toast.state ~= ToastState.EXITING then
+                targetY = targetY + toastHeight + TOAST_SPACING
+            end
+        end
+    else
+        -- Default: stack from top to bottom
+        for i = 1, #activeToasts do
+            local toast = activeToasts[i]
+            local toastHeight = toast.lastHeight or 60
+            local isFirstToast = (i == 1)
+            renderToast(toast, targetY, isFirstToast)
+            if toast.state ~= ToastState.EXITING then
+                targetY = targetY + toastHeight + TOAST_SPACING
+            end
         end
     end
     

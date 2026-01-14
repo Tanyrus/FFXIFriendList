@@ -163,8 +163,82 @@ function M.Render(state, dataModule, callbacks)
     end
     
     imgui.Spacing()
+    imgui.Separator()
+    imgui.Spacing()
+    imgui.Text("Notification Display Filters:")
+    imgui.Spacing()
+    
+    local showFriendOnline = {prefs.notificationShowFriendOnline ~= false}
+    if imgui.Checkbox("Show friend online notifications", showFriendOnline) then
+        if app and app.features and app.features.preferences then
+            app.features.preferences:setPref("notificationShowFriendOnline", showFriendOnline[1])
+            app.features.preferences:save()
+        end
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("Show notifications when friends come online.")
+    end
+    
+    local showFriendOffline = {prefs.notificationShowFriendOffline ~= false}
+    if imgui.Checkbox("Show friend offline notifications", showFriendOffline) then
+        if app and app.features and app.features.preferences then
+            app.features.preferences:setPref("notificationShowFriendOffline", showFriendOffline[1])
+            app.features.preferences:save()
+        end
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("Show notifications when friends go offline.")
+    end
+    
+    local showFriendRequest = {prefs.notificationShowFriendRequest ~= false}
+    if imgui.Checkbox("Show friend request notifications", showFriendRequest) then
+        if app and app.features and app.features.preferences then
+            app.features.preferences:setPref("notificationShowFriendRequest", showFriendRequest[1])
+            app.features.preferences:save()
+        end
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("Show notifications when you receive a friend request.")
+    end
+    
+    local showRequestAccepted = {prefs.notificationShowRequestAccepted ~= false}
+    if imgui.Checkbox("Show request accepted notifications", showRequestAccepted) then
+        if app and app.features and app.features.preferences then
+            app.features.preferences:setPref("notificationShowRequestAccepted", showRequestAccepted[1])
+            app.features.preferences:save()
+        end
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("Show notifications when someone accepts your friend request.")
+    end
+    
+    local showRequestRejected = {prefs.notificationShowRequestRejected ~= false}
+    if imgui.Checkbox("Show request rejected notifications", showRequestRejected) then
+        if app and app.features and app.features.preferences then
+            app.features.preferences:setPref("notificationShowRequestRejected", showRequestRejected[1])
+            app.features.preferences:save()
+        end
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("Show notifications when someone rejects your friend request.")
+    end
+    
+    imgui.Spacing()
     
     M.RenderNotificationBackgroundColor(state, prefs)
+    
+    imgui.Spacing()
+    
+    local stackFromBottom = {prefs.notificationStackFromBottom or false}
+    if imgui.Checkbox("Stack notifications from bottom", stackFromBottom) then
+        if app and app.features and app.features.preferences then
+            app.features.preferences:setPref("notificationStackFromBottom", stackFromBottom[1])
+            app.features.preferences:save()
+        end
+    end
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip("When enabled, notifications start at the bottom and stack upward. When disabled, they start at the top and stack downward.")
+    end
     
     imgui.Spacing()
     

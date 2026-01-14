@@ -1229,15 +1229,14 @@ function M.Friends:checkForStatusChanges(currentStatuses)
             })
         end
         
-        -- Create toasts for friends going offline (optional, can be enabled)
-        -- Uncomment if offline notifications are desired:
-        -- for _, displayName in ipairs(offlineTransitions) do
-        --     app.features.notifications:push(Notifications.ToastType.FriendOffline, {
-        --         title = "Friend Offline",
-        --         message = displayName .. " went offline",
-        --         dedupeKey = "offline_" .. string.lower(displayName)
-        --     })
-        -- end
+        -- Create toasts for friends going offline
+        for _, displayName in ipairs(offlineTransitions) do
+            app.features.notifications:push(Notifications.ToastType.FriendOffline, {
+                title = "Friend Offline",
+                message = displayName .. " went offline",
+                dedupeKey = "offline_" .. string.lower(displayName)
+            })
+        end
     end
     
     -- Update previous status with current

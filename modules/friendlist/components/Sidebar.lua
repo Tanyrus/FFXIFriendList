@@ -1,6 +1,8 @@
 local imgui = require('imgui')
 local FontManager = require('app.ui.FontManager')
 local icons = require('libs.icons')
+local UIConstants = require('core.UIConstants')
+local UI = require('constants.ui')
 
 local M = {}
 
@@ -20,16 +22,26 @@ function M.Render(state, dataModule, onSaveState)
     -- Use add-friend icon when there are incoming requests, otherwise use requests icon
     local requestsIcon = incomingCount > 0 and "add_friend" or "tab_requests"
     local tabIcons = {"tab_friends", requestsIcon, "tab_view", "tab_privacy", "tab_tags", "tab_notifications", "tab_themes", "tab_help"}
+    local tabColorKeys = {"friends", "requests", "view", "privacy", "tags", "notifications", "themes", "help"}
     
     -- Check if we should use icons and get tint color
     local app = _G.FFXIFriendListApp
     local useIcons = false
-    local iconTint = {1, 1, 1, 1}
+    local defaultIconTint = {1, 1, 1, 1}
+    local individualColors = {}
     if app and app.features and app.features.preferences then
         local prefs = app.features.preferences:getPrefs()
         useIcons = prefs.useIconsForTabs or false
         if prefs.tabIconTint then
-            iconTint = {prefs.tabIconTint.r, prefs.tabIconTint.g, prefs.tabIconTint.b, prefs.tabIconTint.a}
+            defaultIconTint = {prefs.tabIconTint.r, prefs.tabIconTint.g, prefs.tabIconTint.b, prefs.tabIconTint.a}
+        end
+        -- Load individual icon colors
+        if prefs.tabIconColors then
+            for key, color in pairs(prefs.tabIconColors) do
+                if color then
+                    individualColors[key] = {color.r, color.g, color.b, color.a}
+                end
+            end
         end
     end
     
@@ -54,8 +66,12 @@ function M.Render(state, dataModule, onSaveState)
         local clicked = false
         
         if useIcons then
+            -- Get color for this specific icon (individual color or default tint)
+            local colorKey = tabColorKeys[i + 1]
+            local iconTint = individualColors[colorKey] or defaultIconTint
+            
             -- Try to render icon button with custom tint
-            local iconClicked = icons.RenderIconButton(iconName, s(24), s(24), tabLabel, iconTint)
+            local iconClicked = icons.RenderIconButtonWithSize(iconName, s(UI.ICON_SIZES.TAB_ICON_BUTTON), s(UI.ICON_SIZES.TAB_ICON_BUTTON), tabLabel, iconTint)
             if iconClicked == nil then
                 -- Fallback to text if icon not available
                 clicked = imgui.Button(tabLabel .. "##tab_" .. i, iconButtonSize)

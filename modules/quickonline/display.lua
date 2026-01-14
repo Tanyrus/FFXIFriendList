@@ -396,14 +396,29 @@ function M.RenderTopBar(dataModule)
     local isConnected = dataModule.IsConnected()
     local s = FontManager.scaled
     
+    -- Get UI icon colors from preferences
+    local app = _G.FFXIFriendListApp
+    local uiIconColors = {}
+    if app and app.features and app.features.preferences then
+        local prefs = app.features.preferences:getPrefs()
+        if prefs.uiIconColors then
+            for key, color in pairs(prefs.uiIconColors) do
+                if color then
+                    uiIconColors[key] = {color.r, color.g, color.b, color.a}
+                end
+            end
+        end
+    end
+    
     imgui.PushStyleVar(ImGuiStyleVar_FramePadding, {s(6), s(6)})
     imgui.PushStyleVar(ImGuiStyleVar_FrameRounding, s(4))
     
     local lockIconName = state.locked and "lock" or "unlock"
     local lockTooltip = state.locked and "Window locked (click to unlock)" or "Lock window position"
+    local lockColor = uiIconColors[lockIconName] or {1, 1, 1, 1}
     
-    local lockIconSize = s(21)
-    local clicked = icons.RenderIconButton(lockIconName, lockIconSize, lockIconSize, lockTooltip)
+    local lockIconSize = s(UIConst.ICON_SIZES.ACTION_ICON_BUTTON)
+    local clicked = icons.RenderIconButtonWithSize(lockIconName, lockIconSize, lockIconSize, lockTooltip, lockColor)
     if clicked == nil then
         local lockLabel = state.locked and "Locked" or "Unlocked"
         clicked = imgui.Button(lockLabel .. "##lock_btn")
@@ -425,7 +440,7 @@ function M.RenderTopBar(dataModule)
         end
     end
     
-    imgui.SameLine(0, s(8))
+    imgui.SameLine(0, s(4))
     
     if not isConnected then
         imgui.PushStyleColor(ImGuiCol_Button, Colors.BUTTON.DISABLED)
@@ -434,8 +449,9 @@ function M.RenderTopBar(dataModule)
     end
     
     -- Refresh button - always use icon
-    local refreshIconSize = s(21)
-    local refreshClicked = icons.RenderIconButton("refresh", refreshIconSize, refreshIconSize, "Refresh friend list")
+    local refreshIconSize = s(UIConst.ICON_SIZES.ACTION_ICON_BUTTON)
+    local refreshColor = uiIconColors.refresh or {1, 1, 1, 1}
+    local refreshClicked = icons.RenderIconButtonWithSize("refresh", refreshIconSize, refreshIconSize, "Refresh friend list", refreshColor)
     if refreshClicked == nil then
         -- Fallback to text button
         refreshClicked = imgui.Button("Refresh")
@@ -457,11 +473,12 @@ function M.RenderTopBar(dataModule)
         imgui.PopStyleColor(3)
     end
     
-    imgui.SameLine(0, s(8))
+    imgui.SameLine(0, s(4))
     
     -- Full button - always use expand icon
-    local expandIconSize = s(21)
-    local expandClicked = icons.RenderIconButton("expand", expandIconSize, expandIconSize, "Switch to full view (Main Window)")
+    local expandIconSize = s(UIConst.ICON_SIZES.ACTION_ICON_BUTTON)
+    local expandColor = uiIconColors.expand or {1, 1, 1, 1}
+    local expandClicked = icons.RenderIconButtonWithSize("expand", expandIconSize, expandIconSize, "Switch to full view (Main Window)", expandColor)
     if expandClicked == nil then
         -- Fallback to text button
         expandClicked = imgui.Button("Full")

@@ -559,7 +559,7 @@ function M.RenderContent(dataModule)
         useIcons = prefs.useIconsForTabs or false
     end
     
-    local sidebarWidth = useIcons and FontManager.scaled(35) or FontManager.scaled(UIConstants.SIDEBAR_WIDTH)
+    local sidebarWidth = useIcons and FontManager.scaled(30) or FontManager.scaled(UIConstants.SIDEBAR_WIDTH)
     imgui.BeginChild("Sidebar", {sidebarWidth, 0}, false)
     Sidebar.Render(state, dataModule, M.SaveWindowState)
     imgui.EndChild()

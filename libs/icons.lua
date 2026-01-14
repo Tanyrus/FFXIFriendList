@@ -227,11 +227,81 @@ function M.RenderIconButton(iconName, width, height, tooltip, tintColor)
     imgui.PushStyleColor(ImGuiCol_Button, btnColor);
     imgui.PushStyleColor(ImGuiCol_ButtonHovered, btnHoverColor);
     imgui.PushStyleColor(ImGuiCol_ButtonActive, btnActiveColor);
-    imgui.PushStyleVar(ImGuiStyleVar_FramePadding, {2, 2});
+    -- Frame padding set to -1 to use image size directly
     imgui.PushStyleVar(ImGuiStyleVar_FrameRounding, 4);
     
     -- ImageButton: textureId, size, uv0, uv1, frame_padding, bg_color, tint_color
+    -- frame_padding = -1 means use FramePadding style var (default padding)
     local clicked = imgui.ImageButton(textureId, {w, h}, {0, 0}, {1, 1}, -1, {0, 0, 0, 0}, tint);
+    
+    -- Pop styles and ID
+    imgui.PopStyleVar(1);
+    imgui.PopStyleColor(3);
+    imgui.PopID();
+    
+    if imgui.IsItemHovered() and tooltip then
+        imgui.SetTooltip(tooltip);
+    end
+    
+    return clicked;
+end
+
+-- Render icon button with explicit button size (image is automatically scaled by UI.ICON_SCALE)
+function M.RenderIconButtonWithSize(iconName, buttonWidth, buttonHeight, tooltip, tintColor)
+    local texture = M.GetIcon(iconName);
+    if texture == nil or texture.image == nil then
+        return nil;
+    end
+    
+    local btnW = buttonWidth or 24;
+    local btnH = buttonHeight or 24;
+    -- Image is scaled by ICON_SCALE constant
+    local UI = require('constants.ui');
+    local imgW = math.floor(btnW * UI.ICON_SCALE);
+    local imgH = math.floor(btnH * UI.ICON_SCALE);
+    local textureId = tonumber(ffi.cast("uint32_t", texture.image));
+    
+    -- Calculate padding needed to center smaller image in larger button
+    local padX = math.max(0, (btnW - imgW) / 2);
+    local padY = math.max(0, (btnH - imgH) / 2);
+    
+    -- Get button colors from theme (or use fallback)
+    local btnColor = {0.26, 0.26, 0.26, 1.0};
+    local btnHoverColor = {0.35, 0.35, 0.35, 1.0};
+    local btnActiveColor = {0.45, 0.45, 0.45, 1.0};
+    
+    local app = _G.FFXIFriendListApp;
+    if app and app.features and app.features.themes then
+        local themeColors = app.features.themes:getCurrentThemeColors();
+        if themeColors then
+            if themeColors.buttonColor then
+                local c = themeColors.buttonColor;
+                btnColor = {c.r or 0.26, c.g or 0.26, c.b or 0.26, c.a or 1.0};
+            end
+            if themeColors.buttonHoverColor then
+                local c = themeColors.buttonHoverColor;
+                btnHoverColor = {c.r or 0.35, c.g or 0.35, c.b or 0.35, c.a or 1.0};
+            end
+            if themeColors.buttonActiveColor then
+                local c = themeColors.buttonActiveColor;
+                btnActiveColor = {c.r or 0.45, c.g or 0.45, c.b or 0.45, c.a or 1.0};
+            end
+        end
+    end
+    
+    -- Use provided tint color or default to white
+    local tint = tintColor or {1, 1, 1, 1};
+    
+    -- Push button colors and unique ID
+    imgui.PushID("icon_btn_sized_" .. iconName);
+    imgui.PushStyleColor(ImGuiCol_Button, btnColor);
+    imgui.PushStyleColor(ImGuiCol_ButtonHovered, btnHoverColor);
+    imgui.PushStyleColor(ImGuiCol_ButtonActive, btnActiveColor);
+    imgui.PushStyleVar(ImGuiStyleVar_FramePadding, {padX, padY});
+    imgui.PushStyleVar(ImGuiStyleVar_FrameRounding, 4);
+    
+    -- ImageButton: textureId, size, uv0, uv1, frame_padding, bg_color, tint_color
+    local clicked = imgui.ImageButton(textureId, {imgW, imgH}, {0, 0}, {1, 1}, -1, {0, 0, 0, 0}, tint);
     
     -- Pop styles and ID
     imgui.PopStyleVar(2);

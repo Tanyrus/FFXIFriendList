@@ -113,6 +113,28 @@ function M.Preferences.new()
     self.windowsPositionLocked = false
     self.useIconsForTabs = false
     self.tabIconTint = nil
+    -- Individual tab icon colors (nil = use tabIconTint or default white)
+    self.tabIconColors = {
+        friends = nil,
+        requests = nil,
+        view = nil,
+        privacy = nil,
+        tags = nil,
+        notifications = nil,
+        themes = nil,
+        help = nil
+    }
+    -- UI icon colors (lock, refresh, collapse, expand, discord, github, heart)
+    self.uiIconColors = {
+        lock = nil,
+        unlock = nil,
+        refresh = nil,
+        collapse = nil,
+        expand = nil,
+        discord = nil,
+        github = nil,
+        heart = nil
+    }
     self.notificationSoundsEnabled = true
     self.soundOnFriendOnline = true
     self.soundOnFriendRequest = true

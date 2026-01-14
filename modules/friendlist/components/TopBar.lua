@@ -1,6 +1,7 @@
 local imgui = require('imgui')
 local icons = require('libs.icons')
 local FontManager = require('app.ui.FontManager')
+local UI = require('constants.ui')
 
 local M = {}
 
@@ -23,16 +24,29 @@ function M.Render(state, dataModule, onRefresh, onLockChanged, onViewToggle, sho
     local isConnected = dataModule.IsConnected()
     local s = FontManager.scaled
     
-    imgui.Dummy({0, s(3)})
+    -- Get UI icon colors from preferences
+    local app = _G.FFXIFriendListApp
+    local uiIconColors = {}
+    if app and app.features and app.features.preferences then
+        local prefs = app.features.preferences:getPrefs()
+        if prefs.uiIconColors then
+            for key, color in pairs(prefs.uiIconColors) do
+                if color then
+                    uiIconColors[key] = {color.r, color.g, color.b, color.a}
+                end
+            end
+        end
+    end
     
     imgui.PushStyleVar(ImGuiStyleVar_FramePadding, {s(6), s(6)})
     imgui.PushStyleVar(ImGuiStyleVar_FrameRounding, s(4))
     
     local lockIconName = state.locked and "lock" or "unlock"
     local lockTooltip = state.locked and "Window locked (click to unlock)" or "Lock window position"
+    local lockColor = uiIconColors[lockIconName] or {1, 1, 1, 1}
     
-    local lockIconSize = s(21)
-    local clicked = icons.RenderIconButton(lockIconName, lockIconSize, lockIconSize, lockTooltip)
+    local lockIconSize = s(UI.ICON_SIZES.ACTION_ICON_BUTTON)
+    local clicked = icons.RenderIconButtonWithSize(lockIconName, lockIconSize, lockIconSize, lockTooltip, lockColor)
     if clicked == nil then
         local lockLabel = state.locked and "Locked" or "Unlocked"
         clicked = imgui.Button(lockLabel .. "##lock_btn")
@@ -48,7 +62,7 @@ function M.Render(state, dataModule, onRefresh, onLockChanged, onViewToggle, sho
         end
     end
     
-    imgui.SameLine(0, s(8))
+    imgui.SameLine(0, s(4))
     
     if not isConnected then
         imgui.PushStyleColor(ImGuiCol_Button, {0.3, 0.3, 0.3, 1.0})
@@ -57,8 +71,9 @@ function M.Render(state, dataModule, onRefresh, onLockChanged, onViewToggle, sho
     end
     
     -- Refresh button - always use icon
-    local refreshIconSize = s(21)
-    local refreshClicked = icons.RenderIconButton("refresh", refreshIconSize, refreshIconSize, "Refresh")
+    local refreshIconSize = s(UI.ICON_SIZES.ACTION_ICON_BUTTON)
+    local refreshColor = uiIconColors.refresh or {1, 1, 1, 1}
+    local refreshClicked = icons.RenderIconButtonWithSize("refresh", refreshIconSize, refreshIconSize, "Refresh", refreshColor)
     if refreshClicked == nil then
         -- Fallback to text button
         refreshClicked = imgui.Button("Refresh")
@@ -74,11 +89,12 @@ function M.Render(state, dataModule, onRefresh, onLockChanged, onViewToggle, sho
         imgui.PopStyleColor(3)
     end
     
-    imgui.SameLine(0, s(8))
+    imgui.SameLine(0, s(4))
     
     -- Condensed button - always use collapse icon
-    local collapseIconSize = s(21)
-    local collapseClicked = icons.RenderIconButton("collapse", collapseIconSize, collapseIconSize, "Switch to condensed view (Compact Friend List)")
+    local collapseIconSize = s(UI.ICON_SIZES.ACTION_ICON_BUTTON)
+    local collapseColor = uiIconColors.collapse or {1, 1, 1, 1}
+    local collapseClicked = icons.RenderIconButtonWithSize("collapse", collapseIconSize, collapseIconSize, "Switch to condensed view (Compact Friend List)", collapseColor)
     if collapseClicked == nil then
         -- Fallback to text button
         collapseClicked = imgui.Button("Condensed")
@@ -93,7 +109,7 @@ function M.Render(state, dataModule, onRefresh, onLockChanged, onViewToggle, sho
         end
     end
     
-    local iconSize = s(24)
+    local iconSize = s(UI.ICON_SIZES.SOCIAL_ICON_BUTTON)
     local iconSpacing = s(4)
     local buttonPadding = s(4)
     local iconButtonSize = iconSize + buttonPadding
@@ -109,7 +125,8 @@ function M.Render(state, dataModule, onRefresh, onLockChanged, onViewToggle, sho
         imgui.SameLine(0, s(16))
     end
     
-    local discordClicked = icons.RenderIconButton("discord", iconSize, iconSize, "Discord")
+    local discordColor = uiIconColors.discord or {1, 1, 1, 1}
+    local discordClicked = icons.RenderIconButtonWithSize("discord", iconSize, iconSize, "Discord", discordColor)
     if discordClicked == nil then
         -- Fallback to text button if icon not loaded
         if imgui.Button("Discord##social") then
@@ -123,7 +140,8 @@ function M.Render(state, dataModule, onRefresh, onLockChanged, onViewToggle, sho
     imgui.SameLine(0, iconSpacing)
     
     -- GitHub button
-    local githubClicked = icons.RenderIconButton("github", iconSize, iconSize, "GitHub")
+    local githubColor = uiIconColors.github or {1, 1, 1, 1}
+    local githubClicked = icons.RenderIconButtonWithSize("github", iconSize, iconSize, "GitHub", githubColor)
     if githubClicked == nil then
         if imgui.Button("GitHub##social") then
             openUrl(URL_GITHUB)
@@ -136,7 +154,8 @@ function M.Render(state, dataModule, onRefresh, onLockChanged, onViewToggle, sho
     imgui.SameLine(0, iconSpacing)
     
     -- About/Heart button
-    local heartClicked = icons.RenderIconButton("heart", iconSize, iconSize, "About / Special Thanks")
+    local heartColor = uiIconColors.heart or {1, 1, 1, 1}
+    local heartClicked = icons.RenderIconButtonWithSize("heart", iconSize, iconSize, "About / Special Thanks", heartColor)
     if heartClicked == nil then
         if imgui.Button("About##social") then
             if showAboutPopup then showAboutPopup() end

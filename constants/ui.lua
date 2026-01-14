@@ -96,7 +96,14 @@ M.ICON_SIZES = {
     MEDIUM = 16,
     LARGE = 24,
     XLARGE = 32,
+    -- Button icon sizes (image is automatically scaled by ICON_SCALE)
+    TAB_ICON_BUTTON = 28,      -- Button size for sidebar tabs
+    ACTION_ICON_BUTTON = 28,   -- Button size for action buttons
+    SOCIAL_ICON_BUTTON = 28,   -- Button size for social icons
 }
+
+-- Icon scale factor (image size relative to button size)
+M.ICON_SCALE = 0.8  -- 80% of button size
 
 --------------------------------------------------------------------------------
 -- Child Heights (pixels, for BeginChild)

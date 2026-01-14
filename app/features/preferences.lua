@@ -97,6 +97,32 @@ function M.Preferences:load()
     else
         self.prefs.tabIconTint = nil
     end
+    -- Individual tab icon colors
+    if prefs.tabIconColors and type(prefs.tabIconColors) == "table" then
+        for key, colorData in pairs(prefs.tabIconColors) do
+            if colorData and type(colorData) == "table" then
+                self.prefs.tabIconColors[key] = {
+                    r = colorData.r or 1.0,
+                    g = colorData.g or 1.0,
+                    b = colorData.b or 1.0,
+                    a = colorData.a or 1.0
+                }
+            end
+        end
+    end
+    -- UI icon colors
+    if prefs.uiIconColors and type(prefs.uiIconColors) == "table" then
+        for key, colorData in pairs(prefs.uiIconColors) do
+            if colorData and type(colorData) == "table" then
+                self.prefs.uiIconColors[key] = {
+                    r = colorData.r or 1.0,
+                    g = colorData.g or 1.0,
+                    b = colorData.b or 1.0,
+                    a = colorData.a or 1.0
+                }
+            end
+        end
+    end
     self.prefs.notificationSoundsEnabled = getVal(prefs.notificationSoundsEnabled, true)
     self.prefs.soundOnFriendOnline = getVal(prefs.soundOnFriendOnline, true)
     self.prefs.soundOnFriendRequest = getVal(prefs.soundOnFriendRequest, true)
@@ -163,6 +189,8 @@ function M.Preferences:save()
         windowsPositionLocked = self.prefs.windowsPositionLocked,
         useIconsForTabs = self.prefs.useIconsForTabs,
         tabIconTint = self.prefs.tabIconTint,
+        tabIconColors = self.prefs.tabIconColors,
+        uiIconColors = self.prefs.uiIconColors,
         notificationSoundsEnabled = self.prefs.notificationSoundsEnabled,
         soundOnFriendOnline = self.prefs.soundOnFriendOnline,
         soundOnFriendRequest = self.prefs.soundOnFriendRequest,

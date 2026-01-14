@@ -85,7 +85,7 @@ function M.Preferences:load()
     self.prefs.controllerCloseButton = getVal(prefs.controllerCloseButton, UIConstants.CONTROLLER_CLOSE_BUTTON)
     self.prefs.windowsLocked = getVal(prefs.windowsLocked, false)
     self.prefs.windowsPositionLocked = getVal(prefs.windowsPositionLocked, false)
-    self.prefs.useIconsForTabs = getVal(prefs.useIconsForTabs, false)
+    self.prefs.useIconsForTabs = getVal(prefs.useIconsForTabs, true)
     -- Tab icon tint color (nil = use default white)
     if prefs.tabIconTint and type(prefs.tabIconTint) == "table" then
         self.prefs.tabIconTint = {

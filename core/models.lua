@@ -111,7 +111,7 @@ function M.Preferences.new()
     self.controllerCloseButton = 0x2000
     self.windowsLocked = false
     self.windowsPositionLocked = false
-    self.useIconsForTabs = false
+    self.useIconsForTabs = true
     self.tabIconTint = nil
     -- Individual tab icon colors (nil = use tabIconTint or default white)
     self.tabIconColors = {

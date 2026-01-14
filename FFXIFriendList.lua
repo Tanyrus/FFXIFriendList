@@ -673,6 +673,13 @@ ashita.events.register('command', 'ffxifriendlist_command', function(e)
                 return
             end
             
+            if subcmd == "notifytest" then
+                if app and app.features and app.features.notifications then
+                    app.features.notifications:showTestMultipleNotifications()
+                end
+                return
+            end
+
             if subcmd == "soundtest" then
                 local soundType = command_args[3] or "online"
                 M_playSoundTest(soundType)
@@ -764,6 +771,7 @@ ashita.events.register('command', 'ffxifriendlist_command', function(e)
                 print("  /fl menutoggle - Manually toggle window (fallback for menu detection)")
                 print("  /fl menudebug <on|off|status|dump|hexdump> - Menu detection debug")
                 print("  /fl notify - Show test notification")
+                print("  /fl notifytest - Spawn 5 unique test notifications 0.5s apart")
                 print("  /fl soundtest <type> - Test sounds (online, request, all)")
                 print("  /fl accept <name> - Accept a friend request")
                 print("  /fl deny <name> - Deny/reject a friend request")

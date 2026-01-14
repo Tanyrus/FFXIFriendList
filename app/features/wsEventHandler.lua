@@ -394,6 +394,19 @@ function M.WsEventHandler:_handleFriendRequestDeclined(payload)
     if not friends then return end
     
     local requestId = payload.requestId
+    local declinedBy = payload.declinedBy
+    
+    -- Show notification if someone declined your outgoing request
+    if declinedBy and declinedBy ~= "" then
+        local notifications = self.deps.notifications
+        if notifications then
+            notifications:push(Notifications.ToastType.FriendRequestRejected, {
+                title = "Friend Request Declined",
+                message = declinedBy .. " declined your friend request",
+                dedupeKey = "rejected_" .. string.lower(declinedBy)
+            })
+        end
+    end
     
     -- Remove from BOTH lists (per plan requirement)
     self:_removeRequestById(friends.incomingRequests, requestId)

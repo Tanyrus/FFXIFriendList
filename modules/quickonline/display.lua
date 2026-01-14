@@ -355,6 +355,27 @@ function M.DrawWindow(settings, dataModule)
                 childFlags = bit.bor(childFlags, ImGuiWindowFlags_NoInputs)
             end
             imgui.BeginChild("##quick_online_body", {0, 0}, false, childFlags)
+            
+            -- Context menu for window options
+            if imgui.BeginPopupContextWindow("##quick_online_context") then
+                local hideTopBar = gConfig and gConfig.quickOnlineSettings and gConfig.quickOnlineSettings.hideTopBar or false
+                local hideTopBarBuf = {hideTopBar}
+                if imgui.Checkbox("Hide Top Bar", hideTopBarBuf) then
+                    if gConfig then
+                        if not gConfig.quickOnlineSettings then
+                            gConfig.quickOnlineSettings = {}
+                        end
+                        gConfig.quickOnlineSettings.hideTopBar = hideTopBarBuf[1]
+                        M.SaveWindowState()
+                        local settings = require('libs.settings')
+                        if settings and settings.save then
+                            settings.save()
+                        end
+                    end
+                end
+                imgui.EndPopup()
+            end
+            
             if overlayEnabled then
                 imgui.PushStyleColor(ImGuiCol_ChildBg, Colors.TRANSPARENT)
             end
@@ -507,7 +528,32 @@ function M.RenderTopBar(dataModule)
         end
     end
     
+    -- Invisible button to fill remaining space and capture right-clicks
+    imgui.SameLine()
+    local availWidth, availHeight = imgui.GetContentRegionAvail()
+    imgui.InvisibleButton("##topbar_space", {availWidth, s(24)})
+    
     imgui.PopStyleVar(2)
+    
+    -- Context menu for top bar options (triggers on any item in the top bar)
+    if imgui.BeginPopupContextItem("##quick_online_topbar_context", ImGuiPopupFlags_MouseButtonRight) then
+        local hideTopBar = gConfig and gConfig.quickOnlineSettings and gConfig.quickOnlineSettings.hideTopBar or false
+        local hideTopBarBuf = {hideTopBar}
+        if imgui.Checkbox("Hide Top Bar", hideTopBarBuf) then
+            if gConfig then
+                if not gConfig.quickOnlineSettings then
+                    gConfig.quickOnlineSettings = {}
+                end
+                gConfig.quickOnlineSettings.hideTopBar = hideTopBarBuf[1]
+                M.SaveWindowState()
+                local settings = require('libs.settings')
+                if settings and settings.save then
+                    settings.save()
+                end
+            end
+        end
+        imgui.EndPopup()
+    end
 end
 
 function M.RenderFriendsTable(dataModule, overlayEnabled, disableInteraction, tooltipBgEnabled)

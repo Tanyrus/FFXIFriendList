@@ -351,9 +351,9 @@ function M.RenderJobCell(friend)
     
     if jobText == "" then
         if isOnline then
-            imgui.TextColored(anonColor, "Anon")
+            imgui.TextColored(anonColor, "Anonymous")
         else
-            imgui.TextColored(anonColorDim, "Anon")
+            imgui.TextColored(anonColorDim, "Anonymous")
         end
     else
         if isOnline then
@@ -377,9 +377,9 @@ function M.RenderZoneCell(friend)
     
     if zoneText == "" then
         if isOnline then
-            imgui.TextColored(anonColor, "Anon")
+            imgui.TextColored(anonColor, "Anonymous")
         else
-            imgui.TextColored(anonColorDim, "Anon")
+            imgui.TextColored(anonColorDim, "Anonymous")
         end
     else
         if isOnline then

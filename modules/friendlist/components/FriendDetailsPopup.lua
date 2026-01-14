@@ -144,24 +144,24 @@ function M.Render(friend, state, callbacks)
         local isLastKnown = presence.isLastKnown or friend.isLastKnown
         local lastKnownSuffix = isLastKnown and " (Last Known)" or ""
         
-        -- Job - dark sky blue if Anon
+        -- Job - dark sky blue if Anonymous
         local jobText = getValueOrAnon(presence.job, "string")
         local jobDisplay = "Job: " .. jobText .. (isLastKnown and jobText ~= "Anon" and lastKnownSuffix or "")
         if jobText == "Anon" then
             imgui.Text("Job: ")
             imgui.SameLine(0, 0)
-            imgui.TextColored(anonColor, "Anon")
+            imgui.TextColored(anonColor, "Anonymous")
         else
             imgui.Text(jobDisplay)
         end
         
-        -- Zone - dark sky blue if Anon
+        -- Zone - dark sky blue if Anonymous
         local zoneText = getValueOrAnon(presence.zone, "string")
         local zoneDisplay = "Zone: " .. zoneText .. (isLastKnown and zoneText ~= "Anon" and lastKnownSuffix or "")
         if zoneText == "Anon" then
             imgui.Text("Zone: ")
             imgui.SameLine(0, 0)
-            imgui.TextColored(anonColor, "Anon")
+            imgui.TextColored(anonColor, "Anonymous")
         else
             imgui.Text(zoneDisplay)
         end
@@ -180,7 +180,7 @@ function M.Render(friend, state, callbacks)
             imgui.Text(nationDisplay)
         end
         
-        -- Rank - dark sky blue if Anon
+        -- Rank - dark sky blue if Anonymous
         local rankText = getValueOrAnon(presence.rank, "string")
         if rankText == "Anon" and type(presence.rank) == "number" then
             rankText = tostring(presence.rank)
@@ -189,7 +189,7 @@ function M.Render(friend, state, callbacks)
         if rankText == "Anon" then
             imgui.Text("Rank: ")
             imgui.SameLine(0, 0)
-            imgui.TextColored(anonColor, "Anon")
+            imgui.TextColored(anonColor, "Anonymous")
         else
             imgui.Text(rankDisplay)
         end

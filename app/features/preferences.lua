@@ -250,18 +250,7 @@ function M.Preferences:syncToServer(onComplete)
                 -- Use new envelope format: { success, data, timestamp }
                 local ok, result = Envelope.decode(response)
                 if ok then
-                    if selfRef.deps.logger and selfRef.deps.logger.debug then
-                        selfRef.deps.logger.debug("[Preferences] Settings synced to server")
-                    end
                     syncSuccess = true
-                else
-                    if selfRef.deps.logger and selfRef.deps.logger.debug then
-                        selfRef.deps.logger.debug("[Preferences] Server sync failed (local settings saved)")
-                    end
-                end
-            else
-                if selfRef.deps.logger and selfRef.deps.logger.debug then
-                    selfRef.deps.logger.debug("[Preferences] Server sync failed - local settings saved")
                 end
             end
             
@@ -295,29 +284,12 @@ function M.Preferences:refresh()
     
     local headers = self.deps.connection:getHeaders(characterName)
     
-    local timeMs = 0
-    if self.deps.time then
-        timeMs = self.deps.time()
-    else
-        timeMs = os.time() * 1000
-    end
-    if self.deps.logger and self.deps.logger.debug then
-        self.deps.logger.debug(string.format("[Preferences] [%d] Refresh: GET %s", timeMs, url))
-    end
-    
     local requestId = self.deps.net.request({
         url = url,
         method = "GET",
         headers = headers,
         body = "",
         callback = function(success, response)
-            local callbackTimeMs = 0
-            if self.deps.time then
-                callbackTimeMs = self.deps.time()
-            else
-                callbackTimeMs = os.time() * 1000
-            end
-            
             if success then
                 -- Use new envelope format: { success, data, timestamp }
                 local ok, result = Envelope.decode(response)
@@ -337,18 +309,14 @@ function M.Preferences:refresh()
                     end
                     
                     self:save()
-                    
-                    if self.deps.logger and self.deps.logger.debug then
-                        self.deps.logger.debug(string.format("[Preferences] [%d] Refresh complete", callbackTimeMs))
-                    end
                 else
                     if self.deps.logger and self.deps.logger.warn then
-                        self.deps.logger.warn(string.format("[Preferences] [%d] Refresh: Failed to decode", callbackTimeMs))
+                        self.deps.logger.warn("[Preferences] Refresh: Failed to decode")
                     end
                 end
             else
                 if self.deps.logger and self.deps.logger.warn then
-                    self.deps.logger.warn(string.format("[Preferences] [%d] Refresh: Request failed: %s", callbackTimeMs, tostring(response)))
+                    self.deps.logger.warn(string.format("[Preferences] Refresh: Request failed: %s", tostring(response)))
                 end
             end
         end

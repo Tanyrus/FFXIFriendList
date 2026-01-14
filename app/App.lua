@@ -93,10 +93,6 @@ function App.create(deps)
         for _, eventType in ipairs(eventTypes) do
             app.features.wsClient.eventRouter:registerHandler(eventType, handler)
         end
-        
-        if deps.logger and deps.logger.debug then
-            deps.logger.debug("[App] Registered " .. #eventTypes .. " WS event handlers")
-        end
     end
     
     return app
@@ -107,10 +103,6 @@ end
 function App.initialize(app)
     if app.initialized then
         return true
-    end
-    
-    if app.deps.logger and app.deps.logger.info then
-        app.deps.logger.info("[App] Initializing")
     end
     
     -- Load persisted preferences via deps.storage
@@ -256,64 +248,34 @@ function App._triggerStartupRefresh(app)
         return
     end
     
-    -- Get timing for logs
-    local timeMs = 0
-    if app.deps and app.deps.time then
-        timeMs = app.deps.time()
-    else
-        timeMs = os.time() * 1000
-    end
-    
-    if app.deps.logger and app.deps.logger.info then
-        app.deps.logger.info(string.format("[App] [%d] Triggering startup refresh (parallel)", timeMs))
-    end
-    
     -- Request WebSocket connection via connection manager (non-blocking)
     if app.features.wsConnectionManager then
-        if app.deps.logger and app.deps.logger.debug then
-            app.deps.logger.debug(string.format("[App] [%d] Startup: Requesting WebSocket connection", timeMs))
-        end
         app.features.wsConnectionManager:requestConnect()
     end
     
     -- Fire all requests in parallel (they're independent)
     -- 1. Send heartbeat (safety signal only - NOT for friend status)
     if app.features.friends and app.features.friends.sendHeartbeat then
-        if app.deps.logger and app.deps.logger.debug then
-            app.deps.logger.debug(string.format("[App] [%d] Startup: Firing heartbeat", timeMs))
-        end
         app.features.friends:sendHeartbeat()
     end
     
     -- 2. Refresh friend list (bootstrap - WS will provide updates after)
     if app.features.friends and app.features.friends.refresh then
-        if app.deps.logger and app.deps.logger.debug then
-            app.deps.logger.debug(string.format("[App] [%d] Startup: Firing friend list refresh", timeMs))
-        end
         app.features.friends:refresh()
     end
     
     -- 3. Sync preferences from server - parallel with other requests
     if app.features.preferences and app.features.preferences.refresh then
-        if app.deps.logger and app.deps.logger.debug then
-            app.deps.logger.debug(string.format("[App] [%d] Startup: Firing preferences refresh", timeMs))
-        end
         app.features.preferences:refresh()
     end
     
     -- 4. Refresh friend requests (bootstrap - WS will provide updates after)
     if app.features.friends and app.features.friends.refreshFriendRequests then
-        if app.deps.logger and app.deps.logger.debug then
-            app.deps.logger.debug(string.format("[App] [%d] Startup: Firing friend requests refresh", timeMs))
-        end
         app.features.friends:refreshFriendRequests()
     end
     
     -- 5. Refresh blocklist - parallel with other requests
     if app.features.blocklist and app.features.blocklist.refresh then
-        if app.deps.logger and app.deps.logger.debug then
-            app.deps.logger.debug(string.format("[App] [%d] Startup: Firing blocklist refresh", timeMs))
-        end
         app.features.blocklist:refresh()
     end
 end
@@ -440,10 +402,6 @@ function App.release(app)
         return
     end
     
-    if app.deps.logger and app.deps.logger.info then
-        app.deps.logger.info("[App] Releasing")
-    end
-    
     -- Disconnect WebSocket cleanly
     if app.features.wsClient and app.features.wsClient.disconnect then
         app.features.wsClient:disconnect()
@@ -502,10 +460,6 @@ function App.attemptAutoDetectAndConnect(app)
         if server.id and string.lower(server.id) == string.lower(detectedRealmId) then
             -- Found a match! Auto-select this server
             serverlist:selectServer(server.id)
-            
-            if app.deps.logger and app.deps.logger.info then
-                app.deps.logger.info("[App] Auto-detected and selected server: " .. server.id)
-            end
             return true
         end
     end

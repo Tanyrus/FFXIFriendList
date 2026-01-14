@@ -49,11 +49,16 @@ function M.VersionCheck:checkForUpdates()
             end
             
             local data = envelope.data
-            if not data.serverVersion then
+            if not data.latestAddonVersion then
                 return
             end
             
-            self.latestVersion = data.serverVersion
+            self.latestVersion = data.latestAddonVersion
+            
+            -- Don't check if server returned 'unknown'
+            if self.latestVersion == 'unknown' then
+                return
+            end
             
             -- Parse current and latest versions
             local currentVersion = VersionCore.Version.parse(VersionCore.ADDON_VERSION)
@@ -77,11 +82,11 @@ function M.VersionCheck:notifyOutdated(current, latest)
         return
     end
     
-    self.deps.logger.echo("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    self.deps.logger.echo("================================================")
     self.deps.logger.echo("  FFXI Friend List Update Available!")
-    self.deps.logger.echo("  Current: " .. current .. " → Latest: " .. latest)
+    self.deps.logger.echo("  Current: " .. current .. " -> Latest: " .. latest)
     self.deps.logger.echo("  Download: github.com/Tanyrus/FFXIFriendList/releases")
-    self.deps.logger.echo("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    self.deps.logger.echo("================================================")
 end
 
 return M

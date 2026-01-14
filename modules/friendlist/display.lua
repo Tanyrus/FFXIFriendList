@@ -350,15 +350,7 @@ function M.DrawWindow(settings, dataModule)
         return
     end
     
-    -- Wait for connection to establish before showing main window
-    -- This ensures auto-connect completes before rendering
-    if app and app.features and app.features.connection then
-        if not app.features.connection:isConnected() then
-            return
-        end
-    end
-    
-    -- Server is connected - render main window normally
+    -- Server is connected or connecting - render main window
     local windowFlags = 0
     local app = _G.FFXIFriendListApp
     local globalLocked = false
@@ -951,6 +943,19 @@ function M.RenderTagsTab()
 end
 
 function M.RenderFriendsTab(dataModule, callbacks)
+    -- Check if connected
+    local app = _G.FFXIFriendListApp
+    local isConnected = app and app.features and app.features.connection and app.features.connection:isConnected() or false
+    
+    if not isConnected then
+        imgui.PushStyleColor(ImGuiCol_Text, {0.7, 0.7, 0.7, 1.0})
+        local text = "Connecting to server..."
+        imgui.SetCursorPosY(imgui.GetCursorPosY() + 50)
+        imgui.Text(text)
+        imgui.PopStyleColor()
+        return
+    end
+    
     AddFriendSection.Render(state, dataModule, callbacks.onAddFriend, callbacks.onAddFriendWithRealm)
     
     imgui.Dummy({0, 6})

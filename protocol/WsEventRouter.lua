@@ -53,12 +53,6 @@ function M.WsEventRouter:route(rawMessage)
         return false, errorMsg
     end
     
-    -- Log the event (seq is for debugging only per plan)
-    if self.logger and self.logger.debug then
-        self.logger.debug(string.format("[WsEventRouter] Received: type=%s seq=%d", 
-            event.type, event.seq or 0))
-    end
-    
     -- Find handler for this event type
     local handler = self.handlers[event.type]
     
@@ -67,9 +61,6 @@ function M.WsEventRouter:route(rawMessage)
         if self.defaultHandler then
             handler = self.defaultHandler
         else
-            if self.logger and self.logger.debug then
-                self.logger.debug(string.format("[WsEventRouter] No handler for: %s", event.type))
-            end
             return true  -- Not an error, just unhandled
         end
     end

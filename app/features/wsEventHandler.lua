@@ -72,11 +72,6 @@ end
 -- Main event handler function (called by App.lua which gets events from WsEventRouter)
 -- Signature matches router callback: (payload, eventType, seq, timestamp)
 function M.WsEventHandler:handleEvent(payload, eventType, seq, timestamp)
-    if self.logger and self.logger.debug then
-        self.logger.debug(string.format("[WsEventHandler] Handling: type=%s seq=%d", 
-            tostring(eventType), seq or 0))
-    end
-    
     -- Call internal handler with appropriate event type
     self:_dispatch(eventType, payload)
 end
@@ -121,10 +116,6 @@ end
 
 -- Handle 'connected' event
 function M.WsEventHandler:_handleConnected(payload)
-    if self.logger and self.logger.info then
-        self.logger.info("[WsEventHandler] WebSocket connected: " .. tostring(payload.accountId))
-    end
-    
     -- Update connection state
     if self.deps.connection and self.deps.connection.setConnected then
         self.deps.connection:setConnected()
@@ -136,31 +127,12 @@ function M.WsEventHandler:_handleFriendsSnapshot(payload)
     local friends = self.deps.friends
     if not friends then return end
     
-    -- Echo to chat for debugging
-    if self.logger and self.logger.echo then
-        self.logger.echo(string.format("Snapshot: receiving %d friends", #(payload.friends or {})))
-    end
-    
     -- Clear existing friend list and repopulate
     if friends.friendList then
         friends.friendList:clear()
     end
     
     local friendsData = payload.friends or {}
-    
-    -- Debug: Log each friend in the snapshot
-    if self.logger and self.logger.info then
-        self.logger.info(string.format("[WsEventHandler] friends_snapshot: receiving %d friends", #friendsData))
-        for i, friendData in ipairs(friendsData) do
-            self.logger.info(string.format(
-                "[WsEventHandler] friends_snapshot[%d]: accountId=%s characterName=%s isOnline=%s",
-                i,
-                tostring(friendData.accountId),
-                tostring(friendData.characterName),
-                tostring(friendData.isOnline)
-            ))
-        end
-    end
     
     for _, friendData in ipairs(friendsData) do
         self:_addFriendFromPayload(friendData)
@@ -169,15 +141,6 @@ function M.WsEventHandler:_handleFriendsSnapshot(payload)
     -- Update last updated timestamp
     friends.lastUpdatedAt = self:_getTime()
     friends.state = "idle"
-    
-    -- Echo final count to chat
-    if self.logger and self.logger.echo then
-        self.logger.echo(string.format("Snapshot applied. Total: %d", friends.friendList:size()))
-    end
-    
-    if self.logger and self.logger.info then
-        self.logger.info(string.format("[WsEventHandler] Snapshot applied. Total friends: %d", friends.friendList:size()))
-    end
 end
 
 -- Handle 'friend_online' event
@@ -220,10 +183,6 @@ function M.WsEventHandler:_handleFriendOnline(payload)
     
     -- Trigger notification
     self:_notifyFriendOnline(characterName)
-    
-    if self.logger and self.logger.debug then
-        self.logger.debug("[WsEventHandler] Friend online: " .. tostring(characterName) .. (isAway and " (away)" or ""))
-    end
 end
 
 -- Handle 'friend_offline' event
@@ -256,10 +215,6 @@ function M.WsEventHandler:_handleFriendOffline(payload)
     end
     
     friends.lastUpdatedAt = self:_getTime()
-    
-    if self.logger and self.logger.debug then
-        self.logger.debug("[WsEventHandler] Friend offline: " .. tostring(accountId))
-    end
 end
 
 -- Handle 'friend_state_changed' event
@@ -298,16 +253,6 @@ function M.WsEventHandler:_handleFriendAdded(payload)
     
     local friendData = payload.friend
     if friendData then
-        -- Debug: Log friend_added event details
-        if self.logger and self.logger.info then
-            self.logger.info(string.format(
-                "[WsEventHandler] friend_added: accountId=%s characterName=%s isOnline=%s",
-                tostring(friendData.accountId),
-                tostring(friendData.characterName),
-                tostring(friendData.isOnline)
-            ))
-        end
-        
         self:_addFriendFromPayload(friendData)
         friends.lastUpdatedAt = self:_getTime()
         
@@ -321,10 +266,6 @@ function M.WsEventHandler:_handleFriendAdded(payload)
         local isOnline = friendData.isOnline == true
         if characterName and characterName ~= "" then
             self:_notifyFriendAdded(characterName, isOnline)
-        end
-        
-        if self.logger and self.logger.info then
-            self.logger.info(string.format("[WsEventHandler] Friend added. Total friends: %d", friends.friendList:size()))
         end
     end
 end
@@ -347,18 +288,11 @@ function M.WsEventHandler:_handleFriendRemoved(payload)
             if self.deps.preferences and friend.friendAccountId then
                 self.deps.preferences:clearFriendMute(friend.friendAccountId)
             end
-            if self.logger and self.logger.debug then
-                self.logger.debug("[WsEventHandler] Removed friend: " .. tostring(friend.name))
-            end
             break
         end
     end
     
     friends.lastUpdatedAt = self:_getTime()
-    
-    if self.logger and self.logger.debug then
-        self.logger.debug("[WsEventHandler] Friend removed event processed")
-    end
 end
 
 -- Handle 'friend_request_received' event
@@ -366,22 +300,9 @@ function M.WsEventHandler:_handleFriendRequestReceived(payload)
     local friends = self.deps.friends
     if not friends then return end
     
-    -- Debug: Log the raw payload
-    if self.logger and self.logger.info then
-        self.logger.info(string.format(
-            "[WsEventHandler] friend_request_received: requestId=%s fromAccountId=%s fromCharacterName=%s",
-            tostring(payload.requestId), 
-            tostring(payload.fromAccountId), 
-            tostring(payload.fromCharacterName)
-        ))
-    end
-    
     -- Check for duplicate (same requestId already in list)
     for _, existing in ipairs(friends.incomingRequests) do
         if existing.id == payload.requestId then
-            if self.logger and self.logger.debug then
-                self.logger.debug("[WsEventHandler] Ignoring duplicate friend request: " .. tostring(payload.requestId))
-            end
             return
         end
     end
@@ -398,11 +319,6 @@ function M.WsEventHandler:_handleFriendRequestReceived(payload)
     }
     
     table.insert(friends.incomingRequests, request)
-    
-    -- Debug: Confirm request was added
-    if self.logger and self.logger.info then
-        self.logger.info(string.format("[WsEventHandler] Added incoming request. Total incoming: %d", #friends.incomingRequests))
-    end
     
     -- Trigger notification
     self:_notifyFriendRequest(payload.fromCharacterName)
@@ -449,13 +365,6 @@ function M.WsEventHandler:_handleFriendRequestAccepted(payload)
     if friendName and friendName ~= "" then
         -- Note: Notification is now triggered from _handleFriendAdded where isOnline is available
         -- This handler just cleans up the request lists
-        if self.logger and self.logger.debug then
-            self.logger.debug("[WsEventHandler] Request accepted for: " .. friendName)
-        end
-    end
-    
-    if self.logger and self.logger.debug then
-        self.logger.debug("[WsEventHandler] Request accepted: " .. tostring(requestId))
     end
 end
 
@@ -470,10 +379,6 @@ function M.WsEventHandler:_handleFriendRequestDeclined(payload)
     -- Remove from BOTH lists (per plan requirement)
     self:_removeRequestById(friends.incomingRequests, requestId)
     self:_removeRequestById(friends.outgoingRequests, requestId)
-    
-    if self.logger and self.logger.debug then
-        self.logger.debug("[WsEventHandler] Request declined: " .. tostring(requestId))
-    end
 end
 
 -- Handle 'blocked' event
@@ -485,10 +390,6 @@ function M.WsEventHandler:_handleBlocked(payload)
     if blocklist.refresh then
         blocklist:refresh()
     end
-    
-    if self.logger and self.logger.debug then
-        self.logger.debug("[WsEventHandler] Blocked by: " .. tostring(payload.blockedByAccountId))
-    end
 end
 
 -- Handle 'unblocked' event
@@ -499,10 +400,6 @@ function M.WsEventHandler:_handleUnblocked(payload)
     -- Refresh blocklist from server
     if blocklist.refresh then
         blocklist:refresh()
-    end
-    
-    if self.logger and self.logger.debug then
-        self.logger.debug("[WsEventHandler] Unblocked by: " .. tostring(payload.unblockedByAccountId))
     end
 end
 
@@ -528,10 +425,6 @@ function M.WsEventHandler:_handlePreferencesUpdated(payload)
     -- Save locally
     if preferences.save then
         preferences:save()
-    end
-    
-    if self.logger and self.logger.debug then
-        self.logger.debug("[WsEventHandler] Preferences updated")
     end
 end
 
@@ -583,31 +476,15 @@ function M.WsEventHandler:_addFriendFromPayload(friendData)
         friend.zone = friendData.state.zone or ""
         friend.nation = friendData.state.nation
         friend.rank = friendData.state.rank
-        
-        -- Debug echo for job level
-        if self.logger and self.logger.echo then
-            self.logger.echo(string.format("%s: job=%s lvl=%s sub=%s sublvl=%s",
-                displayName,
-                tostring(friendData.state.job),
-                tostring(friendData.state.jobLevel),
-                tostring(friendData.state.subJob),
-                tostring(friendData.state.subJobLevel)))
-        end
     end
     
     local addResult = friends.friendList:addFriend(friend)
-    if self.logger and self.logger.info then
-        self.logger.info(string.format("[WsEventHandler] addFriend(%s) returned: %s", displayName, tostring(addResult)))
-    end
     
     -- Consume any pending tag for this friend
     if self.deps.tags and self.deps.tags.consumePendingTag then
         local pendingTag = self.deps.tags:consumePendingTag(displayName)
         if pendingTag then
             self.deps.tags:setTagForFriend(displayName, pendingTag)
-            if self.logger and self.logger.info then
-                self.logger.info(string.format("[WsEventHandler] Applied pending tag '%s' to %s", pendingTag, displayName))
-            end
         end
     end
     
@@ -619,9 +496,6 @@ function M.WsEventHandler:_addFriendFromPayload(friendData)
             -- Save notes after applying pending note
             if self.deps.notes.save then
                 self.deps.notes:save()
-            end
-            if self.logger and self.logger.info then
-                self.logger.info(string.format("[WsEventHandler] Applied pending note to %s", displayName))
             end
         end
     end

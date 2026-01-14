@@ -495,12 +495,6 @@ function M._fetchCharacterStatus(app)
             
             if envelope.data then
                 state.characterStatus = envelope.data
-                if app.deps.logger and app.deps.logger.debug then
-                    app.deps.logger.debug("[PrivacyTab] Fetched character status: job=" .. tostring(envelope.data.job) .. 
-                        ", zone=" .. tostring(envelope.data.zone) .. 
-                        ", nation=" .. tostring(envelope.data.nation) .. 
-                        ", rank=" .. tostring(envelope.data.rank))
-                end
             end
         end
     })

@@ -85,9 +85,6 @@ function M.request(options)
     
     local app = _G.FFXIFriendListApp
     local logger = app and app.deps and app.deps.logger
-    if logger and logger.debug then
-        logger.debug(string.format("[Net] [%d] Enqueue: %s %s", req.enqueueTimeMs, req.method, req.url))
-    end
     
     local wrappedCallback = function(body, err, status)
         req.status = 'completed'
@@ -102,30 +99,15 @@ function M.request(options)
         end
         req.completeTimeMs = completeTimeMs
         
-        if logger then
-            local totalTime = completeTimeMs - req.enqueueTimeMs
-            local networkTime = 0
-            if req.sendTimeMs then
-                networkTime = completeTimeMs - req.sendTimeMs
-            end
-            
-            if status and status >= 200 and status < 300 then
-                if logger.debug then
-                    logger.debug(string.format("[Net] [%d] Complete: %s %s -> %d (total: %dms, network: %dms)", 
-                        completeTimeMs, req.method, req.url, status, totalTime, networkTime))
-                end
-            else
+        if logger and logger.warn then
+            if not (status and status >= 200 and status < 300) then
+                local totalTime = completeTimeMs - req.enqueueTimeMs
                 local errorStr = err or "Unknown error"
                 if type(errorStr) == "table" then
                     errorStr = "Request error"
                 end
-                if logger.warn then
-                    logger.warn(string.format("[Net] [%d] Failed: %s %s -> %d (%s) (total: %dms)", 
-                        completeTimeMs, req.method, req.url, status or 0, tostring(errorStr), totalTime))
-                end
-                if body and #body > 0 and #body < 500 and logger.debug then
-                    logger.debug("[Net] Response body: " .. string.sub(body, 1, 200))
-                end
+                logger.warn(string.format("[Net] [%d] Failed: %s %s -> %d (%s) (total: %dms)", 
+                    completeTimeMs, req.method, req.url, status or 0, tostring(errorStr), totalTime))
             end
         end
         
@@ -181,17 +163,13 @@ function M.request(options)
     if moduleRequestId then
         req.status = 'processing'
         requestIdMap[requestId] = moduleRequestId
-        if logger and logger.debug then
-            local sendTimeMs = 0
-            if app and app.deps and app.deps.time then
-                sendTimeMs = app.deps.time()
-            else
-                sendTimeMs = os.time() * 1000
-            end
-            req.sendTimeMs = sendTimeMs
-            local enqueueDelay = sendTimeMs - req.enqueueTimeMs
-            logger.debug(string.format("[Net] [%d] Send: %s %s (enqueue delay: %dms)", sendTimeMs, req.method, req.url, enqueueDelay))
+        local sendTimeMs = 0
+        if app and app.deps and app.deps.time then
+            sendTimeMs = app.deps.time()
+        else
+            sendTimeMs = os.time() * 1000
         end
+        req.sendTimeMs = sendTimeMs
     else
         req.status = 'error'
         if req.callback then

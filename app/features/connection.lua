@@ -151,9 +151,6 @@ function M.Connection.new(deps)
             self.savedServerId = serverSel.savedServerId
             self.savedServerBaseUrl = serverSel.savedServerBaseUrl or ServerConfig.DEFAULT_SERVER_URL
             self.savedRealmId = serverSel.savedServerId
-            if self.logger and self.logger.info then
-                self.logger.info("[Connection] Loaded saved server: " .. tostring(self.savedServerId) .. " (" .. tostring(self.savedServerBaseUrl) .. "), realm: " .. tostring(self.savedRealmId))
-            end
         end
     end
     
@@ -188,10 +185,6 @@ function M.Connection:tick(dtSeconds)
         
         if self:isConnected() then
             -- Character changed while connected - trigger re-auth to update active character
-            if self.logger and self.logger.info then
-                self.logger.info(string.format("[Connection] Character changed from %s to %s while connected, triggering re-auth",
-                    tostring(previousCharacter), characterName))
-            end
             -- Reset connection state to trigger re-auth
             self.autoConnectAttempted = false
             self.autoConnectInProgress = false
@@ -202,9 +195,6 @@ function M.Connection:tick(dtSeconds)
         elseif self.autoConnectAttempted then
             self.autoConnectAttempted = false
             self.autoConnectInProgress = false
-            if self.logger and self.logger.info then
-                self.logger.info("[Connection] Character changed, resetting auto-connect")
-            end
         end
     end
     
@@ -234,11 +224,6 @@ function M.Connection:startConnecting()
     if self.state == M.ConnectionState.Disconnected or 
        self.state == M.ConnectionState.Failed then
         self.state = M.ConnectionState.Connecting
-        if self.logger and self.logger.echo then
-            self.logger.echo("Connecting to server...")
-        elseif self.logger and self.logger.info then
-            self.logger.info("[Connection] State: Disconnected -> Connecting")
-        end
     end
 end
 
@@ -246,11 +231,6 @@ function M.Connection:setConnected()
     if self.state == M.ConnectionState.Connecting or 
        self.state == M.ConnectionState.Reconnecting then
         self.state = M.ConnectionState.Connected
-        if self.logger and self.logger.echo then
-            self.logger.echo("Connected to server")
-        elseif self.logger and self.logger.info then
-            self.logger.info("[Connection] State: Connecting -> Connected")
-        end
         
         local app = _G.FFXIFriendListApp
         if app and app.features and app.features.friends then
@@ -266,9 +246,6 @@ end
 
 function M.Connection:setDisconnected()
     self.state = M.ConnectionState.Disconnected
-    if self.logger and self.logger.info then
-        self.logger.info("[Connection] State: -> Disconnected")
-    end
     
     local app = _G.FFXIFriendListApp
     if app then
@@ -285,9 +262,7 @@ end
 function M.Connection:setFailed()
     self.state = M.ConnectionState.Failed
     local errorMsg = self.lastError and (" (" .. tostring(self.lastError) .. ")") or ""
-    if self.logger and self.logger.echo then
-        self.logger.echo("Connection failed" .. errorMsg)
-    elseif self.logger and self.logger.warn then
+    if self.logger and self.logger.warn then
         self.logger.warn("[Connection] State: -> Failed" .. errorMsg)
     end
 end
@@ -339,12 +314,6 @@ function M.Connection:setSavedServer(serverId, baseUrl)
     -- Reset auto-connect flags so tick() will trigger a new connection attempt
     self.autoConnectAttempted = false
     self.autoConnectInProgress = false
-    
-    if self.logger and self.logger.echo then
-        self.logger.echo("Server selected: " .. tostring(serverId) .. " (" .. tostring(baseUrl) .. ")")
-    elseif self.logger and self.logger.info then
-        self.logger.info("[Connection] Server set: " .. tostring(serverId) .. " -> " .. tostring(baseUrl) .. ", realm: " .. tostring(serverId))
-    end
 end
 
 function M.Connection:clearSavedServer()
@@ -415,9 +384,6 @@ function M.Connection:getHeaders(characterName)
         local apiKey = self:getApiKey(characterName)
         if apiKey ~= "" then
             headers["Authorization"] = "Bearer " .. apiKey
-            if self.logger and self.logger.debug then
-                self.logger.debug("[Connection] Headers: Auth token present for " .. characterName)
-            end
         else
             if self.logger and self.logger.warn then
                 self.logger.warn("[Connection] Headers: No API key for " .. characterName)
@@ -450,12 +416,6 @@ function M.Connection:autoConnect(characterName)
         realmId = self.savedRealmId
     elseif self.realmDetector and self.realmDetector.getRealmId then
         realmId = self.realmDetector:getRealmId() or "notARealServer"
-    end
-    
-    if self.logger and self.logger.echo then
-        self.logger.echo("Auto-connecting as " .. normalizedName .. "...")
-    elseif self.logger and self.logger.info then
-        self.logger.info("[Connection] Auto-connecting as " .. normalizedName .. " (server: " .. self:getBaseUrl() .. ")")
     end
     
     self:startConnecting()
@@ -508,22 +468,6 @@ function M.Connection:autoConnect(characterName)
             headers["X-Realm-Id"] = realmIdForHeader
         end
         
-        if self.logger and self.logger.echo then
-            self.logger.echo("Auth URL: " .. url)
-            self.logger.echo("Auth body: " .. tostring(requestBody))
-            self.logger.echo("Auth headers:")
-            for k, v in pairs(headers) do
-                self.logger.echo("  " .. tostring(k) .. ": " .. tostring(v))
-            end
-        elseif self.logger and self.logger.info then
-            self.logger.info("[Connection] Auth URL: " .. url)
-            self.logger.info("[Connection] Auth body: " .. tostring(requestBody))
-            self.logger.info("[Connection] Auth headers:")
-            for k, v in pairs(headers) do
-                self.logger.info("[Connection]   " .. tostring(k) .. ": " .. tostring(v))
-            end
-        end
-        
         local requestId = self.net.request({
             url = url,
             method = "POST",
@@ -559,9 +503,7 @@ function M.Connection:handleAuthResponse(success, response, characterName, fallb
         if self.logger and self.logger.warn then
             self.logger.warn(string.format("[Connection] Auth failed; retry in %.1fs (attempt %d)", delay / 1000, attempt))
         end
-        if self.logger and self.logger.echo then
-            self.logger.echo("Connection failed: " .. tostring(self.lastError))
-        elseif self.logger and self.logger.error then
+        if self.logger and self.logger.error then
             self.logger.error("[Connection] Auth failed: " .. tostring(self.lastError))
         end
         return
@@ -646,10 +588,6 @@ function M.Connection:setActiveCharacter(characterId, characterName, apiKey)
         ["Authorization"] = "Bearer " .. apiKey
     }
     
-    if self.logger and self.logger.debug then
-        self.logger.debug("[Connection] Setting active character: " .. tostring(characterId))
-    end
-    
     self.net.request({
         url = url,
         method = "POST",
@@ -658,9 +596,6 @@ function M.Connection:setActiveCharacter(characterId, characterName, apiKey)
         callback = function(success, response)
             if success then
                 self.lastSetActiveAt = os.time() * 1000
-                if self.logger and self.logger.debug then
-                    self.logger.debug("[Connection] Set active character succeeded")
-                end
             else
                 if self.logger and self.logger.warn then
                     self.logger.warn("[Connection] Set active character failed: " .. tostring(response))
@@ -675,23 +610,9 @@ end
 -- Complete the connection process after auth and set-active
 function M.Connection:completeConnection(characterName)
     self:setConnected()
-    if self.logger and self.logger.echo then
-        self.logger.echo("Connected to server as " .. characterName)
-    elseif self.logger and self.logger.info then
-        self.logger.info("[Connection] Successfully authenticated " .. characterName)
-    end
     
     local app = _G.FFXIFriendListApp
     if app and not app._startupRefreshCompleted then
-        if self.logger and self.logger.debug then
-            local timeMs = 0
-            if app.deps and app.deps.time then
-                timeMs = app.deps.time()
-            else
-                timeMs = os.time() * 1000
-            end
-            self.logger.debug(string.format("[Connection] [%d] Triggering immediate startup refresh", timeMs))
-        end
         local App = require("app.App")
         if App and App._triggerStartupRefresh then
             App._triggerStartupRefresh(app)

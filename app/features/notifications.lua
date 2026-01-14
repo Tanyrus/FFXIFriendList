@@ -164,9 +164,6 @@ function M.Notifications:push(type, payload)
     if dedupeKey then
         for _, toast in ipairs(self.queue) do
             if toast.dedupeKey == dedupeKey and not toast.dismissed then
-                if self.deps and self.deps.logger and self.deps.logger.debug then
-                    self.deps.logger.debug(string.format("[Notifications] Skipping duplicate toast: type=%s dedupeKey=%s", tostring(type), tostring(dedupeKey)))
-                end
                 return
             end
         end
@@ -184,10 +181,6 @@ function M.Notifications:push(type, payload)
     end
     
     table.insert(self.queue, toast)
-    
-    if self.deps and self.deps.logger and self.deps.logger.debug then
-        self.deps.logger.debug(string.format("[Notifications] Toast enqueued: type=%s title=%s", tostring(type), tostring(title)))
-    end
 end
 
 function M.Notifications:showTestNotification()
@@ -209,10 +202,6 @@ function M.Notifications:showTestNotification()
         message = "This is a test notification to verify display.",
         duration = duration
     })
-    
-    if self.deps and self.deps.logger and self.deps.logger.info then
-        self.deps.logger.info("[Notifications] Test notification triggered")
-    end
 end
 
 -- Show a test friend-online notification (respects muteTestFriendOnline preference)

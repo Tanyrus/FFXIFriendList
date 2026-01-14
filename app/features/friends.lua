@@ -138,11 +138,6 @@ function M.Friends:getState()
     local rawFriends = self.friendList:getFriends()
     local friendsWithPresence = {}
     
-    -- Debug logging (use info level for visibility)
-    if self.deps.logger and self.deps.logger.info then
-        self.deps.logger.info(string.format("[Friends:getState] rawFriends count: %d", #rawFriends))
-    end
-    
     for _, friend in ipairs(rawFriends) do
         local status = self.friendList:getFriendStatus(friend.name)
         
@@ -222,29 +217,16 @@ function M.Friends:tick(dtSeconds)
 end
 
 function M.Friends:refresh()
-    if self.deps.logger and self.deps.logger.debug then
-        self.deps.logger.debug("[Friends] refresh() called")
-    end
-    
     -- Prevent duplicate in-flight requests
     if self.refreshInFlight then
-        if self.deps.logger and self.deps.logger.debug then
-            self.deps.logger.debug("[Friends] refresh() skipped: request already in flight")
-        end
         return false
     end
     
     if not self.deps.net or not self.deps.connection then
-        if self.deps.logger and self.deps.logger.warn then
-            self.deps.logger.warn("[Friends] refresh() aborted: missing net or connection")
-        end
         return false
     end
     
     if not self.deps.connection:isConnected() then
-        if self.deps.logger and self.deps.logger.warn then
-            self.deps.logger.warn("[Friends] refresh() aborted: not connected")
-        end
         self.lastError = { type = "NotConnected", message = "Not connected to server" }
         return false
     end
@@ -258,10 +240,6 @@ function M.Friends:refresh()
     
     local headers = self.deps.connection:getHeaders(self:_getCharacterName())
     
-    if self.deps.logger and self.deps.logger.info then
-        self.deps.logger.info("[Friends] Refreshing friends from: " .. url)
-    end
-    
     local requestId = self.deps.net.request({
         url = url,
         method = "GET",
@@ -271,10 +249,6 @@ function M.Friends:refresh()
             self:handleRefreshResponse(success, response)
         end
     })
-    
-    if self.deps.logger and self.deps.logger.debug then
-        self.deps.logger.debug("[Friends] refresh() request queued: " .. tostring(requestId ~= nil))
-    end
     
     return requestId ~= nil
 end
@@ -298,9 +272,6 @@ function M.Friends:handleRefreshResponse(success, response)
             errorMsg = tostring(errorMsg or "Network error")
         end
         self.lastError = { type = "NetworkError", message = errorMsg }
-        if self.deps.logger and self.deps.logger.debug then
-            self.deps.logger.debug(string.format("[Friends] [%d] Refresh failed: %s", decodeStartMs, errorMsg))
-        end
         self:scheduleRetry()
         return
     end
@@ -383,12 +354,6 @@ function M.Friends:handleRefreshResponse(success, response)
     end
     local stateUpdateTime = stateUpdateEndMs - stateUpdateStartMs
     
-    if self.deps.logger and self.deps.logger.debug then
-        local friendCount = #self.friendList:getFriends()
-        self.deps.logger.debug(string.format("[Friends] [%d] Refresh complete: %d friends (decode: %dms, state: %dms)", 
-            stateUpdateEndMs, friendCount, decodeTime, stateUpdateTime))
-    end
-    
     -- Status change notifications are now handled via WS events
     -- See: wsEventHandler.lua
 end
@@ -462,39 +427,20 @@ function M.Friends:addFriend(name)
                 -- Try to parse error from response
                 local errorMsg = "Failed to send friend request"
                 local errorCode = nil
-                local ok, envelope = Envelope.decode(response)
-                if ok == false and envelope == Envelope.DecodeError.ServerError then
-                    -- errorMsg is in the third return value
-                    local _, _, serverMsg = Envelope.decode(response)
-                    if serverMsg then
-                        errorMsg = serverMsg
-                    end
-                elseif type(response) == "string" then
-                    local decoded = Envelope.decode(response)
-                    if not decoded then
-                        -- Try raw JSON parse for error
-                        local Json = require("protocol.Json")
-                        local jsonOk, jsonData = Json.decode(response)
-                        if jsonOk and jsonData.error then
-                            if jsonData.error.message then
-                                errorMsg = jsonData.error.message
-                            end
-                            if jsonData.error.code then
-                                errorCode = jsonData.error.code
-                            end
-                        end
-                    end
-                end
                 
-                if self.deps.logger and self.deps.logger.warn then
-                    self.deps.logger.warn("[Friends] Send request failed: " .. errorMsg)
+                -- Envelope.decode returns: success, errorType, errorMessage, errorCode
+                local ok, errorType, serverMsg, serverCode = Envelope.decode(response)
+                
+                if not ok and errorType == Envelope.DecodeError.ServerError then
+                    errorMsg = serverMsg or errorMsg
+                    errorCode = serverCode
                 end
                 
                 -- Friendly message for CHARACTER_NOT_FOUND error
                 if errorCode == "CHARACTER_NOT_FOUND" then
                     if self.deps.logger and self.deps.logger.echo then
                         self.deps.logger.echo("Player '" .. name .. "' doesn't have the addon installed.")
-                        self.deps.logger.echo("Tell them to get it at: github.com/Tanyrus/FFXIFriendList")
+                        self.deps.logger.echo("Tell them to get it at: https://github.com/Tanyrus/FFXIFriendList")
                     end
                 else
                     if self.deps.logger and self.deps.logger.echo then
@@ -578,30 +524,12 @@ function M.Friends:addFriendWithRealm(name, realmId)
                 -- Try to parse error from response
                 local errorMsg = "Failed to send cross-server friend request"
                 local errorCode = nil
-                local ok, envelope = Envelope.decode(response)
-                if ok == false and envelope == Envelope.DecodeError.ServerError then
-                    local _, _, serverMsg = Envelope.decode(response)
-                    if serverMsg then
-                        errorMsg = serverMsg
-                    end
-                elseif type(response) == "string" then
-                    local decoded = Envelope.decode(response)
-                    if not decoded then
-                        local Json = require("protocol.Json")
-                        local jsonOk, jsonData = Json.decode(response)
-                        if jsonOk and jsonData.error then
-                            if jsonData.error.message then
-                                errorMsg = jsonData.error.message
-                            end
-                            if jsonData.error.code then
-                                errorCode = jsonData.error.code
-                            end
-                        end
-                    end
-                end
                 
-                if self.deps.logger and self.deps.logger.warn then
-                    self.deps.logger.warn("[Friends] Cross-server request failed: " .. errorMsg)
+                -- Envelope.decode returns: success, errorType, errorMessage, errorCode
+                local ok, errorType, serverMsg, serverCode = Envelope.decode(response)
+                if not ok and errorType == Envelope.DecodeError.ServerError then
+                    errorMsg = serverMsg or errorMsg
+                    errorCode = serverCode
                 end
                 
                 -- Friendly message for CHARACTER_NOT_FOUND error
@@ -661,9 +589,6 @@ function M.Friends:removeFriend(name)
     end
     
     if not accountId then
-        if self.deps.logger and self.deps.logger.warn then
-            self.deps.logger.warn("[Friends] Cannot remove: friend not found - " .. tostring(name))
-        end
         return false
     end
     
@@ -790,9 +715,6 @@ end
 function M.Friends:refreshFriendRequests()
     -- Prevent duplicate in-flight requests
     if self.friendRequestsInFlight then
-        if self.deps.logger and self.deps.logger.debug then
-            self.deps.logger.debug("[Friends] refreshFriendRequests() skipped: request already in flight")
-        end
         return false
     end
     
@@ -886,10 +808,6 @@ function M.Friends:handleFriendRequestsResponse(success, response, requestType)
         self:checkForNewFriendRequests(self.incomingRequests)
     elseif requestType == "outgoing" then
         self.outgoingRequests = requests
-    end
-    
-    if self.deps.logger and self.deps.logger.debug then
-        self.deps.logger.debug("[Friends] Refreshed " .. tostring(requestType) .. " requests: " .. #requests)
     end
 end
 
@@ -1083,9 +1001,6 @@ function M.Friends:sendHeartbeat()
     if not realmId or realmId == "" then
         -- Realm not detected yet, skip heartbeat (will retry next interval)
         self.heartbeatInFlight = false
-        if self.deps.logger and self.deps.logger.debug then
-            self.deps.logger.debug("[Friends] Heartbeat skipped: realm ID not available yet")
-        end
         return false
     end
     
@@ -1095,6 +1010,11 @@ function M.Friends:sendHeartbeat()
     
     local url = self.deps.connection:getBaseUrl() .. Endpoints.PRESENCE.HEARTBEAT
     local headers = self.deps.connection:getHeaders(characterName)
+    
+    -- Ensure X-Realm-Id header is present (server requires it)
+    if not headers["X-Realm-Id"] and realmId and realmId ~= "" then
+        headers["X-Realm-Id"] = realmId
+    end
     
     local requestId = self.deps.net.request({
         url = url,
@@ -1111,10 +1031,6 @@ function M.Friends:sendHeartbeat()
             if not success then
                 if self.deps.logger and self.deps.logger.warn then
                     self.deps.logger.warn("[Friends] Heartbeat failed: " .. tostring(response))
-                end
-            else
-                if self.deps.logger and self.deps.logger.debug then
-                    self.deps.logger.debug("[Friends] Heartbeat sent (response ignored)")
                 end
             end
         end
@@ -1158,9 +1074,6 @@ function M.Friends:checkForStatusChanges(currentStatuses)
     if not self.initialStatusScanComplete then
         self.previousOnlineStatus = currentOnlineStatus
         self.initialStatusScanComplete = true
-        if self.deps.logger and self.deps.logger.debug then
-            self.deps.logger.debug("[Friends] Initial status scan complete, notifications enabled")
-        end
         return
     end
     
@@ -1180,17 +1093,6 @@ function M.Friends:checkForStatusChanges(currentStatuses)
         end
     end
     
-    -- Log transitions for debugging
-    if self.deps.logger and self.deps.logger.debug then
-        if #onlineTransitions > 0 or #offlineTransitions > 0 then
-            self.deps.logger.debug(string.format(
-                "[NotificationDiff] onlineTransitions=[%s] offlineTransitions=[%s]",
-                table.concat(onlineTransitions, ", "),
-                table.concat(offlineTransitions, ", ")
-            ))
-        end
-    end
-    
     -- Get notifications feature from app
     local app = _G.FFXIFriendListApp
     if app and app.features and app.features.notifications then
@@ -1198,9 +1100,6 @@ function M.Friends:checkForStatusChanges(currentStatuses)
         
         -- Create toasts for friends coming online
         for _, displayName in ipairs(onlineTransitions) do
-            if self.deps.logger and self.deps.logger.debug then
-                self.deps.logger.debug(string.format("[ToastQueue] enqueue type=FriendOnline name=%s", displayName))
-            end
             app.features.notifications:push(Notifications.ToastType.FriendOnline, {
                 title = "Friend Online",
                 message = displayName .. " is now online",
@@ -1245,16 +1144,6 @@ function M.Friends:checkForNewFriendRequests(incomingRequests)
         end
     end
     
-    -- Log new requests for debugging
-    if self.deps.logger and self.deps.logger.debug then
-        if #newRequests > 0 then
-            self.deps.logger.debug(string.format(
-                "[NotificationDiff] requestTransitions=[%s]",
-                table.concat(newRequests, ", ")
-            ))
-        end
-    end
-    
     -- Get notifications feature from app
     local app = _G.FFXIFriendListApp
     if app and app.features and app.features.notifications then
@@ -1262,9 +1151,6 @@ function M.Friends:checkForNewFriendRequests(incomingRequests)
         
         -- Create toasts for new friend requests
         for _, displayName in ipairs(newRequests) do
-            if self.deps.logger and self.deps.logger.debug then
-                self.deps.logger.debug(string.format("[ToastQueue] enqueue type=FriendRequest name=%s", displayName))
-            end
             app.features.notifications:push(Notifications.ToastType.FriendRequestReceived, {
                 title = "Friend Request",
                 message = displayName .. " sent you a friend request",
@@ -1585,10 +1471,6 @@ function M.Friends:_fetchCharacterList()
     
     local url = self.deps.connection:getBaseUrl() .. Endpoints.FRIENDS.CHARACTER_AND_FRIENDS
     
-    if self.deps.logger and self.deps.logger.debug then
-        self.deps.logger.debug("[Friends] Fetching character list from: " .. url)
-    end
-    
     local requestId = self.deps.net.request({
         url = url,
         method = "GET",
@@ -1616,9 +1498,6 @@ function M.Friends:_handleCharacterListResponse(success, response)
         local dataModule = require('modules.friendlist.data')
         if dataModule and dataModule.SetCharacters then
             dataModule.SetCharacters(result.characters)
-            if self.deps.logger and self.deps.logger.debug then
-                self.deps.logger.debug("[Friends] Set " .. tostring(#result.characters) .. " characters in data module")
-            end
         end
     end
 end

@@ -35,13 +35,8 @@ function M.decode(str)
         -- Log decode failure
         local app = _G.FFXIFriendListApp
         local logger = app and app.deps and app.deps.logger
-        if logger then
-            if logger.warn then
-                logger.warn("[Json] Decode failed: " .. errorMsg)
-            end
-            if str and #str > 0 and #str < 500 and logger.debug then
-                logger.debug("[Json] Failed JSON (first 200 chars): " .. string.sub(str, 1, 200))
-            end
+        if logger and logger.warn then
+            logger.warn("[Json] Decode failed: " .. errorMsg)
         end
         
         return false, errorMsg

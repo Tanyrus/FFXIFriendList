@@ -179,15 +179,55 @@ ashita.events.register('load', 'ffxifriendlist_load', function()
     local sessionManager = SessionManager.new()
     
     -- Create logger early so RealmDetector can use it
+    -- Color codes for Ashita chat:
+    -- \31\x02 = Red (errors)
+    -- \31\x08 = Yellow (warnings)
+    -- \31\x06 = Green (info/success)
+    -- \31\x92 = Light Blue (debug - temporary only)
+    -- \31\xD0 = Purple (echo - for end users)
+    -- \31\x01 = White (default)
+    
+    -- Debug level: 0=silent, 1=error, 2=warn, 3=info, 4=debug (default: 0)
+    local currentLevel = 0
+    
     local logger = {
-        debug = function(msg) return nil end,  -- Silent by default
-        info = function(msg) return nil end,   -- Silent by default
-        error = function(msg) 
-            print("[FFXIFriendList ERROR] " .. tostring(msg))
+        debug = function(msg)
+            if currentLevel >= 4 then
+                print("\31\x92[FFXIFriendList] DEBUG: " .. tostring(msg) .. "\31\x01")
+            end
             return nil
         end,
-        warn = function(msg) return nil end,   -- Silent by default
-        echo = function(msg) return nil end    -- Silent by default
+        info = function(msg)
+            if currentLevel >= 3 then
+                print("\31\x06[FFXIFriendList] INFO: " .. tostring(msg) .. "\31\x01")
+            end
+            return nil
+        end,
+        warn = function(msg)
+            if currentLevel >= 2 then
+                print("\31\x08[FFXIFriendList] WARN: " .. tostring(msg) .. "\31\x01")
+            end
+            return nil
+        end,
+        error = function(msg)
+            if currentLevel >= 1 then
+                print("\31\x02[FFXIFriendList] ERROR: " .. tostring(msg) .. "\31\x01")
+            end
+            return nil
+        end,
+        echo = function(msg)
+            -- Echo always prints (for end-user messages) in purple
+            print("\31\xD0[FFXIFriendList] " .. tostring(msg) .. "\31\x01")
+            return nil
+        end,
+        setLevel = function(level)
+            if type(level) == "number" and level >= 0 and level <= 4 then
+                currentLevel = level
+            end
+        end,
+        getLevel = function()
+            return currentLevel
+        end
     }
     
     -- Initialize realm detector (auto-detects server from Ashita config)
@@ -288,9 +328,9 @@ ashita.events.register('load', 'ffxifriendlist_load', function()
             wsClient = app.features.wsClient
         })
         
-        -- Enable diagnostics if debugMode is set in preferences
-        local debugModeEnabled = gConfig and gConfig.data and gConfig.data.preferences and gConfig.data.preferences.debugMode
-        if debugModeEnabled then
+        -- Enable diagnostics if log level is 4 (debug)
+        local logLevel = deps.logger.getLevel and deps.logger.getLevel() or 1
+        if logLevel >= 4 then
             diagRunner:setEnabled(true)
         end
     end
@@ -359,9 +399,9 @@ ashita.events.register('load', 'ffxifriendlist_load', function()
     local _ = moduleRegistry.InitializeAll(gAdjustedSettings)
     
     initialized = true
-    if deps.logger and deps.logger.info then
-        deps.logger.info("Initialized")
-    end
+    
+    -- Always print that we initialized (echo bypasses log levels)
+    logger.echo("Friend List loaded - type /fl to open")
     
     -- Ensure windows start closed (modules may have set them during initialization)
     if gConfig then
@@ -582,6 +622,7 @@ ashita.events.register('command', 'ffxifriendlist_command', function(e)
         
         -- Only proceed if initialized
         if not initialized then
+            print("[FFXIFriendList] Not initialized yet - addon still loading")
             return
         end
         
@@ -702,6 +743,7 @@ ashita.events.register('command', 'ffxifriendlist_command', function(e)
                 print("[FFXIFriendList] Commands:")
                 print("  /fl - Toggle friend list window")
                 print("  /flist or /qo - Toggle quick online window")
+                print("  /fl debug <0-4> - Set log level (0=silent, 1=error, 2=warn, 3=info, 4=debug)")
                 print("  /fl menutoggle - Manually toggle window (fallback for menu detection)")
                 print("  /fl menudebug <on|off|status|dump|hexdump> - Menu detection debug")
                 print("  /fl notify - Show test notification")
@@ -709,7 +751,7 @@ ashita.events.register('command', 'ffxifriendlist_command', function(e)
                 print("  /fl block <name> - Block a player from sending friend requests")
                 print("  /fl unblock <name> - Unblock a player")
                 print("  /fl blocked - List all blocked players")
-                print("  /fl diag <cmd> - Run diagnostics (requires DebugMode=true)")
+                print("  /fl diag <cmd> - Run diagnostics (requires level 4)")
                 print("  /befriend <name> [tag] - Send friend request with optional tag")
                 return
             end
@@ -729,18 +771,35 @@ ashita.events.register('command', 'ffxifriendlist_command', function(e)
             end
             
             if subcmd == "debug" then
-                -- Toggle debug mode which enables diagnostics
-                if gConfig and gConfig.data and gConfig.data.preferences then
-                    gConfig.data.preferences.debugMode = not gConfig.data.preferences.debugMode
-                    local enabled = gConfig.data.preferences.debugMode
-                    if diagRunner then
-                        diagRunner:setEnabled(enabled)
+                local levelArg = command_args[3]
+                if not levelArg then
+                    -- Show current level
+                    if app and app.deps and app.deps.logger and app.deps.logger.getLevel then
+                        local currentLevel = app.deps.logger.getLevel()
+                        print("[FFXIFriendList] Current log level: " .. currentLevel)
+                        print("[FFXIFriendList] Levels: 0=silent, 1=error, 2=warn, 3=info, 4=debug")
+                        print("[FFXIFriendList] Usage: /fl debug <0-4>")
                     end
-                    print("[FFXIFriendList] Debug mode " .. (enabled and "ENABLED" or "DISABLED"))
-                    -- Save the setting
-                    local settings = require("libs.settings")
-                    if settings and settings.save then
-                        settings.save()
+                    return
+                end
+                
+                -- Parse and validate level
+                local level = tonumber(levelArg)
+                if not level or level < 0 or level > 4 then
+                    print("[FFXIFriendList] Invalid log level: " .. tostring(levelArg))
+                    print("[FFXIFriendList] Levels: 0=silent, 1=error, 2=warn, 3=info, 4=debug")
+                    return
+                end
+                
+                -- Set the level
+                if app and app.deps and app.deps.logger and app.deps.logger.setLevel then
+                    app.deps.logger.setLevel(level)
+                    local levelNames = { [0]="silent", [1]="error", [2]="warn", [3]="info", [4]="debug" }
+                    print("[FFXIFriendList] Log level set to: " .. level .. " (" .. levelNames[level] .. ")")
+                    
+                    -- If setting to debug, also enable diagnostics
+                    if level == 4 and diagRunner then
+                        diagRunner:setEnabled(true)
                     end
                 end
                 return
@@ -830,15 +889,6 @@ ashita.events.register('command', 'ffxifriendlist_command', function(e)
             
             -- Update module visibility via registry
             moduleRegistry.CheckVisibility(gConfig)
-            
-            -- Also ensure the module's window is open when showing
-            local friendListEntry = moduleRegistry.Get('friendList')
-            if friendListEntry and friendListEntry.module and friendListEntry.module.display then
-                -- Force window to be visible if we're showing it
-                if gConfig.showFriendList and friendListEntry.module.display.SetWindowOpen then
-                    friendListEntry.module.display.SetWindowOpen(true)
-                end
-            end
             
             -- Trigger refresh if opening
             if gConfig.showFriendList and app and app.features.friends then

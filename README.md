@@ -23,38 +23,62 @@ A comprehensive friend list management addon for FFXI private servers using the 
 - **Friend List Display**: View all your friends with real-time online/offline status (server-computed)
 - **Friend Requests**: Send, accept, reject, or cancel pending friend requests
 - **Add Friends**: Easily add new friends via the UI or `/befriend` command
-- **Toast Notifications**: Get notified when friends come online or new friend requests arrive
+- **Block List**: Block players to prevent friend requests and remove existing friendships
+- **Toast Notifications**: Get notified when friends come online, go offline, or send friend requests
+- **Notification Control**: Enable/disable specific notification types and mute individual friends
 
 ### Friend Information
-- **Job Information**: View friends' current job and level (when sharing enabled)
+- **Job Information**: View friends' current job, subjob, and levels (when sharing enabled)
 - **Rank Display**: See friends' nation rank (when sharing enabled)
 - **Nation Information**: Display which nation friends belong to (when sharing enabled)
 - **Zone/Location**: Track which zone friends are currently in (when sharing enabled)
-- **Last Seen**: See when friends were last online (durable, server-computed)
+- **Last Seen**: See when friends were last online with durable, server-computed timestamps
 - **Linked Characters**: See all characters linked to a friend's account (server-provided)
+- **Friended As**: See which character name a friend added you as
 
-### Notes System
-- **Local Notes**: Notes are stored locally on your device (not synced to server)
+### Notes & Tags System
+- **Local Notes**: Notes are stored locally on your device (not synced to server by default)
+- **Server Notes** (Optional): Enable server-synced notes to share across devices and characters
+- **Note Merging**: Smart merging of local and server notes when both exist
 - **Note Editor**: Rich text editor for friend notes with character count
 - **Per-Account**: Notes are stored per-account and shared across all characters on the same account
+- **Tag Organization**: Create custom tags to organize friends into groups (e.g., "Favorite", "Linkshell", "Crafters")
+- **Tag Filtering**: Filter friend list by tags with collapsible tag sections
+- **Pending Tags**: Tags automatically apply when friend requests are accepted
 
 ### Account & Character Management
 - **Automatic Account Association**: Server automatically associates characters to accounts
 - **Character Switching**: Server handles character switching and account merging automatically
+- **Multi-Character Support**: Manage multiple characters under a single account
 - **Alt Awareness**: See all linked characters for friends (server-provided)
 - **Identity Recovery**: If API key is lost, server can recover identity via character name + realm
+- **Realm Detection**: Automatic detection and selection of your server/realm
 
-### Privacy & Preferences
+### Privacy & Presence
+- **Presence Status**: Set your status as Online, Away, or Invisible
+- **Presence Selector**: Choose your online status before logging in
 - **Share Online Status**: Control whether you appear online to friends
 - **Share Character Data**: Control sharing job/nation/rank information
 - **Share Location**: Control sharing your current zone/location
-- **Anonymous Mode**: Hide all character data while online
+- **Share Job When Anonymous**: Option to show job even in anonymous mode
+- **Anonymous Mode**: Hide all character data while appearing online
 - **Preferences Sync**: Preferences are synced to the server across all characters (per-account)
 - **Immediate Apply**: Preference changes apply immediately (no save button needed)
-- **Notification Duration**: Customize how long toast notifications are displayed
 
-### Customization
-- **Themes**: 4 built-in themes plus support for custom themes
+### Notifications & Sounds
+- **Toast Notifications**: Customizable notifications for friend events
+- **Notification Types**: Friend online, friend offline, friend requests, request accepted/declined
+- **Sound Alerts**: Custom sound effects for different notification types
+- **Notification Duration**: Customize how long toast notifications are displayed
+- **Notification Positioning**: Drag notifications to reposition with SHIFT key
+- **Stack Direction**: Stack notifications from top-down or bottom-up
+- **Progress Bar**: Optional progress bar showing time remaining on notifications
+- **Test Notifications**: Preview notifications with adjustable settings
+- **Per-Friend Muting**: Mute notifications for specific friends
+- **Custom Sounds**: Override default sounds with your own .wav files
+
+### Display & Customization
+- **Themes**: 5 built-in themes plus support for custom themes
   - Warm Brown
   - Modern Dark
   - Green Nature
@@ -62,24 +86,37 @@ A comprehensive friend list management addon for FFXI private servers using the 
   - Ashita
 - **Custom Themes**: Create and save your own color schemes
 - **Transparency Controls**: Adjust window and text transparency
-- **Font Scaling**: Customize font size
-- **Column Visibility**: Show/hide columns (Job, Rank, Nation, Zone, Last Seen)
+- **Font Scaling**: Customize font size for better readability
+- **Column Visibility**: Show/hide columns (Job, Rank, Nation, Zone, Last Seen, Friended As)
 - **Column Resizing**: Resize table columns to your preference
 - **Color Customization**: Fine-tune colors for all UI elements (RGBA)
+- **Tab Icons**: Optional icon display for tabs with customizable colors
 - **Custom Assets**: Override sounds and icons with your own files
+- **Window Locking**: Lock windows to prevent accidental movement or closing
 
 ### Quick Online View
 - **Condensed Window**: A minimal, name-only view of online friends
 - **Hover Details**: Hold mouse over a friend to see full details
 - **SHIFT Override**: Hold SHIFT while hovering to show all fields regardless of settings
+- **Tag Grouping**: Shows friends grouped by tags in Quick Online view
+- **Customizable Columns**: Choose which columns to display in Quick Online window
+
+### Input & Controls
+- **Keyboard Shortcuts**: Custom close key binding support
+- **Controller Support**: Xbox, PlayStation, Nintendo Switch Pro, and Stadia controller support
+- **Context Menus**: Right-click friends for quick actions (edit note, change tag, mute, block, remove)
+- **Filter/Search**: Real-time search to filter friends by name
+- **Sorting**: Sort friends by any column (name, job, zone, status, last seen)
 
 ## Commands
 
 ### Main Commands
 
-- **`/fl`** - Toggle the friend list window (show/hide)
+- **`/fl`** or **`/fl show`** - Toggle the friend list window (show/hide)
 - **`/fl help`** or **`/fl h`** - Display help information
 - **`/befriend <name>`** - Send a friend request to the specified player
+- **`/fl reload`** - Reload the addon
+- **`/fl unload`** - Unload the addon
 
 ## Installation
 
@@ -102,6 +139,24 @@ A comprehensive friend list management addon for FFXI private servers using the 
 Configuration files are stored in:
 - `config/addons/FFXIFriendList/`
 
+**What's Stored Locally**:
+- Friend notes (unless "Use Server Notes" is enabled)
+- Tags and tag organization
+- Theme preference
+- Window positions and sizes
+- Notification duration and position
+- UI customization settings
+- Controller bindings
+
+**What's Synced to Server**:
+- Friend list and relationships
+- Friend requests (pending incoming/outgoing)
+- Block list
+- Privacy preferences (online status, sharing settings)
+- Presence status (Online/Away/Invisible)
+- Column visibility preferences
+- Server notes (if enabled)
+
 ### Custom Assets
 
 You can override default sounds and icons by placing custom files in the config folder:
@@ -117,10 +172,15 @@ See the README.txt in the config folder for available file names.
 ### Local Data
 
 Local-only data (not synced to server):
-- Local notes (stored locally per-account, shared across characters on the same account)
-- Theme preference
-- Notification duration
-- Window positions
+- Local notes (unless "Use Server Notes" is enabled in Privacy settings)
+- Tags and tag assignments
+- Theme preferences
+- Notification duration and position
+- Window positions and sizes
+- UI customization (column widths, visibility, transparency, fonts)
+- Sound preferences
+- Controller bindings
+- Custom close key
 
 ## Usage Examples
 
@@ -139,23 +199,53 @@ Alternatively, use the command:
 
 ### Adding a Note
 
-1. Open the friend list window
-2. Right-click on a friend and select "Edit Note" (or just left click)
+1. Open the friend list window (`/fl`)
+2. Right-click on a friend and select "Edit Note" (or just left-click their row)
 3. Enter your note in the editor
 4. Click "Save"
 
 **Note Storage**:
-- Notes are stored locally on your device (per-account) and are not synced to the server
+- Notes are stored locally on your device by default (per-account)
 - Notes are shared across all characters on the same account
+- Enable "Use Server Notes" in Privacy settings to sync notes to the server
+- Server notes support smart merging with local notes
+
+### Using Tags
+
+1. Open the friend list window
+2. Right-click on a friend and select "Edit Tag"
+3. Choose an existing tag or create a new one
+4. Tags group friends into collapsible sections
+5. Manage all tags in the Settings tab
+
+**Tag Features**:
+- Tags are stored locally (not synced to server)
+- Pending tags automatically apply when friend requests are accepted
+- Collapse/expand tag sections to organize your view
+- "Favorite" tag is created by default
+
+### Blocking a Player
+
+1. Right-click on a friend
+2. Select "Block & Remove"
+3. Confirm the action
+4. The player will be removed from your friend list and blocked
+
+**Block Effects**:
+- Blocked players cannot send you friend requests
+- Existing friendships are automatically removed
+- Block list is server-synced across all characters
+- Manage blocked players in the Settings tab
 
 ### Switching Characters
 
 1. Log out and log in with a different character
-2. Addon automatically detects character change
+2. Addon automatically detects character change and reconnects
 3. Server handles account association automatically
-4. Friend list and notes are shared if characters are on the same account
+4. Friend list and server preferences are shared across all characters
+5. Local data (notes, tags, theme) persists per-account
 
-**Note**: The server automatically merges accounts if you switch to a character that belongs to a different account.
+**Note**: The server automatically merges accounts if you switch to a character that belongs to a different account or creates character associations as needed.
 
 ## Troubleshooting
 
@@ -164,17 +254,53 @@ Alternatively, use the command:
 - **Check Ashita version**: Ensure you're using Ashita v4
 - **Check addon location**: Verify `FFXIFriendList.lua` is in the `addons/FFXIFriendList` directory
 - **Check Ashita logs**: Look for error messages in Ashita's log files
+- **Reload addon**: Try `/addon reload FFXIFriendList`
+
+### Connection Issues
+
+- **Check server URL**: Ensure your realm is correctly detected in Server Selection
+- **Check API key**: Verify your API key is saved (Settings → Data → API Key)
+- **WebSocket connection**: Connection status is shown in the main window header
+- **Firewall**: Ensure HTTPS and WebSocket (WSS) connections are not blocked
+
+### Friends Not Showing Online
+
+- **WebSocket must be connected**: Real-time status requires active WebSocket connection
+- **Check their privacy settings**: Friends may have set presence to "Invisible"
+- **Check your block list**: Ensure the friend is not blocked
+- **Server sync**: Give it a few seconds after logging in for initial sync
+
+### Notes Not Saving
+
+- **Local notes**: Saved automatically to local config files
+- **Server notes**: Require "Use Server Notes" enabled in Privacy settings
+- **Character limit**: Notes have a maximum length (check editor for count)
 
 ## Support
 
 ### Reporting Issues
 
 When reporting issues, please include:
-- Addon version
+- Addon version (displayed in the main window)
 - Ashita version
 - Server/Realm name
 - Steps to reproduce the issue
 - Screenshots (if applicable)
+- Any error messages from Ashita logs
+
+### Discord Community
+
+Join the FFXI Friend List Discord for:
+- Community support and help
+- Feature requests and suggestions
+- Bug reports and troubleshooting
+- Updates and announcements
+
+<p align="center">
+  <a href="https://discord.gg/JXsx7zf3Dx">
+    <img src="assets/discord_banner.png" alt="Join the FFXI Friend List Discord">
+  </a>
+</p>
 
 ## License
 

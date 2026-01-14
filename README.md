@@ -28,18 +28,15 @@ A comprehensive friend list management addon for FFXI private servers using the 
 - **Notification Control**: Enable/disable specific notification types and mute individual friends
 
 ### Friend Information
-- **Job Information**: View friends' current job, subjob, and levels (when sharing enabled)
+- **Job Information**: View friends' current job, subjob, and levels (when sharing enabled or not anon)
 - **Rank Display**: See friends' nation rank (when sharing enabled)
 - **Nation Information**: Display which nation friends belong to (when sharing enabled)
 - **Zone/Location**: Track which zone friends are currently in (when sharing enabled)
-- **Last Seen**: See when friends were last online with durable, server-computed timestamps
+- **Last Seen**: See when friends were last online
 - **Linked Characters**: See all characters linked to a friend's account (server-provided)
-- **Friended As**: See which character name a friend added you as
 
 ### Notes & Tags System
-- **Local Notes**: Notes are stored locally on your device (not synced to server by default)
-- **Server Notes** (Optional): Enable server-synced notes to share across devices and characters
-- **Note Merging**: Smart merging of local and server notes when both exist
+- **Local Notes**: Notes are stored locally on your device
 - **Note Editor**: Rich text editor for friend notes with character count
 - **Per-Account**: Notes are stored per-account and shared across all characters on the same account
 - **Tag Organization**: Create custom tags to organize friends into groups (e.g., "Favorite", "Linkshell", "Crafters")
@@ -115,8 +112,6 @@ A comprehensive friend list management addon for FFXI private servers using the 
 - **`/fl`** or **`/fl show`** - Toggle the friend list window (show/hide)
 - **`/fl help`** or **`/fl h`** - Display help information
 - **`/befriend <name>`** - Send a friend request to the specified player
-- **`/fl reload`** - Reload the addon
-- **`/fl unload`** - Unload the addon
 
 ## Installation
 
@@ -139,24 +134,6 @@ A comprehensive friend list management addon for FFXI private servers using the 
 Configuration files are stored in:
 - `config/addons/FFXIFriendList/`
 
-**What's Stored Locally**:
-- Friend notes (unless "Use Server Notes" is enabled)
-- Tags and tag organization
-- Theme preference
-- Window positions and sizes
-- Notification duration and position
-- UI customization settings
-- Controller bindings
-
-**What's Synced to Server**:
-- Friend list and relationships
-- Friend requests (pending incoming/outgoing)
-- Block list
-- Privacy preferences (online status, sharing settings)
-- Presence status (Online/Away/Invisible)
-- Column visibility preferences
-- Server notes (if enabled)
-
 ### Custom Assets
 
 You can override default sounds and icons by placing custom files in the config folder:
@@ -172,7 +149,7 @@ See the README.txt in the config folder for available file names.
 ### Local Data
 
 Local-only data (not synced to server):
-- Local notes (unless "Use Server Notes" is enabled in Privacy settings)
+- Local notes
 - Tags and tag assignments
 - Theme preferences
 - Notification duration and position
@@ -207,8 +184,6 @@ Alternatively, use the command:
 **Note Storage**:
 - Notes are stored locally on your device by default (per-account)
 - Notes are shared across all characters on the same account
-- Enable "Use Server Notes" in Privacy settings to sync notes to the server
-- Server notes support smart merging with local notes
 
 ### Using Tags
 
@@ -256,26 +231,6 @@ Alternatively, use the command:
 - **Check Ashita logs**: Look for error messages in Ashita's log files
 - **Reload addon**: Try `/addon reload FFXIFriendList`
 
-### Connection Issues
-
-- **Check server URL**: Ensure your realm is correctly detected in Server Selection
-- **Check API key**: Verify your API key is saved (Settings → Data → API Key)
-- **WebSocket connection**: Connection status is shown in the main window header
-- **Firewall**: Ensure HTTPS and WebSocket (WSS) connections are not blocked
-
-### Friends Not Showing Online
-
-- **WebSocket must be connected**: Real-time status requires active WebSocket connection
-- **Check their privacy settings**: Friends may have set presence to "Invisible"
-- **Check your block list**: Ensure the friend is not blocked
-- **Server sync**: Give it a few seconds after logging in for initial sync
-
-### Notes Not Saving
-
-- **Local notes**: Saved automatically to local config files
-- **Server notes**: Require "Use Server Notes" enabled in Privacy settings
-- **Character limit**: Notes have a maximum length (check editor for count)
-
 ## Support
 
 ### Reporting Issues
@@ -287,20 +242,6 @@ When reporting issues, please include:
 - Steps to reproduce the issue
 - Screenshots (if applicable)
 - Any error messages from Ashita logs
-
-### Discord Community
-
-Join the FFXI Friend List Discord for:
-- Community support and help
-- Feature requests and suggestions
-- Bug reports and troubleshooting
-- Updates and announcements
-
-<p align="center">
-  <a href="https://discord.gg/JXsx7zf3Dx">
-    <img src="assets/discord_banner.png" alt="Join the FFXI Friend List Discord">
-  </a>
-</p>
 
 ## License
 

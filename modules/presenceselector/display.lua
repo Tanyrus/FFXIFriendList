@@ -21,7 +21,6 @@ function M.Initialize(settings)
         local prefs = app.features.preferences:getPrefs()
         if prefs and prefs.presenceStatus then
             state.selectedStatus = prefs.presenceStatus
-            print("[FL] Loaded server preference: " .. state.selectedStatus)
             return
         end
     end
@@ -32,7 +31,6 @@ function M.Initialize(settings)
     
     if data and data.presenceSelector and data.presenceSelector.lastStatus then
         state.selectedStatus = data.presenceSelector.lastStatus
-        print("[FL] Loaded saved pre-login status: " .. state.selectedStatus)
     else
         -- Default to online if no saved preference
         state.selectedStatus = 'online'
@@ -134,94 +132,72 @@ function M.SaveStatus()
     
     savedSettings.set('data', data)
     savedSettings.save()
-    
-    print("[FL] Saved pre-login status preference: " .. state.selectedStatus)
 end
 
 function M.UpdateServerStatus()
     -- Just mark that we have a pending update
     -- The actual HTTP request will happen when connection is ready
     state.pendingServerUpdate = true
-    print("[FL] Pre-login status queued: " .. state.selectedStatus)
 end
 
 -- Check if there's a pending status update that needs to be synced
 function M.HasPendingUpdate()
-    local hasPending = state.hasSetStatus and state.pendingServerUpdate
-    if hasPending then
-        print("[FL] Presence selector has pending update: " .. state.selectedStatus)
-    end
-    return hasPending
+    return state.hasSetStatus and state.pendingServerUpdate
 end
 
 -- Apply the pending status update using a direct HTTP call
 function M.ApplyPendingUpdate(app)
-    print("[FL] ApplyPendingUpdate called")
-    
     local success, err = pcall(function()
         if not state.hasSetStatus or not state.pendingServerUpdate then
-            print("[FL] No pending update to apply")
             return false
         end
         
         if not app then
-            print("[FL] No app provided")
             return false
         end
         
         if not app.deps then
-            print("[FL] No app.deps")
             return false
         end
         
         if not app.deps.net then
-            print("[FL] No app.deps.net")
             return false
         end
         
         if not app.features then
-            print("[FL] No app.features")
             return false
         end
         
         if not app.features.connection then
-            print("[FL] No app.features.connection")
             return false
         end
         
         local connection = app.features.connection
         if not connection.isConnected then
-            print("[FL] Connection has no isConnected method")
             return false
         end
         
         if not connection:isConnected() then
-            print("[FL] Connection not ready")
             return false
         end
         
         local apiKey = connection.apiKey
         if not apiKey or apiKey == "" then
-            print("[FL] No API key: " .. tostring(apiKey))
             return false
         end
         
         if not connection.getBaseUrl then
-            print("[FL] Connection has no getBaseUrl method")
             return false
         end
         
         local baseUrl = connection:getBaseUrl()
         if not baseUrl or baseUrl == "" then
-            print("[FL] No baseUrl from connection")
             return false
         end
         
         -- Make direct PATCH request to update presence status
         local url = baseUrl .. "/api/preferences"
         local body = string.format('{"presenceStatus":"%s"}', state.selectedStatus)
-        
-        print("[FL] Syncing pre-login status: " .. state.selectedStatus .. " to " .. url)
         
         app.deps.net.request({
             url = url,
@@ -233,11 +209,6 @@ function M.ApplyPendingUpdate(app)
             body = body,
             callback = function(success, response)
                 state.pendingServerUpdate = false
-                if success then
-                    print("[FL] Pre-login status applied: " .. state.selectedStatus)
-                else
-                    print("[FL] Failed to apply pre-login status: " .. tostring(response))
-                end
             end
         })
         
@@ -245,7 +216,6 @@ function M.ApplyPendingUpdate(app)
     end)
     
     if not success then
-        print("[FL] Error in ApplyPendingUpdate: " .. tostring(err))
         return false
     end
     

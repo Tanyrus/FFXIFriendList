@@ -263,6 +263,24 @@ function M.Preferences:syncToServer(onComplete)
     return true
 end
 
+-- Update a single preference and sync to server
+-- This can be called before character detection completes
+function M.Preferences:updatePreference(key, value, onComplete)
+    if not self:setPref(key, value) then
+        if onComplete then onComplete(false) end
+        return false
+    end
+    
+    -- If connection is available, sync to server
+    -- Otherwise just update locally (will sync when connection is ready)
+    if self.deps.connection and self.deps.connection.apiKey and self.deps.connection.apiKey ~= "" then
+        return self:syncToServer(onComplete)
+    end
+    
+    if onComplete then onComplete(true) end
+    return true
+end
+
 function M.Preferences:refresh()
     if not self.deps.net or not self.deps.connection then
         return false

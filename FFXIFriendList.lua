@@ -395,6 +395,15 @@ ashita.events.register('load', 'ffxifriendlist_load', function()
     -- Themes functionality is now integrated into the main window's Themes tab
     -- No separate themes window module needed
     
+    -- Presence selector (shown before character detection)
+    local presenceSelectorModule = require('modules.presenceselector')
+    local _ = moduleRegistry.Register('presenceSelector', {
+        module = presenceSelectorModule,
+        settingsKey = 'presenceSelectorSettings',
+        configKey = nil, -- Always render when needed
+        hasSetHidden = false
+    })
+    
     -- Initialize modules
     local _ = moduleRegistry.InitializeAll(gAdjustedSettings)
     
@@ -464,6 +473,22 @@ end)
 
 -- Render callback
 ashita.events.register('d3d_present', 'ffxifriendlist_present', function()
+    -- Render presence selector even before addon fully initializes
+    -- This allows user to set status before character loads
+    -- Must be very defensive as this runs before load event completes
+    if moduleRegistry and gConfig and gAdjustedSettings then
+        local success, isReady = pcall(function() return App.isGameReady() end)
+        if success and not isReady then
+            -- Directly call the module's Render, bypassing visibility checks
+            local entry = moduleRegistry.Get('presenceSelector')
+            if entry and entry.module and entry.module.Render then
+                pcall(function()
+                    entry.module.Render(gConfig, gAdjustedSettings, false)
+                end)
+            end
+        end
+    end
+    
     if not initialized then
         return
     end
@@ -483,7 +508,7 @@ ashita.events.register('d3d_present', 'ffxifriendlist_present', function()
         App.tick(app, deltaTime)  -- deltaTime is already in seconds from os.clock()
     end
     
-    -- Don't render or process input until character is loaded
+    -- Don't render other modules until character is loaded
     if not App.isGameReady() then
         return nil
     end

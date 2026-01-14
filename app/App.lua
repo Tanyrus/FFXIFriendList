@@ -186,6 +186,15 @@ function App.tick(app, dtSeconds)
         return
     end
     
+    -- Retry startup refresh if it was delayed waiting for preference update
+    if app._retryStartupRefresh then
+        local presenceSelectorModule = require('modules.presenceselector.display')
+        if presenceSelectorModule.IsPendingServerUpdate and not presenceSelectorModule.IsPendingServerUpdate() then
+            -- Update is complete, trigger refresh now
+            App._triggerStartupRefresh(app)
+        end
+    end
+    
     -- Attempt auto-detect and auto-select server on first tick after servers are loaded
     -- (deferred from initialize() because refresh() is async)
     if not app._autoDetectAttempted and app.features.serverlist and app.features.serverlist.servers and #app.features.serverlist.servers > 0 then
@@ -247,6 +256,25 @@ function App._triggerStartupRefresh(app)
     if not app.features.connection or not app.features.connection:isConnected() then
         return
     end
+    
+    -- Check if presence selector has a pending status update
+    -- Apply it BEFORE checking if pending, so it can start the HTTP request
+    local presenceSelectorModule = require('modules.presenceselector.display')
+    if presenceSelectorModule.HasPendingUpdate and presenceSelectorModule.HasPendingUpdate() then
+        if presenceSelectorModule.ApplyPendingUpdate then
+            -- Apply the pending update (starts async HTTP request)
+            presenceSelectorModule.ApplyPendingUpdate(app)
+        end
+    end
+    
+    -- Now check if the update is still pending (request in flight)
+    if presenceSelectorModule.IsPendingServerUpdate and presenceSelectorModule.IsPendingServerUpdate() then
+        -- Retry in a moment after the update completes
+        app._retryStartupRefresh = true
+        return
+    end
+    
+    app._retryStartupRefresh = false
     
     -- Request WebSocket connection via connection manager (non-blocking)
     if app.features.wsConnectionManager then

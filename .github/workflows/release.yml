@@ -34,6 +34,7 @@ jobs:
                     --exclude='.git/' \
                     --exclude='.gitignore' \
                     --exclude='.gitattributes' \
+                    --exclude='Install-FFXIFriendList.bat' \
                     ./ release/FFXIFriendList/
 
           # Verify the addon entry file exists
@@ -80,6 +81,7 @@ jobs:
         with:
           files: |
             FFXIFriendList-${{ env.VERSION }}.zip
+            Install-FFXIFriendList.bat
           name: FFXIFriendList v${{ env.VERSION }}
           draft: false
           prerelease: false

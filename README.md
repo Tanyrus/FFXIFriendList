@@ -119,13 +119,25 @@ A comprehensive friend list management addon for FFXI private servers using the 
 
 1. **Ashita v4**: This addon requires Ashita v4 framework
 
-### Installation Steps
+### Automatic Installation (Recommended)
+
+1. Download `Install-FFXIFriendList.bat` from [GitHub Releases](https://github.com/Tanyrus/FFXIFriendList/releases) (inside the ZIP or as a separate file)
+2. Double-click `Install-FFXIFriendList.bat`
+3. The installer will:
+   - Automatically detect your Ashita installation (or prompt you to select the folder)
+   - Download and install the latest version from GitHub
+   - Add the addon to your `scripts/default.txt` to load automatically
+   - Preserve your existing configuration and settings
+
+**Note**: When the folder browser appears, select your Ashita root directory - this is the folder that **CONTAINS** the `addons`, `scripts`, and `config` folders. For Horizon XI, this is typically the `Game` folder.
+
+### Manual Installation
 
 1. Download the latest release (`FFXIFriendList-x.x.x.zip`)
 2. Extract the `FFXIFriendList` folder to your Ashita addons directory:
-   - `addons/FFXIFriendList/`
+   - `<Ashita Root>/addons/FFXIFriendList/`
 3. Load the addon in-game with `/addon load FFXIFriendList`
-4. (Optional) Add to your default script to load automatically
+4. (Optional) Add `/addon load ffxifriendlist` to your `scripts/default.txt` to load automatically
 
 ## Configuration
 

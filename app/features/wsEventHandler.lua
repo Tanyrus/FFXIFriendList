@@ -486,7 +486,9 @@ function M.WsEventHandler:_addFriendFromPayload(friendData)
         return
     end
     
-    -- Use addedAsCharacterName from server if available, otherwise fallback to friend's name
+    -- Use addedAsCharacterName from server if available, otherwise fallback to friend's current name
+    -- addedAsCharacterName = character name when friendship was created
+    -- displayName = friend's current character name
     local friendedAs = friendData.addedAsCharacterName or displayName
     local friend = FriendList.Friend.new(displayName, friendedAs)
     friend.friendAccountId = friendData.accountId

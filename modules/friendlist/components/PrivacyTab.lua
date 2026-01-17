@@ -265,6 +265,9 @@ function M.RenderPrivacyControlsSection(state, callbacks)
             app.features.preferences:setPref("shareJobWhenAnonymous", shareJobWhenAnonymous[1])
             app.features.preferences:save()
             app.features.preferences:syncToServer()
+            -- Reload character status for preview
+            state.characterStatus = nil
+            state.lastFetchedCharacterId = nil
         end
     end
     if imgui.IsItemHovered() then

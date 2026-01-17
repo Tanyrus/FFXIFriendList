@@ -229,7 +229,7 @@ function M.Render(state, dataModule, callbacks)
     
     imgui.Spacing()
     
-    local stackFromBottom = {prefs.notificationStackFromBottom or false}
+    local stackFromBottom = {prefs.notificationStackFromBottom == true}
     if imgui.Checkbox("Stack notifications from bottom", stackFromBottom) then
         if app and app.features and app.features.preferences then
             app.features.preferences:setPref("notificationStackFromBottom", stackFromBottom[1])

@@ -128,6 +128,7 @@ function M.Preferences:load()
     self.prefs.soundOnFriendRequest = getVal(prefs.soundOnFriendRequest, true)
     self.prefs.notificationSoundVolume = getVal(prefs.notificationSoundVolume, 0.6)
     self.prefs.notificationShowTestPreview = getVal(prefs.notificationShowTestPreview, false)
+    self.prefs.notificationStackFromBottom = getVal(prefs.notificationStackFromBottom, false)
     self.prefs.muteTestFriendOnline = getVal(prefs.muteTestFriendOnline, false)
     self.prefs.muteTestFriendRequest = getVal(prefs.muteTestFriendRequest, false)
     -- Notification background color (nil = use theme, otherwise {r, g, b, a})
@@ -196,6 +197,7 @@ function M.Preferences:save()
         soundOnFriendRequest = self.prefs.soundOnFriendRequest,
         notificationSoundVolume = self.prefs.notificationSoundVolume,
         notificationShowTestPreview = self.prefs.notificationShowTestPreview,
+        notificationStackFromBottom = self.prefs.notificationStackFromBottom,
         muteTestFriendOnline = self.prefs.muteTestFriendOnline,
         muteTestFriendRequest = self.prefs.muteTestFriendRequest,
         notificationBgColor = self.prefs.notificationBgColor,

@@ -409,7 +409,8 @@ function M.RenderNationRankCell(friend)
     -- Use nations module for icon lookup (supports both numeric and string values)
     local nationIcon = nations.getIconName(nation)
     
-    if nation == nil or nation == -1 or (rankNum == "" and not nationIcon) then
+    -- Check if nation is anonymous (nil, -1, empty string, or 'Anonymous' sentinel)
+    if nation == nil or nation == -1 or nation == "Anonymous" or (rankNum == "" and not nationIcon) then
         if isOnline then
             imgui.TextColored(anonColor, "Anonymous")
         else

@@ -186,18 +186,24 @@ function M.Initialize(settings)
         end
         if settings.columns then
             for colName, colState in pairs(settings.columns) do
-                if colState.visible ~= nil then
-                    state.columnVisible[colName] = colState.visible
+                -- Skip legacy 'realm' column if present in saved prefs
+                if colName ~= "realm" and colName ~= "Realm" then
+                    if colState.visible ~= nil then
+                        state.columnVisible[colName] = colState.visible
+                    end
                 end
             end
         end
         if settings.columnOrder and type(settings.columnOrder) == "table" and #settings.columnOrder > 0 then
+            -- Load saved column order but strip legacy 'Realm' entries
             state.columnOrder = {}
-            for i, col in ipairs(settings.columnOrder) do
-                state.columnOrder[i] = col
+            for _, col in ipairs(settings.columnOrder) do
+                if col ~= "Realm" then
+                    table.insert(state.columnOrder, col)
+                end
             end
             -- Ensure any new columns (added in later versions) are appended to the order
-            local defaultColumnOrder = {"Name", "Job", "Zone", "Nation/Rank", "Last Seen", "Added As", "Realm"}
+            local defaultColumnOrder = {"Name", "Job", "Zone", "Nation/Rank", "Last Seen", "Added As"}
             for _, defaultCol in ipairs(defaultColumnOrder) do
                 local found = false
                 for _, savedCol in ipairs(state.columnOrder) do
@@ -213,7 +219,9 @@ function M.Initialize(settings)
         end
         if settings.columnWidths and type(settings.columnWidths) == "table" then
             for colName, width in pairs(settings.columnWidths) do
-                state.columnWidths[colName] = width
+                if colName ~= "Realm" then
+                    state.columnWidths[colName] = width
+                end
             end
         end
         if settings.groupByOnlineStatus ~= nil then
@@ -1156,7 +1164,6 @@ function M.RenderTaggedFriendSections(dataModule, callbacks)
                 if callbacks.onSaveState then callbacks.onSaveState() end
             end
             
-            local realmVisible = {state.columnVisible.realm}
             imgui.Separator()
             imgui.Text("Column Widths:")
             imgui.Separator()

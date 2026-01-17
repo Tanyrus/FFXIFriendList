@@ -59,6 +59,7 @@ local state = {
     soundPolicy = nil,
     lastToastIds = {},
     activeToasts = {},
+    pendingQueue = {},
     isDragging = false,
     dragStartMouseX = 0,
     dragStartMouseY = 0,
@@ -251,6 +252,36 @@ end
 local FADE_OUT_PERCENT = 0.20
 local Y_ANIMATION_SPEED = 8.0
 
+local function calculateAvailableScreenSpace(activeToasts, stackFromBottom)
+    local screenH = scaling.window.h or 1080
+    local margin = 8
+    
+    -- Calculate total height used by active toasts
+    local totalUsedHeight = 0
+    for i, toast in ipairs(activeToasts) do
+        if toast.state ~= ToastState.EXITING and toast.state ~= ToastState.COMPLETE then
+            local toastHeight = toast.lastHeight or 60
+            totalUsedHeight = totalUsedHeight + toastHeight
+            if i > 1 then
+                totalUsedHeight = totalUsedHeight + TOAST_SPACING
+            end
+        end
+    end
+    
+    -- Calculate available space from current position
+    local availableSpace
+    if stackFromBottom then
+        -- When stacking from bottom, check space above the anchor point
+        availableSpace = (state.positionY or DEFAULT_POSITION_Y) - margin
+    else
+        -- When stacking from top, check space below the anchor point
+        availableSpace = screenH - (state.positionY or DEFAULT_POSITION_Y) - margin
+    end
+    
+    -- Return remaining space after accounting for active toasts
+    return math.max(0, availableSpace - totalUsedHeight)
+end
+
 local function updateToast(toast, currentTime, prefsDurationMs)
     local elapsed = currentTime - (toast.createdAt or 0)
     local duration = prefsDurationMs
@@ -309,6 +340,16 @@ local function renderToast(toast, targetY, isFirstToast)
         toast.currentY = toast.currentY + yDiff * Y_ANIMATION_SPEED * 0.016
     else
         toast.currentY = targetY
+    end
+
+    -- Clamp individual toast Y so it cannot go off-screen
+    do
+        local screenH = scaling.window.h or 1080
+        local margin = 8
+        local estHeight = toast.lastHeight or windowHeight or 60
+        local minY = margin
+        local maxY = math.max(margin, screenH - estHeight - margin)
+        toast.currentY = math.max(minY, math.min(toast.currentY, maxY))
     end
     
     local windowId = "##Toast_" .. tostring(toast.id or 0)
@@ -641,19 +682,147 @@ function M.DrawWindow(settings, dataModule)
         end
     end
     
-    local activeToasts = {}
-    if showTestPreview and state.testToast then
-        table.insert(activeToasts, state.testToast)
+    -- Determine stack direction early so it's available for queue logic
+    local stackFromBottom = false
+    if prefs and prefs.notificationStackFromBottom then
+        stackFromBottom = true
     end
+    
+    -- Separate incoming toasts into active and pending based on screen space
+    local activeToasts = {}
+    local incomingToasts = {}
+    
+    -- Include test toast in incoming toasts so it goes through queue logic
+    if showTestPreview and state.testToast then
+        table.insert(incomingToasts, state.testToast)
+    end
+    
     for _, toast in ipairs(rawToasts) do
         if toast.state ~= ToastState.COMPLETE then
-            table.insert(activeToasts, toast)
+            table.insert(incomingToasts, toast)
         end
     end
     
+    -- Track which toasts are already active (by ID)
+    local activeIds = {}
+    
+    -- Add previously active toasts first
+    for _, toast in ipairs(incomingToasts) do
+        for _, activeToast in ipairs(state.activeToasts or {}) do
+            if toast.id == activeToast.id and not activeIds[toast.id] then
+                table.insert(activeToasts, toast)
+                activeIds[toast.id] = true
+                break
+            end
+        end
+    end
+    
+    -- Try to move pending toasts to active if there's room
+    local pendingToAdd = {}
+    for _, toast in ipairs(state.pendingQueue or {}) do
+        if not activeIds[toast.id] then
+            table.insert(pendingToAdd, toast)
+        end
+    end
+    
+    -- Add new toasts to pending if not already active
+    local newPending = {}
+    for _, toast in ipairs(incomingToasts) do
+        if not activeIds[toast.id] then
+            -- Check if it's already in pending queue
+            local alreadyPending = false
+            for _, pendingToast in ipairs(state.pendingQueue or {}) do
+                if pendingToast.id == toast.id then
+                    alreadyPending = true
+                    break
+                end
+            end
+            if not alreadyPending then
+                table.insert(pendingToAdd, toast)
+            end
+        end
+    end
+    
+    -- Calculate available space and try to activate pending toasts
+    local availableSpace = calculateAvailableScreenSpace(activeToasts, stackFromBottom)
+    local minToastHeight = 60 + TOAST_SPACING
+    
+    local updatedPending = {}
+    for _, toast in ipairs(pendingToAdd) do
+        if availableSpace >= minToastHeight then
+            -- Enough space - activate this toast
+            table.insert(activeToasts, toast)
+            activeIds[toast.id] = true
+            availableSpace = availableSpace - minToastHeight
+        else
+            -- No space - keep in pending queue
+            table.insert(updatedPending, toast)
+        end
+    end
+    
+    state.pendingQueue = updatedPending
+    state.activeToasts = activeToasts
+
     if #activeToasts == 0 then
         return
     end
+
+    -- Calculate total height of visible toasts (used to preserve anchor on stack-direction toggle)
+    local function calcTotalHeight(toasts)
+        local total = 0
+        for i = 1, #toasts do
+            local t = toasts[i]
+            local h = t.lastHeight or 60
+            if t.state ~= ToastState.EXITING then
+                if total > 0 then
+                    total = total + TOAST_SPACING
+                end
+                total = total + h
+            end
+        end
+        return total
+    end
+
+    local totalHeight = calcTotalHeight(activeToasts)
+
+    -- Preserve the first-notification screen position when toggling stack direction.
+    -- `state.positionY` is used as the top-anchor when stacking down (default),
+    -- and as the bottom-anchor when stacking from bottom (stack up). When the
+    -- preference flips, adjust `state.positionY` so the first visible toast
+    -- remains at the same screen Y.
+    if state.previousStackFromBottom == nil then
+        state.previousStackFromBottom = stackFromBottom
+    end
+
+    if state.previousStackFromBottom ~= stackFromBottom then
+        local oldFirstY
+        if state.previousStackFromBottom then
+            -- previously stacking from bottom: first (anchor) toast was at state.positionY - totalHeight
+            oldFirstY = state.positionY - totalHeight
+        else
+            -- previously stacking top->down: first toast was at state.positionY
+            oldFirstY = state.positionY
+        end
+
+        if stackFromBottom then
+            -- switching to bottom stacking: compute new positionY so bottom-most == oldFirstY
+            state.positionY = oldFirstY + totalHeight
+        else
+            -- switching to top stacking: set new positionY so top-most == oldFirstY
+            state.positionY = oldFirstY
+        end
+    end
+
+    -- Clamp anchor inside screen bounds so notifications never go off-screen.
+    local screenW = scaling.window.w or 1920
+    local screenH = scaling.window.h or 1080
+    -- small margin to ensure visibility
+    local margin = 8
+    state.positionX = math.max(margin, math.min(state.positionX or DEFAULT_POSITION_X, (screenW - margin)))
+    state.positionY = math.max(margin, math.min(state.positionY or DEFAULT_POSITION_Y, (screenH - margin)))
+
+    -- remember current stack preference for next frame
+    state.previousStackFromBottom = stackFromBottom
     
     local themePushed = false
     if app and app.features and app.features.themes then
@@ -671,12 +840,6 @@ function M.DrawWindow(settings, dataModule)
                 end
             end)
         end
-    end
-    
-    -- Check if we should stack from bottom
-    local stackFromBottom = false
-    if prefs and prefs.notificationStackFromBottom then
-        stackFromBottom = true
     end
     
     local targetY = state.positionY
@@ -728,6 +891,7 @@ function M.Cleanup()
     state.initialized = false
     state.lastToastIds = {}
     state.activeToasts = {}
+    state.pendingQueue = {}
     state.testToast = nil
     state.isDragging = false
 end

@@ -212,7 +212,11 @@ function Update-DefaultScript {
     if ($lastAddonLoadIndex -ne -1) {
         # Insert right after the last /addon load command
         $insertIndex = $lastAddonLoadIndex + 1
-        $newLines = @($lines[0..$lastAddonLoadIndex]) + $Command + @($lines[$insertIndex..($lines.Count - 1)])
+        if ($insertIndex -lt $lines.Count) {
+            $newLines = @($lines[0..$lastAddonLoadIndex]) + $Command + @($lines[$insertIndex..($lines.Count - 1)])
+        } else {
+            $newLines = @($lines[0..$lastAddonLoadIndex]) + $Command
+        }
         $newLines | Set-Content -Path $defaultTxtPath -Encoding UTF8
         return $true
     }
@@ -236,9 +240,17 @@ function Update-DefaultScript {
     if ($insertIndex -eq -1) {
         # Last resort: append to end
         Add-Content -Path $defaultTxtPath -Value "`n$Command"
+    } elseif ($insertIndex -eq 0) {
+        # Insert at beginning
+        $newLines = @($Command) + @($lines)
+        $newLines | Set-Content -Path $defaultTxtPath -Encoding UTF8
     } else {
         # Insert at found position
-        $newLines = @($lines[0..($insertIndex - 1)]) + $Command + @($lines[$insertIndex..($lines.Count - 1)])
+        if ($insertIndex -lt $lines.Count) {
+            $newLines = @($lines[0..($insertIndex - 1)]) + $Command + @($lines[$insertIndex..($lines.Count - 1)])
+        } else {
+            $newLines = @($lines[0..($insertIndex - 1)]) + $Command
+        }
         $newLines | Set-Content -Path $defaultTxtPath -Encoding UTF8
     }
     

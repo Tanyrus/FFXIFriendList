@@ -446,6 +446,27 @@ function M.encodeSetActiveCharacter(characterId)
     return Json.encode(body)
 end
 
+-- Encode DeviceCode request (for /api/auth/device-code endpoint)
+-- Starts the Discord device auth flow for new users
+-- Body: {"characterName": "...", "realmId": "..."}
+function M.encodeDeviceCode(characterName, realmId)
+    local body = {
+        characterName = characterName,
+        realmId = realmId or "unknown"
+    }
+    return Json.encode(body)
+end
+
+-- Encode DevicePoll request (for /api/auth/device-poll endpoint)
+-- Polls to check if the user has completed Discord sign-in
+-- Body: {"deviceCode": "..."}
+function M.encodeDevicePoll(deviceCode)
+    local body = {
+        deviceCode = deviceCode
+    }
+    return Json.encode(body)
+end
+
 -- Encode SendFriendRequest for new server (for /api/friends/request endpoint)
 -- Body: {"characterName": "...", "realmId": "..."}
 function M.encodeNewSendFriendRequest(characterName, realmId)

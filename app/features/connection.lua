@@ -119,6 +119,17 @@ function M.Connection.new(deps)
     self.nextAutoConnectAt = nil
     self.backoffBaseMs = 2000
     self.backoffMaxMs = 60000
+
+    -- Device auth state (Discord sign-in flow for new users)
+    self.deviceAuthInProgress = false
+    self.deviceCode = nil
+    self.deviceCodeUserCode = nil
+    self.deviceCodeVerificationUrl = nil
+    self.deviceCodeExpiresAt = nil
+    self.deviceCodeNextPollAt = nil
+    self.deviceCodePollInterval = nil
+    self.deviceCodeShownMessage = false
+    self.deviceAuthPollInFlight = false
     
     -- Load API key (single key model)
     if _G.gConfig and _G.gConfig.data and _G.gConfig.data.apiKey and _G.gConfig.data.apiKey ~= "" then
@@ -168,6 +179,128 @@ function M.Connection:getState()
     }
 end
 
+function M.Connection:_clearDeviceAuth()
+    self.deviceAuthInProgress = false
+    self.deviceCode = nil
+    self.deviceCodeUserCode = nil
+    self.deviceCodeVerificationUrl = nil
+    self.deviceCodeExpiresAt = nil
+    self.deviceCodeNextPollAt = nil
+    self.deviceCodePollInterval = nil
+    self.deviceCodeShownMessage = false
+    self.deviceAuthPollInFlight = false
+end
+
+function M.Connection:_pollDeviceAuth()
+    if not self.net or not self.deviceCode then
+        return
+    end
+
+    local baseUrl = self:getBaseUrl()
+    baseUrl = baseUrl:gsub("/+$", "")
+
+    local addonVersion = addon and addon.version or VersionCore.ADDON_VERSION
+
+    self.deviceAuthPollInFlight = true
+    self.deviceCodeNextPollAt = self._timeMs() + (self.deviceCodePollInterval or 5000)
+
+    self.net.request({
+        url = baseUrl .. Endpoints.AUTH.DEVICE_POLL,
+        method = "POST",
+        headers = {
+            ["Content-Type"] = "application/json",
+            ["User-Agent"] = "FFXIFriendList/" .. addonVersion,
+        },
+        body = RequestEncoder.encodeDevicePoll(self.deviceCode),
+        callback = function(success, response)
+            self.deviceAuthPollInFlight = false
+            self:_handleDevicePollResponse(success, response)
+        end
+    })
+end
+
+function M.Connection:_handleDevicePollResponse(success, response)
+    if not success then
+        -- Network error — just wait and retry on next interval
+        return
+    end
+
+    local ok, result = Envelope.decode(response)
+    if not ok then
+        return
+    end
+
+    local data = result.data or {}
+    local status = data.status
+
+    if status == "complete" then
+        local sessionToken = data.sessionToken
+        if sessionToken and sessionToken ~= "" then
+            self:setApiKey(nil, sessionToken)
+            if _G.gConfig then
+                if not _G.gConfig.data then _G.gConfig.data = {} end
+                _G.gConfig.data.apiKey = sessionToken
+                _G.gConfig.data.apiKeys = nil
+                _G.gConfig.data.apiKeysByRealm = nil
+                local settings = require("libs.settings")
+                if settings and settings.save then settings.save() end
+            end
+            self:_clearDeviceAuth()
+            if self.logger and self.logger.echo then
+                self.logger.echo("[FFXIFriendList] Discord sign-in complete! Connecting...")
+            end
+            -- Reset so tick() triggers autoConnect with the new API key
+            self.autoConnectAttempted = false
+            self.autoConnectInProgress = false
+        end
+    elseif status == "expired" then
+        self:_clearDeviceAuth()
+        self:setFailed()
+        if self.logger and self.logger.echo then
+            self.logger.echo("[FFXIFriendList] Sign-in code expired. Relog or use /fl to retry.")
+        end
+    end
+    -- "pending" — nothing to do; next poll is already scheduled
+end
+
+function M.Connection:tickDeviceAuth()
+    local now = self._timeMs()
+
+    -- Check expiry
+    if self.deviceCodeExpiresAt and now >= self.deviceCodeExpiresAt then
+        self:_clearDeviceAuth()
+        self:setFailed()
+        if self.logger and self.logger.echo then
+            self.logger.echo("[FFXIFriendList] Sign-in code expired. Relog or use /fl to retry.")
+        end
+        return
+    end
+
+    -- Show the sign-in message once (then suppress repeats)
+    if not self.deviceCodeShownMessage then
+        self.deviceCodeShownMessage = true
+        if self.logger and self.logger.echo then
+            self.logger.echo(
+                "[FFXIFriendList] New account! Sign in with Discord: " ..
+                (self.deviceCodeVerificationUrl or "?") ..
+                " | Code: " .. (self.deviceCodeUserCode or "?")
+            )
+        end
+    end
+
+    -- Wait until the next poll interval
+    if self.deviceCodeNextPollAt and now < self.deviceCodeNextPollAt then
+        return
+    end
+
+    -- Don't stack polls
+    if self.deviceAuthPollInFlight then
+        return
+    end
+
+    self:_pollDeviceAuth()
+end
+
 function M.Connection:tick(dtSeconds)
     if not self:hasSavedServer() then
         return
@@ -182,7 +315,12 @@ function M.Connection:tick(dtSeconds)
     if characterName ~= self.lastCharacterName then
         local previousCharacter = self.lastCharacterName
         self.lastCharacterName = characterName
-        
+
+        -- Cancel device auth if the character that started it has changed
+        if self.deviceAuthInProgress then
+            self:_clearDeviceAuth()
+        end
+
         if self:isConnected() then
             -- Character changed while connected - trigger re-auth to update active character
             -- Reset connection state to trigger re-auth
@@ -198,6 +336,12 @@ function M.Connection:tick(dtSeconds)
         end
     end
     
+    -- Device auth polling (Discord sign-in flow for new users without an API key)
+    if self.deviceAuthInProgress then
+        self:tickDeviceAuth()
+        return
+    end
+
     -- If previously failed, schedule retry with backoff
     if (self.state == M.ConnectionState.Failed or self.state == M.ConnectionState.Disconnected) then
         if self.autoConnectInProgress then
@@ -428,57 +572,70 @@ function M.Connection:autoConnect(characterName)
     local function attemptConnect()
         local baseUrl = self:getBaseUrl()
         baseUrl = baseUrl:gsub("/+$", "")
-        
-        -- New server auth flow:
-        -- If we have an API key, use /api/auth/add-character to add this character
-        -- If no API key, use /api/auth/register to create a new account
-        local hasApiKey = storedApiKey and storedApiKey ~= ""
-        local url, requestBody
-        
-        if hasApiKey then
-            -- Add character to account (creates if needed, links if exists)
-            url = baseUrl .. Endpoints.AUTH.ADD_CHARACTER
-            requestBody = RequestEncoder.encodeAddCharacter(normalizedName, realmId)
-        else
-            -- No API key - register as new user
-            url = baseUrl .. Endpoints.AUTH.REGISTER
-            requestBody = RequestEncoder.encodeRegister(normalizedName, realmId)
-        end
-        
-        local addonVersion = addon and addon.version or VersionCore.ADDON_VERSION
-        local headers = {
-            ["Content-Type"] = "application/json",
-            ["User-Agent"] = "FFXIFriendList/" .. addonVersion,
-            ["X-Character-Name"] = normalizedName
-        }
-        
-        -- Add Authorization header (Bearer token format) if we have an API key
-        if hasApiKey then
-            headers["Authorization"] = "Bearer " .. storedApiKey
-        end
-        
-        -- Add realm ID header
+
+        -- Resolve realm ID header value once
         local realmIdForHeader = nil
         if self.savedRealmId and self.savedRealmId ~= "" then
             realmIdForHeader = self.savedRealmId
         elseif self.realmDetector and self.realmDetector.getRealmId then
             realmIdForHeader = self.realmDetector:getRealmId()
         end
-        if realmIdForHeader and realmIdForHeader ~= "" then
-            headers["X-Realm-Id"] = realmIdForHeader
-        end
-        
-        local requestId = self.net.request({
-            url = url,
-            method = "POST",
-            headers = headers,
-            body = requestBody,
-            callback = function(success, response)
-                self:handleAuthResponse(success, response, normalizedName, storedApiKey)
+
+        local addonVersion = addon and addon.version or VersionCore.ADDON_VERSION
+
+        -- New server auth flow:
+        -- If we have an API key, use /api/auth/add-character to add this character
+        -- If no API key, start the Discord device-code flow (no silent registration)
+        local hasApiKey = storedApiKey and storedApiKey ~= ""
+
+        if hasApiKey then
+            -- Add character to account (creates if needed, links if exists)
+            local url = baseUrl .. Endpoints.AUTH.ADD_CHARACTER
+            local headers = {
+                ["Content-Type"] = "application/json",
+                ["User-Agent"] = "FFXIFriendList/" .. addonVersion,
+                ["X-Character-Name"] = normalizedName,
+                ["Authorization"] = "Bearer " .. storedApiKey,
+            }
+            if realmIdForHeader and realmIdForHeader ~= "" then
+                headers["X-Realm-Id"] = realmIdForHeader
             end
-        })
-        
-        return requestId ~= nil
+
+            local requestId = self.net.request({
+                url = url,
+                method = "POST",
+                headers = headers,
+                body = RequestEncoder.encodeAddCharacter(normalizedName, realmId),
+                callback = function(success, response)
+                    self:handleAuthResponse(success, response, normalizedName, storedApiKey)
+                end
+            })
+
+            return requestId ~= nil
+        else
+            -- No API key — start Discord device-code flow
+            local url = baseUrl .. Endpoints.AUTH.DEVICE_CODE
+            local headers = {
+                ["Content-Type"] = "application/json",
+                ["User-Agent"] = "FFXIFriendList/" .. addonVersion,
+                ["X-Character-Name"] = normalizedName,
+            }
+            if realmIdForHeader and realmIdForHeader ~= "" then
+                headers["X-Realm-Id"] = realmIdForHeader
+            end
+
+            local requestId = self.net.request({
+                url = url,
+                method = "POST",
+                headers = headers,
+                body = RequestEncoder.encodeDeviceCode(normalizedName, realmId),
+                callback = function(success, response)
+                    self:handleDeviceCodeResponse(success, response)
+                end
+            })
+
+            return requestId ~= nil
+        end
     end
     
     return attemptConnect()
@@ -566,6 +723,53 @@ function M.Connection:handleAuthResponse(success, response, characterName, fallb
         -- No character ID available, proceed with connection
         self:completeConnection(characterName)
     end
+end
+
+function M.Connection:handleDeviceCodeResponse(success, response)
+    self.autoConnectInProgress = false
+
+    if not success then
+        self:setFailed()
+        self.lastError = response or "Network error"
+        -- Schedule retry with backoff (same as handleAuthResponse)
+        local attempt = math.max(1, self.retryAttemptCount + 1)
+        local delay = self.backoffBaseMs * (2 ^ (attempt - 1))
+        delay = math.min(delay, self.backoffMaxMs)
+        local jitterRange = math.floor(delay * 0.2)
+        local jitter = (math.random(0, jitterRange * 2) - jitterRange)
+        delay = math.max(250, delay + jitter)
+        self.nextAutoConnectAt = self._timeMs() + delay
+        self.retryAttemptCount = attempt
+        self.autoConnectAttempted = false
+        if self.logger and self.logger.warn then
+            self.logger.warn("[Connection] Device code request failed; retry in " ..
+                string.format("%.1fs", delay / 1000))
+        end
+        return
+    end
+
+    local ok, result = Envelope.decode(response)
+    if not ok then
+        self:setFailed()
+        self.autoConnectAttempted = false
+        return
+    end
+
+    local data = result.data or {}
+    self.deviceCode = data.deviceCode
+    self.deviceCodeUserCode = data.userCode
+    self.deviceCodeVerificationUrl = data.verificationUrl
+    self.deviceCodePollInterval = (data.interval or 5) * 1000
+    self.deviceCodeExpiresAt = self._timeMs() + ((data.expiresIn or 300) * 1000)
+    self.deviceCodeNextPollAt = self._timeMs() + self.deviceCodePollInterval
+    self.deviceCodeShownMessage = false
+    self.deviceAuthInProgress = true
+
+    -- Stay disconnected while waiting for Discord — tick() will poll
+    self.state = M.ConnectionState.Disconnected
+    self.autoConnectAttempted = false
+    self.retryAttemptCount = 0
+    self.nextAutoConnectAt = nil
 end
 
 -- BUG 2 FIX: Set the active character on the server

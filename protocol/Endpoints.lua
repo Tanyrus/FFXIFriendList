@@ -25,7 +25,9 @@ M.AUTH = {
     ENSURE = "/api/auth/ensure",
     ADD_CHARACTER = "/api/auth/add-character",
     SET_ACTIVE = "/api/auth/set-active",
-    ME = "/api/auth/me"
+    ME = "/api/auth/me",
+    DEVICE_CODE = "/api/auth/device-code",
+    DEVICE_POLL = "/api/auth/device-poll",
 }
 
 -- Friends endpoints

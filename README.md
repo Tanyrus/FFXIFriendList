@@ -17,6 +17,8 @@ No donations, payments, subscriptions, or other financial contributions are acce
 
 A comprehensive friend list management addon for FFXI private servers using the Ashita v4 framework. This addon provides real-time friend status tracking, account-based character linking, notes (local), and more through a modern ImGui interface.
 
+> **Contributors / agents:** see [`CLAUDE.md`](CLAUDE.md) for the architecture and protocol guide. The backend lives in the sibling [`FFXIFriendListServer`](https://github.com/Tanyrus/FFXIFriendListServer) repository (FastAPI + PostgreSQL).
+
 ## Features
 
 ### Core Friend Management
@@ -129,7 +131,7 @@ A comprehensive friend list management addon for FFXI private servers using the 
    - Add the addon to your `scripts/default.txt` to load automatically
    - Preserve your existing configuration and settings
 
-**Note**: When the folder browser appears, select your Ashita root directory - this is the folder that **CONTAINS** the `addons`, `scripts`, and `config` folders. For Horizon XI, this is typically the `Game` folder.
+**Note**: When the folder browser appears, select your **Ashita root directory** — this is the folder that **CONTAINS** the `addons/`, `scripts/`, and `config/` folders. For Horizon XI, this is the **`Game`** folder of your Horizon XI install (the one that has `addons`, `scripts`, and `config` inside it). It is **not** the folder containing the FFXI executable, and it is not the `Horizon` parent folder.
 
 ### Manual Installation
 
@@ -152,7 +154,7 @@ You can override default sounds and icons by placing custom files in the config 
 - `config/addons/FFXIFriendList/sounds/` - Custom notification sounds (.wav)
 - `config/addons/FFXIFriendList/images/` - Custom icons (.png)
 
-See the README.txt in the config folder for available file names.
+**File naming**: place a custom file with the same filename as the built-in asset to override it. The built-in asset names live in `assets/sounds/` and `assets/icons/` of the addon folder — copy a filename from there to override that specific sound or icon.
 
 ### Realm Detection
 
@@ -240,8 +242,15 @@ Alternatively, use the command:
 
 - **Check Ashita version**: Ensure you're using Ashita v4
 - **Check addon location**: Verify `FFXIFriendList.lua` is in the `addons/FFXIFriendList` directory
-- **Check Ashita logs**: Look for error messages in Ashita's log files
+- **Check Ashita logs**: Look for error messages in Ashita's log files (typically `<Ashita Root>/logs/`)
 - **Reload addon**: Try `/addon reload FFXIFriendList`
+
+### Common Errors
+
+- **"API key invalid" / repeated auth failures** — the saved API key is no longer valid on the server. Delete `apiKey` from `config/addons/FFXIFriendList/settings.lua` (or the whole settings file to start fresh) and reload the addon. The plugin will re-issue a new key via the device-code flow.
+- **"Server unreachable" / connection retries** — verify your internet connection, then check the server URL in `core/ServerConfig.lua` (defaults to staging). If you're behind a firewall, the addon needs outbound HTTPS (443) and WSS (443) to `app.ffxifriendlist.com` (or `app-staging.ffxifriendlist.com`).
+- **Friends list is empty even though you have friends** — open the friend list once and wait ~5 seconds for the WebSocket to deliver the snapshot. If the snapshot never arrives, look for WS errors in the Ashita log; reconnect with `/fl` close + reopen, or `/addon reload FFXIFriendList`.
+- **Realm not detected** — open the addon and pick your realm manually in the Server Selection UI. If your server isn't in the list, file an issue.
 
 ## Support
 

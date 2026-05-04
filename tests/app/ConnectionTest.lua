@@ -69,7 +69,7 @@ local function testConnectionServerSelection()
     
     conn:clearSavedServer()
     assert(not conn:hasSavedServer(), "Should not have saved server after clearing")
-    assert(conn:getBaseUrl() == "https://api.horizonfriendlist.com", "Should return default URL")
+    assert(conn:getBaseUrl() == "https://app.ffxifriendlist.com", "Should return default URL")
     
     return true
 end

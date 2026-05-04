@@ -4,16 +4,30 @@
 
 local M = {}
 
--- Default server URL - used when no saved URL is available
--- This value may change between releases (e.g., api.* -> api2.*)
-M.DEFAULT_SERVER_URL = "https://api2.horizonfriendlist.com"
+-- Environment: "production" or "staging"
+-- Change this value to switch the plugin between environments.
+M.ENVIRONMENT = "staging"
+
+-- Server URLs per environment
+M.URLS = {
+    production = "https://app.ffxifriendlist.com",
+    staging    = "https://app-staging.ffxifriendlist.com",
+}
+
+-- Default server URL - derived from the active environment
+M.DEFAULT_SERVER_URL = M.URLS[M.ENVIRONMENT] or M.URLS.production
 
 -- WebSocket path (appended to server URL)
 M.WS_PATH = "/ws"
 
+-- Get the base URL for the active environment
+function M.getBaseUrl()
+    return M.URLS[M.ENVIRONMENT] or M.URLS.production
+end
+
 -- Build full WebSocket URL from base URL
 function M.getWsUrl(baseUrl)
-    baseUrl = baseUrl or M.DEFAULT_SERVER_URL
+    baseUrl = baseUrl or M.getBaseUrl()
     -- Convert https:// to wss://
     local wsUrl = baseUrl:gsub("^https://", "wss://"):gsub("^http://", "ws://")
     return wsUrl .. M.WS_PATH

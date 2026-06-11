@@ -303,7 +303,10 @@ function M.Friends:handleRefreshResponse(success, response)
     local decodeTime = stateUpdateStartMs - decodeStartMs
     
     self.friendList:clear()
-    
+
+    -- Collected for the online-state diff engine (baseline seed / gap reconcile).
+    local statuses = {}
+
     -- New server returns { friends: FriendInfo[] }
     local friends = result.friends or {}
     for _, friendData in ipairs(friends) do
@@ -341,10 +344,17 @@ function M.Friends:handleRefreshResponse(success, response)
         status.rank = friend.rank or ""
         status.lastSeenAt = friend.lastSeenAt
         status.showOnlineStatus = true
-        
+
         self.friendList:updateFriendStatus(status)
+        table.insert(statuses, status)
     end
-    
+
+    -- Feed the diff engine: the first refresh seeds the online-state baseline
+    -- silently; a gap-triggered reconcile diffs against it and surfaces any
+    -- transitions we missed while WS events were dropped. Shared with the WS
+    -- snapshot path so both agree on what is "new".
+    self:checkForStatusChanges(statuses)
+
     self.state = "idle"
     self.lastError = nil
     self.lastUpdatedAt = getTime(self)

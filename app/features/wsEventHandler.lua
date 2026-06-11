@@ -73,8 +73,44 @@ end
 -- Main event handler function (called by App.lua which gets events from WsEventRouter)
 -- Signature matches router callback: (payload, eventType, seq, timestamp)
 function M.WsEventHandler:handleEvent(payload, eventType, seq, timestamp)
+    -- Detect missed events via the per-event sequence number BEFORE dispatch.
+    self:_trackSeq(eventType, seq)
     -- Call internal handler with appropriate event type
     self:_dispatch(eventType, payload)
+end
+
+-- Track the WS event sequence and reconcile via a one-shot HTTP refresh when a
+-- forward gap reveals we missed events (presence updates are WS-only, so a gap
+-- otherwise leaves stale online/offline state). connected/friends_snapshot are
+-- full re-syncs: they reset the baseline and are never treated as a gap, so a
+-- reconnect's lower seq is not mistaken for a missed event.
+function M.WsEventHandler:_trackSeq(eventType, seq)
+    if eventType == "connected" or eventType == "friends_snapshot" then
+        self.lastSeq = (type(seq) == "number") and seq or nil
+        return
+    end
+
+    if type(seq) ~= "number" then
+        return
+    end
+
+    local last = self.lastSeq
+    self.lastSeq = seq
+    if last ~= nil and seq > last + 1 then
+        self:_requestReconcile()
+    end
+end
+
+-- One-shot reconcile: pull the authoritative friend list over HTTP. friends:refresh
+-- is already guarded (connection check + in-flight dedup), so repeated gaps coalesce.
+function M.WsEventHandler:_requestReconcile()
+    local friends = self.deps.friends
+    if friends and friends.refresh then
+        if self.logger and self.logger.info then
+            self.logger.info("[WsEventHandler] WS sequence gap detected; reconciling via HTTP refresh")
+        end
+        friends:refresh()
+    end
 end
 
 -- Internal dispatch by event type

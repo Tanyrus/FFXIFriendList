@@ -168,6 +168,40 @@ local function testGraceWindowSuppressesBurstAfterConnected()
     return true
 end
 
+-- A forward gap in the per-event seq means we missed events; trigger a one-shot
+-- HTTP friends:refresh() to reconcile stale presence.
+local function testSeqGapTriggersReconcileRefresh()
+    local handler, friends = setup()
+    local refreshCount = 0
+    friends.refresh = function() refreshCount = refreshCount + 1; return true end
+
+    handler:handleEvent({}, "connected", 1)
+    handler:handleEvent({ accountId = "a1", characterName = "alice" }, "friend_online", 2)
+    assert(refreshCount == 0, "contiguous seq must not reconcile, got " .. refreshCount)
+
+    -- seq jumps 2 -> 5 (missed 3 and 4).
+    handler:handleEvent({ accountId = "a1" }, "friend_offline", 5)
+    assert(refreshCount == 1, "a seq gap should trigger exactly one reconcile refresh, got " .. refreshCount)
+    return true
+end
+
+-- A reconnect resets the seq baseline (new session) and the snapshot reconciles
+-- on its own; the lower seq must NOT be mistaken for a gap.
+local function testReconnectSeqResetDoesNotReconcile()
+    local handler, friends = setup()
+    local refreshCount = 0
+    friends.refresh = function() refreshCount = refreshCount + 1; return true end
+
+    handler:handleEvent({}, "connected", 100)
+    handler:handleEvent({ accountId = "a1", characterName = "alice" }, "friend_online", 101)
+    -- Reconnect: new session, seq restarts low; snapshot is the reconcile.
+    handler:handleEvent({}, "connected", 1)
+    handler:handleEvent(snapshot({ { accountId = "a1", name = "alice", online = true } }), "friends_snapshot", 2)
+    handler:handleEvent({ accountId = "a1", characterName = "alice" }, "friend_online", 3)
+    assert(refreshCount == 0, "reconnect/snapshot must not trigger gap reconcile, got " .. refreshCount)
+    return true
+end
+
 -- ------------------------------------------------------------------ runner ---
 local function run()
     local tests = {
@@ -175,6 +209,8 @@ local function run()
         { name = "testGenuineOfflineToOnlineToasts", fn = testGenuineOfflineToOnlineToasts },
         { name = "testOfflineThenOnlineRoundTrip", fn = testOfflineThenOnlineRoundTrip },
         { name = "testGraceWindowSuppressesBurstAfterConnected", fn = testGraceWindowSuppressesBurstAfterConnected },
+        { name = "testSeqGapTriggersReconcileRefresh", fn = testSeqGapTriggersReconcileRefresh },
+        { name = "testReconnectSeqResetDoesNotReconcile", fn = testReconnectSeqResetDoesNotReconcile },
     }
     local passed, failed = 0, 0
     for _, t in ipairs(tests) do

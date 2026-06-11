@@ -1243,6 +1243,36 @@ function M.Friends:checkForStatusChanges(currentStatuses)
     self.previousOnlineStatus = currentOnlineStatus
 end
 
+-- Records a live "friend online" event in the online-state map and reports
+-- whether it is a genuine offline->online transition worth notifying about.
+-- Suppresses notifications before the baseline scan is established and for
+-- friends already known to be online (reconnect re-sync re-sends the full set).
+-- Shares previousOnlineStatus/initialStatusScanComplete with checkForStatusChanges
+-- so the snapshot (bulk) and live (per-event) paths agree on what is "new".
+function M.Friends:registerFriendOnline(characterName)
+    local key = string.lower(characterName or "")
+    if key == "" then return false end
+
+    local wasPreviouslyOnline = self.previousOnlineStatus[key] == true
+    self.previousOnlineStatus[key] = true
+
+    -- No baseline yet: we cannot tell new-online from already-online, stay quiet.
+    if not self.initialStatusScanComplete then
+        return false
+    end
+
+    -- Only a true offline(or unknown)->online flip is worth a toast.
+    return not wasPreviouslyOnline
+end
+
+-- Records a live "friend offline" event so a later return to online is detected
+-- as a genuine transition by registerFriendOnline.
+function M.Friends:registerFriendOffline(characterName)
+    local key = string.lower(characterName or "")
+    if key == "" then return end
+    self.previousOnlineStatus[key] = false
+end
+
 -- Check for new friend requests and trigger notifications
 function M.Friends:checkForNewFriendRequests(incomingRequests)
     if not incomingRequests then

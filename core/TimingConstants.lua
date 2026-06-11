@@ -19,6 +19,11 @@ M.MAX_RETRIES = 3
 M.WS_BASE_RECONNECT_DELAY_MS = 1000
 M.WS_MAX_RECONNECT_DELAY_MS = 60000
 
+-- After (re)connect the server re-sends friend_online for every online friend
+-- (plus a friends_snapshot). Suppress "friend online" toasts for this long so
+-- the re-sync burst is not mistaken for fresh online events.
+M.WS_ONLINE_RESYNC_GRACE_MS = 5000
+
 -- Notification display durations
 M.NOTIFICATION_DEFAULT_DURATION_MS = 5000
 M.NOTIFICATION_LONG_DURATION_MS = 8000

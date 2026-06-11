@@ -5,6 +5,7 @@
 local WsEnvelope = require("protocol.WsEnvelope")
 local FriendList = require("core.friendlist")
 local utils = require("modules.friendlist.components.helpers.utils")
+local TimingConstants = require("core.TimingConstants")
 
 local M = {}
 
@@ -120,6 +121,20 @@ function M.WsEventHandler:_handleConnected(payload)
     if self.deps.connection and self.deps.connection.setConnected then
         self.deps.connection:setConnected()
     end
+
+    -- Open the re-sync grace window: the server is about to re-send the full
+    -- online set, which must not be toasted as fresh online events.
+    self:_openResyncGraceWindow()
+end
+
+-- Open the online re-sync grace window (suppresses friend_online toasts).
+function M.WsEventHandler:_openResyncGraceWindow()
+    self.onlineResyncGraceUntil = self:_getTime() + TimingConstants.WS_ONLINE_RESYNC_GRACE_MS
+end
+
+-- True while online toasts should be suppressed as part of a reconnect re-sync.
+function M.WsEventHandler:_inResyncGraceWindow()
+    return self.onlineResyncGraceUntil ~= nil and self:_getTime() < self.onlineResyncGraceUntil
 end
 
 -- Handle 'friends_snapshot' event - full friend list
@@ -133,11 +148,30 @@ function M.WsEventHandler:_handleFriendsSnapshot(payload)
     end
     
     local friendsData = payload.friends or {}
-    
+
     for _, friendData in ipairs(friendsData) do
         self:_addFriendFromPayload(friendData)
     end
-    
+
+    -- Seed/refresh the online-state baseline from the snapshot. The first call
+    -- establishes the baseline silently; later snapshots (reconnect) diff against
+    -- it and toast only genuine transitions. This routes the bulk re-sync through
+    -- the same diff engine the live friend_online path uses.
+    if friends.checkForStatusChanges then
+        local statuses = {}
+        for _, friendData in ipairs(friendsData) do
+            table.insert(statuses, {
+                characterName = friendData.characterName,
+                displayName = friendData.characterName,
+                isOnline = friendData.isOnline == true,
+            })
+        end
+        friends:checkForStatusChanges(statuses)
+    end
+
+    -- A snapshot may precede a friend_online re-send burst; suppress those.
+    self:_openResyncGraceWindow()
+
     -- Update last updated timestamp
     friends.lastUpdatedAt = self:_getTime()
     friends.state = "idle"
@@ -190,9 +224,17 @@ function M.WsEventHandler:_handleFriendOnline(payload)
     
     friends.friendList:updateFriendStatus(status)
     friends.lastUpdatedAt = self:_getTime()
-    
-    -- Trigger notification
-    self:_notifyFriendOnline(characterName)
+
+    -- Only toast on a genuine offline->online transition. The online-state map
+    -- (shared with the snapshot baseline) suppresses re-sync re-sends, and the
+    -- grace window covers the burst right after (re)connect.
+    local isGenuineTransition = true
+    if friends.registerFriendOnline then
+        isGenuineTransition = friends:registerFriendOnline(characterName)
+    end
+    if isGenuineTransition and not self:_inResyncGraceWindow() then
+        self:_notifyFriendOnline(characterName)
+    end
 end
 
 -- Handle 'friend_offline' event
@@ -220,10 +262,15 @@ function M.WsEventHandler:_handleFriendOffline(payload)
             status.isAway = false
             status.lastSeenAt = lastSeenAt
             friends.friendList:updateFriendStatus(status)
+            -- Keep the online-state map in sync so a later return-to-online is
+            -- recognised as a genuine transition.
+            if friends.registerFriendOffline then
+                friends:registerFriendOffline(friend.name)
+            end
             break
         end
     end
-    
+
     friends.lastUpdatedAt = self:_getTime()
 end
 

@@ -404,18 +404,20 @@ function M.Connection:getHeaders(characterName)
         headers["X-Realm-Id"] = realmIdForHeader
     end
     
-    -- Add Authorization header (Bearer token format)
-    if characterName ~= "" then
-        local apiKey = self:getApiKey(characterName)
-        if apiKey ~= "" then
-            headers["Authorization"] = "Bearer " .. apiKey
-        else
-            if self.logger and self.logger.warn then
-                self.logger.warn("[Connection] Headers: No API key for " .. characterName)
-            end
+    -- Add Authorization header (Bearer token format). The API key is
+    -- ACCOUNT-level, so attach it whenever we have one, regardless of whether a
+    -- character name is available. Gating this on characterName ~= "" caused
+    -- intermittent "API connected but WS won't authenticate" failures on
+    -- zone/reload, when the name isn't known yet but the token is.
+    local apiKey = self:getApiKey(characterName)
+    if apiKey ~= "" then
+        headers["Authorization"] = "Bearer " .. apiKey
+    else
+        if self.logger and self.logger.warn then
+            self.logger.warn("[Connection] Headers: No API key available")
         end
     end
-    
+
     return headers
 end
 

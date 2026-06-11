@@ -648,12 +648,9 @@ ashita.events.register('command', 'ffxifriendlist_command', function(e)
         if #command_args > 1 then
             local subcmd = command_args[2]
             
-            -- /fl debug - toggle debug window (if implemented)
-            if subcmd == "debug" then
-                -- TODO: Implement debug window toggle
-                return
-            end
-            
+            -- NOTE: '/fl debug <0-4>' (set log level) is handled below; do not add
+            -- an early stub here or it will dead-end before the real handler.
+
             -- /fl perf - print performance summary (if implemented)
             if subcmd == "perf" then
                 -- TODO: Implement performance summary

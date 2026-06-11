@@ -27,6 +27,7 @@ addTest("tests.app.NotesTest")
 addTest("tests.app.BlocklistTest")
 addTest("tests.app.WsEventHandlerTest")
 addTest("tests.app.WsReconnectResyncTest")
+addTest("tests.app.BackoffTest")
 -- TODO: Add more tests:
 -- addTest("tests.app.ServerListTest")
 -- addTest("tests.app.PreferencesTest")

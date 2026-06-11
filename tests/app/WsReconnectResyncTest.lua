@@ -202,9 +202,31 @@ local function testReconnectSeqResetDoesNotReconcile()
     return true
 end
 
+-- getState() caches the rebuilt friends array and only rebuilds when the
+-- friend list actually mutates (FriendList.revision), not every frame.
+local function testGetStateCachesUntilMutation()
+    local handler, friends = setup()
+    handler:_dispatch("friends_snapshot", snapshot({
+        { accountId = "a1", name = "alice", online = true },
+    }))
+
+    local s1 = friends:getState()
+    local s2 = friends:getState()
+    assert(s1.friends == s2.friends, "friends array should be reused while unchanged (same table)")
+
+    -- A mutation must invalidate the cache (new array).
+    handler:_dispatch("friend_offline", { accountId = "a1" })
+    local s3 = friends:getState()
+    assert(s3.friends ~= s1.friends, "friends array should be rebuilt after a mutation")
+    -- And it must reflect the change.
+    assert(s3.friends[1].isOnline == false, "rebuilt snapshot should reflect offline state")
+    return true
+end
+
 -- ------------------------------------------------------------------ runner ---
 local function run()
     local tests = {
+        { name = "testGetStateCachesUntilMutation", fn = testGetStateCachesUntilMutation },
         { name = "testReconnectReSendDoesNotToastOnlineFriend", fn = testReconnectReSendDoesNotToastOnlineFriend },
         { name = "testGenuineOfflineToOnlineToasts", fn = testGenuineOfflineToOnlineToasts },
         { name = "testOfflineThenOnlineRoundTrip", fn = testOfflineThenOnlineRoundTrip },

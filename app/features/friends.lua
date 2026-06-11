@@ -141,34 +141,46 @@ local function formatJobFromState(state)
 end
 
 function M.Friends:getState()
-    local rawFriends = self.friendList:getFriends()
-    local friendsWithPresence = {}
-    
-    for _, friend in ipairs(rawFriends) do
-        local status = self.friendList:getFriendStatus(friend.name)
-        
-        local friendCopy = {
-            name = friend.name,
-            friendedAs = friend.friendedAs,
-            linkedCharacters = friend.linkedCharacters,
-            isOnline = status and status.isOnline or false,
-            isAway = status and status.isAway or false,
-            isPending = friend.isPending or false,
-            friendAccountId = friend.friendAccountId,
-            sharesOnlineStatus = status and status.showOnlineStatus ~= false or true,
-            lastSeenAt = status and status.lastSeenAt or 0,
-            realmId = friend.realmId,
-            presence = {
-                job = status and status.job or "",
-                zone = status and status.zone or "",
-                rank = status and status.rank or "",
-                nation = status and status.nation or -1,
-                lastSeenAt = status and status.lastSeenAt or 0
+    -- The friends array (with per-friend presence) is the expensive part to
+    -- rebuild and getState() is called every frame. Rebuild it only when the
+    -- underlying FriendList actually mutates (tracked by its monotonic revision),
+    -- which matters at the 1000-friend cap. The cheap fields below (requests,
+    -- state, lastError) are always read fresh.
+    local revision = self.friendList.revision
+    local friendsWithPresence
+    if self._friendsCache ~= nil and self._friendsCacheRevision == revision then
+        friendsWithPresence = self._friendsCache
+    else
+        friendsWithPresence = {}
+        local rawFriends = self.friendList:getFriends()
+        for _, friend in ipairs(rawFriends) do
+            local status = self.friendList:getFriendStatus(friend.name)
+
+            local friendCopy = {
+                name = friend.name,
+                friendedAs = friend.friendedAs,
+                linkedCharacters = friend.linkedCharacters,
+                isOnline = status and status.isOnline or false,
+                isAway = status and status.isAway or false,
+                isPending = friend.isPending or false,
+                friendAccountId = friend.friendAccountId,
+                sharesOnlineStatus = status and status.showOnlineStatus ~= false or true,
+                lastSeenAt = status and status.lastSeenAt or 0,
+                realmId = friend.realmId,
+                presence = {
+                    job = status and status.job or "",
+                    zone = status and status.zone or "",
+                    rank = status and status.rank or "",
+                    nation = status and status.nation or -1,
+                    lastSeenAt = status and status.lastSeenAt or 0
+                }
             }
-        }
-        table.insert(friendsWithPresence, friendCopy)
+            table.insert(friendsWithPresence, friendCopy)
+        end
+        self._friendsCache = friendsWithPresence
+        self._friendsCacheRevision = revision
     end
-    
+
     return {
         friends = friendsWithPresence,
         incomingRequests = self.incomingRequests,

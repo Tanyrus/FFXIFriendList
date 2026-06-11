@@ -5,6 +5,7 @@
 
 local TimingConstants = require("core.TimingConstants")
 local Limits = require("constants.limits")
+local Backoff = require("core.Backoff")
 
 local M = {}
 
@@ -142,11 +143,11 @@ function M.WsConnectionManager:tick()
         self.nextAttemptAt = nil
         self:_attemptConnect()
     end
-    
-    -- Tick the underlying WsClient (non-blocking message processing only)
-    if self.wsClient and self.state == M.State.CONNECTED then
-        self.wsClient:tickMessages()
-    end
+
+    -- NOTE: the WsClient message/connect pumps are owned by App.tick (it calls
+    -- wsClient:tickConnect() + wsClient:tickMessages() once per frame). This
+    -- manager used to also call tickMessages() while CONNECTED, which double-
+    -- processed the inbound queue every frame. Single ownership lives in App.
 end
 
 -- Get current state
@@ -269,16 +270,12 @@ function M.WsConnectionManager:_handleConnectFailed(errorMsg)
 end
 
 function M.WsConnectionManager:_calculateBackoff()
-    -- Exponential backoff: base * 2^(attempt-1)
-    local delay = self.config.baseDelayMs * (2 ^ (self.attemptCount - 1))
-    delay = math.min(delay, self.config.maxDelayMs)
-    
-    -- Add jitter: ±jitterPercent
-    local jitterRange = delay * self.config.jitterPercent
-    local jitter = (math.random() * 2 - 1) * jitterRange
-    delay = math.floor(delay + jitter)
-    
-    return math.max(100, delay)  -- Minimum 100ms
+    return Backoff.compute(self.attemptCount, {
+        baseMs = self.config.baseDelayMs,
+        maxMs = self.config.maxDelayMs,
+        jitterPercent = self.config.jitterPercent,
+        minMs = 100,
+    })
 end
 
 function M.WsConnectionManager:_updateStatus()

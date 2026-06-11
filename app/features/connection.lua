@@ -4,6 +4,7 @@ local Envelope = require("protocol.Envelope")
 local Endpoints = require("protocol.Endpoints")
 local ServerConfig = require("core.ServerConfig")
 local VersionCore = require("core.versioncore")
+local Backoff = require("core.Backoff")
 
 M.ConnectionState = {
     Disconnected = "Disconnected",
@@ -520,13 +521,14 @@ function M.Connection:handleAuthResponse(success, response, characterName, fallb
     if not success then
         self:setFailed()
         self.lastError = response or "Network error"
-        -- Schedule retry with exponential backoff + jitter
+        -- Schedule retry with exponential backoff + jitter (shared helper)
         local attempt = math.max(1, self.retryAttemptCount + 1)
-        local delay = self.backoffBaseMs * (2 ^ (attempt - 1))
-        delay = math.min(delay, self.backoffMaxMs)
-        local jitterRange = math.floor(delay * 0.2)
-        local jitter = (math.random(0, jitterRange * 2) - jitterRange)
-        delay = math.max(250, delay + jitter)
+        local delay = Backoff.compute(attempt, {
+            baseMs = self.backoffBaseMs,
+            maxMs = self.backoffMaxMs,
+            jitterPercent = 0.2,
+            minMs = 250,
+        })
         self.nextAutoConnectAt = self._timeMs() + delay
         self.retryAttemptCount = attempt
         self.autoConnectAttempted = false

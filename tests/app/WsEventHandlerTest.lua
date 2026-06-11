@@ -311,13 +311,6 @@ local function testFriendRequestReceivedNormalization()
     
     print("✓ testFriendRequestReceivedNormalization passed")
 end
-    
-    assert(payload.requestId ~= nil, "Should have requestId")
-    assert(payload.fromAccountId ~= nil, "Should have fromAccountId")
-    assert(payload.fromCharacterName ~= nil, "Should have fromCharacterName")
-    assert(payload.createdAt ~= nil, "Should have createdAt")
-    print("✓ testFriendRequestReceivedPayloadFields passed")
-end
 
 local function testBlockedPayloadFields()
     local payload = {

@@ -121,6 +121,9 @@ function M.Connection.new(deps)
     self.autoConnectInProgress = false
     self.lastCharacterName = ""
     self.retryAttemptCount = 0
+    -- Whether we've already shown the user a "trouble connecting" notice for the
+    -- current failure streak (so we echo once, not on every backoff retry).
+    self.authFailureEchoed = false
     self.nextAutoConnectAt = nil
     self.backoffBaseMs = 2000
     self.backoffMaxMs = 60000
@@ -527,6 +530,14 @@ function M.Connection:handleAuthResponse(success, response, characterName, fallb
         self.nextAutoConnectAt = self._timeMs() + delay
         self.retryAttemptCount = attempt
         self.autoConnectAttempted = false
+        -- Surface ONE user-facing notice once the failures persist, instead of
+        -- silently retrying forever. Reset on a successful connect (below).
+        if attempt >= 3 and not self.authFailureEchoed then
+            self.authFailureEchoed = true
+            if print then
+                print("[FFXIFriendList] Trouble reaching the friend list server - retrying in the background...")
+            end
+        end
         if self.logger and self.logger.warn then
             self.logger.warn(string.format("[Connection] Auth failed; retry in %.1fs (attempt %d)", delay / 1000, attempt))
         end
@@ -584,6 +595,7 @@ function M.Connection:handleAuthResponse(success, response, characterName, fallb
     self.lastSetActiveAt = nil
     -- Reset backoff on success
     self.retryAttemptCount = 0
+    self.authFailureEchoed = false
     self.nextAutoConnectAt = nil
     
     -- If we have a character ID, call set-active to ensure this is the active character

@@ -1024,10 +1024,28 @@ function M.RenderTaggedFriendSections(dataModule, callbacks)
     imgui.Spacing()
     
     if #friends == 0 then
-        imgui.Text("No friends" .. (filterText ~= "" and " matching filter" or ""))
+        if filterText ~= "" then
+            imgui.Text("No friends matching filter")
+        else
+            -- Distinguish empty / loading / error instead of always "No friends".
+            local friendsState = dataModule.GetFriendsState and dataModule.GetFriendsState() or "idle"
+            local lastError = dataModule.GetLastError and dataModule.GetLastError() or nil
+            if friendsState == "syncing" then
+                imgui.TextDisabled("Loading friends...")
+            elseif friendsState == "error" or lastError then
+                local msg = (type(lastError) == "table" and lastError.message) or "Couldn't reach the server"
+                imgui.TextColored({0.95, 0.55, 0.45, 1.0}, "Couldn't load friends")
+                imgui.TextDisabled(tostring(msg))
+                if imgui.SmallButton("Retry##friends_error") then
+                    if callbacks and callbacks.onRefresh then callbacks.onRefresh() end
+                end
+            else
+                imgui.TextDisabled("No friends yet - add one above")
+            end
+        end
         return
     end
-    
+
     local tagOrder = {}
     if tagsFeature then
         tagOrder = tagsFeature:getAllTags() or {}

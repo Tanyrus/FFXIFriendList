@@ -166,7 +166,29 @@ function M.Render(state, dataModule, onRefresh, onLockChanged, onViewToggle, sho
     end
     
     imgui.PopStyleVar(2)
-    
+
+    -- Subtle realtime (WebSocket) status. Only shown when NOT healthily connected
+    -- so it stays out of the way; never gates the window. FAILED gets a manual
+    -- reconnect button since the manager has stopped retrying.
+    local wsState = dataModule.GetWsConnectionState and dataModule.GetWsConnectionState() or "CONNECTED"
+    if wsState ~= "CONNECTED" and wsState ~= "DISCONNECTED" then
+        local statusText, statusDetail = dataModule.GetWsStatus()
+        if wsState == "FAILED" then
+            imgui.TextColored({0.90, 0.50, 0.45, 1.0}, "Realtime updates offline")
+            imgui.SameLine(0, s(6))
+            if imgui.SmallButton("Reconnect##ws_retry") then
+                if dataModule.RetryWsConnection then dataModule.RetryWsConnection() end
+            end
+        else
+            -- CONNECTING / BACKING_OFF: show a quiet reconnecting hint + countdown.
+            local label = statusText or "Reconnecting"
+            if statusDetail and statusDetail ~= "" then
+                label = label .. " (" .. statusDetail .. ")"
+            end
+            imgui.TextColored({0.85, 0.75, 0.40, 1.0}, label)
+        end
+    end
+
     imgui.Dummy({0, s(3)})
 end
 

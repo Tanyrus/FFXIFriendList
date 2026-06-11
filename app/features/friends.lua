@@ -861,24 +861,13 @@ function M.Friends:handlePCUpdate(packet)
     if not packet or packet.type ~= "pc_update" then
         return
     end
-    
-    -- Skip during zone cooldown
-    if self.lastZoneOnlyUpdateAt then
-        local timeSinceZoneUpdate = getTime(self) - self.lastZoneOnlyUpdateAt
-        if timeSinceZoneUpdate < 4000 then
-            return  -- Skip during zone cooldown
-        end
-    end
-    
-    -- Track anonymous status from packet
-    local currentAnon = packet.isAnonymous
-    
-    if self.lastKnownAnonStatus ~= currentAnon then
-        self.lastKnownAnonStatus = currentAnon
-        
-        self.presenceChangedAt = getTime(self)
-        self:updatePresence()
-    end
+
+    -- NOTE: 0x00D (PC Update) is BROADCAST for every nearby PC, so its anonymous
+    -- bit reflects whoever's packet just arrived — not necessarily the local
+    -- player. Driving our own /anon status from it caused it to flip to false in
+    -- crowded zones (e.g. Port Jeuno) as non-anon passers-by updated. Self-anon is
+    -- now driven solely by the authoritative self packet 0x037 (handleUpdateChar).
+    -- 0x00D no longer touches lastKnownAnonStatus.
 end
 
 function M.Friends:handleUpdateChar(packet)

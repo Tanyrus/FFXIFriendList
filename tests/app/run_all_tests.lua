@@ -70,9 +70,10 @@ print(string.format("Total: %d test suites passed, %d failed", totalPassed, tota
 
 if totalFailed == 0 then
     print("All tests passed!")
-    return true
+    -- Honour "exit 0 = pass": set the process exit code, not just a return value.
+    os.exit(0)
 else
     print("Some tests failed!")
-    return false
+    os.exit(1)
 end
 

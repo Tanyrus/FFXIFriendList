@@ -62,9 +62,9 @@ local function testFriendsRefreshResponse()
     local deps = createFakeDeps()
     local friends = Friends.Friends.new(deps)
     
-    -- Simulate successful refresh response
-    local responseJson = '{"protocolVersion":"2.0.0","type":"FriendsListResponse","success":true,"payload":{"friends":[{"name":"Friend1","friendedAs":"Friend1"}],"serverTime":1234567890}}'
-    
+    -- Live envelope shape: { success, data:{ friends:[{accountId, characterName, ...}] }, timestamp }
+    local responseJson = '{"success":true,"data":{"friends":[{"accountId":"acc-1","characterName":"Friend1","isOnline":true}]},"timestamp":1234567890}'
+
     friends:refresh()
     local requests = deps.net.getRequests()
     assert(#requests == 1, "Should have one request")
@@ -112,13 +112,19 @@ end
 local function testFriendsRemoveFriend()
     local deps = createFakeDeps()
     local friends = Friends.Friends.new(deps)
-    
+
+    -- removeFriend resolves the account id from the local list, so the friend
+    -- must exist before we can remove it.
+    local f = FriendList.Friend.new("Friend1", "Friend1")
+    f.friendAccountId = "acc-1"
+    friends.friendList:addFriend(f)
+
     deps.net.clearRequests()
     local success = friends:removeFriend("Friend1")
-    
+
     assert(success, "Should successfully start remove friend")
     assert(#deps.net.getRequests() == 1, "Should have made one request")
-    
+
     return true
 end
 

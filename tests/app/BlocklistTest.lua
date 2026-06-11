@@ -109,7 +109,7 @@ local function testBlocklistRefresh()
     
     local req = deps.net.getRequests()[1]
     assert(req.method == "GET", "Should use GET method")
-    assert(string.find(req.url, "/api/blocked"), "Should call blocked endpoint")
+    assert(string.find(req.url, "/api/block", 1, true), "Should call block endpoint")
     
     return true
 end
@@ -118,7 +118,8 @@ local function testBlocklistRefreshResponse()
     local deps = createFakeDeps()
     local blocklist = Blocklist.Blocklist.new(deps)
     
-    local responseJson = '{"protocolVersion":"2.0.0","type":"BlockedAccountsResponse","success":true,"blocked":[{"accountId":123,"displayName":"Player1","blockedAt":1234567890}],"count":1}'
+    -- Live envelope shape: { success, data:{ blocked:[...] }, timestamp }
+    local responseJson = '{"success":true,"data":{"blocked":[{"accountId":123,"displayName":"Player1","blockedAt":1234567890}]},"timestamp":1234567890}'
     
     blocklist:refresh()
     local requests = deps.net.getRequests()

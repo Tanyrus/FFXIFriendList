@@ -383,18 +383,9 @@ ashita.events.register('load', 'ffxifriendlist_load', function()
         hasSetHidden = true
     })
     
-    -- ServerSelection module - DISABLED: Now handled by friendlist and quickonline modules
-    -- local serverSelectionModule = require('modules.serverselection')
-    -- local _ = moduleRegistry.Register('serverSelection', {
-    --     module = serverSelectionModule,
-    --     settingsKey = 'serverSelectionSettings',
-    --     configKey = 'showServerSelection',
-    --     hasSetHidden = true
-    -- })
-    
-    -- Themes functionality is now integrated into the main window's Themes tab
-    -- No separate themes window module needed
-    
+    -- Server selection and Themes are integrated into the friendlist/quickonline
+    -- windows; there are no separate window modules for them.
+
     -- Presence selector (shown before character detection)
     local presenceSelectorModule = require('modules.presenceselector')
     local _ = moduleRegistry.Register('presenceSelector', {

@@ -1,3 +1,12 @@
+-- protocol/ContractChecks.lua
+--
+-- NOTE: this module is currently UNWIRED (nothing calls validateResponse) and is
+-- debug-only when enabled. The authoritative wire contract is what the live
+-- feature handlers actually read -- app/features/friends.lua, blocklist.lua,
+-- preferences.lua, wsEventHandler.lua, connection.lua -- NOT the shapes asserted
+-- here. Some validators below still described a retired wire shape; the ones that
+-- conflicted with the live handlers have been corrected. Trust the handler.
+
 local Endpoints = require('protocol.Endpoints')
 
 local M = {}
@@ -165,10 +174,12 @@ function M.validateFriendsList(response)
     local name = "FRIENDS_LIST"
     M.assertFields(name, response, {"friends"})
     M.assertArray(name, "friends", response.friends)
-    
+
     if response.friends and #response.friends > 0 then
         local firstFriend = response.friends[1]
-        M.assertFields(name .. ".friend", firstFriend, {"friendAccountId"})
+        -- Live shape (see friends.lua:handleRefreshResponse): accountId +
+        -- characterName. The old 'friendAccountId' field no longer exists.
+        M.assertFields(name .. ".friend", firstFriend, {"accountId", "characterName"})
     end
 end
 

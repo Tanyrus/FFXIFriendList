@@ -566,6 +566,83 @@ test("Single in-flight connection guard", function()
 end)
 
 --------------------------------------------------------------------------------
+-- WS lifecycle is reflected into the connection feature (item 1b)
+--------------------------------------------------------------------------------
+
+local function createMockConnection()
+    return {
+        realtimeStates = {},
+        realtimeState = nil,
+        setRealtimeState = function(self, s)
+            self.realtimeState = s
+            table.insert(self.realtimeStates, s)
+        end,
+        getRealtimeState = function(self) return self.realtimeState end,
+    }
+end
+
+local function newConnectedManager(mockTime, mockWs, mockConn)
+    local manager = WsConnectionManager.WsConnectionManager.new({
+        time = mockTime.get,
+        wsClient = mockWs,
+        logger = createMockLogger(),
+        connection = mockConn,
+    })
+    mockWs.simulateSuccess = true
+    manager:requestConnect()
+    manager:tick()  -- triggers connect -> success
+    return manager
+end
+
+test("connect success reflects 'connected' into connection feature", function()
+    local mockTime = createMockTime()
+    local mockWs = createMockWsClient()
+    local mockConn = createMockConnection()
+    local manager = newConnectedManager(mockTime, mockWs, mockConn)
+
+    assertEq(manager:getState(), "CONNECTED")
+    assertEq(mockConn:getRealtimeState(), "connected",
+        "manager should reflect connected realtime state")
+end)
+
+test("onConnectionLost reflects 'reconnecting' into connection feature", function()
+    local mockTime = createMockTime()
+    local mockWs = createMockWsClient()
+    local mockConn = createMockConnection()
+    local manager = newConnectedManager(mockTime, mockWs, mockConn)
+
+    -- Server force-closes a healthy connection.
+    mockWs.onCloseCallback("server closed")
+
+    assertEq(mockConn:getRealtimeState(), "reconnecting",
+        "after losing a live connection the connection feature should show reconnecting")
+end)
+
+test("max attempts reached reflects 'failed' into connection feature", function()
+    local mockTime = createMockTime()
+    local mockWs = createMockWsClient()
+    local mockConn = createMockConnection()
+    local manager = WsConnectionManager.WsConnectionManager.new({
+        time = mockTime.get,
+        wsClient = mockWs,
+        logger = createMockLogger(),
+        connection = mockConn,
+    })
+
+    mockWs.simulateError = "boom"
+    manager:requestConnect()
+    -- Drive enough attempts to exhaust maxAttempts (10).
+    for i = 1, 40 do
+        mockTime.advance(120000)
+        manager:tick()
+    end
+
+    assertEq(manager:getState(), "FAILED")
+    assertEq(mockConn:getRealtimeState(), "failed",
+        "exhausting reconnect attempts should reflect failed realtime state")
+end)
+
+--------------------------------------------------------------------------------
 -- Run Tests
 --------------------------------------------------------------------------------
 

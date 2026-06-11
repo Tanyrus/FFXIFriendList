@@ -104,6 +104,11 @@ function M.Connection.new(deps)
     self._timeMs = deps.time or function() return os.clock() * 1000 end
     
     self.state = M.ConnectionState.Disconnected
+    -- Realtime (WebSocket) health, tracked SEPARATELY from the auth/API `state`
+    -- above. The HTTP API stays reachable while the WS reconnects, so this must
+    -- NOT gate windows or flip isConnected() — it only drives a subtle indicator.
+    -- One of: "disconnected" | "connecting" | "connected" | "reconnecting" | "failed".
+    self.realtimeState = "disconnected"
     self.apiKey = ""  -- Single API key for the account
     self.savedServerId = nil
     self.savedServerBaseUrl = nil
@@ -164,8 +169,28 @@ function M.Connection:getState()
         isConnecting = self:isConnecting(),
         hasServer = self:hasSavedServer(),
         baseUrl = self:getBaseUrl(),
-        lastError = self.lastError
+        lastError = self.lastError,
+        realtimeState = self.realtimeState
     }
+end
+
+-- Realtime (WebSocket) health, independent of the auth/API state. Set by the
+-- WsConnectionManager as the socket connects/drops/reconnects. Purely
+-- informational: drives a subtle "reconnecting" hint, never gates windows.
+function M.Connection:setRealtimeState(realtimeState)
+    if realtimeState then
+        self.realtimeState = realtimeState
+    end
+end
+
+function M.Connection:getRealtimeState()
+    return self.realtimeState
+end
+
+-- True when realtime updates are flowing (WS connected). Distinct from
+-- isConnected() which reflects HTTP/API auth.
+function M.Connection:isRealtimeConnected()
+    return self.realtimeState == "connected"
 end
 
 function M.Connection:tick(dtSeconds)

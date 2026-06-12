@@ -1338,10 +1338,22 @@ function M.RenderServerNotDetectedWindow()
     M.PopTheme(themePushed)
 end
 
+local callbacksCache = nil
+local callbacksCacheApp = nil
+local callbacksCacheData = nil
+
 function M.GetCallbacks(dataModule)
     local app = _G.FFXIFriendListApp
-    
-    return {
+    -- These closures capture only `app` and `dataModule` (stable across frames)
+    -- plus module-level state, so cache the table and rebuild only when either
+    -- identity changes (e.g. app nil -> instance at boot). GetCallbacks is called
+    -- several times per frame and recursively from onRenderContextMenu, so this
+    -- avoids ~20 closure allocations each time.
+    if callbacksCache and callbacksCacheApp == app and callbacksCacheData == dataModule then
+        return callbacksCache
+    end
+
+    local callbacks = {
         onRefresh = function()
             if app and app.features and app.features.friends then
                 app.features.friends:refresh()
@@ -1512,6 +1524,10 @@ function M.GetCallbacks(dataModule)
             FriendContextMenu.Render(friend, state, M.GetCallbacks(dataModule))
         end,
     }
+    callbacksCache = callbacks
+    callbacksCacheApp = app
+    callbacksCacheData = dataModule
+    return callbacks
 end
 
 return M

@@ -849,10 +849,20 @@ function M.RenderCompactFriendsList(friends, sectionTag, dataModule, disableInte
 end
 
 -- Get callbacks for shared components (matches main window pattern)
+local callbacksCache = nil
+local callbacksCacheApp = nil
+local callbacksCacheData = nil
+
 function M.GetCallbacks(dataModule)
     local app = _G.FFXIFriendListApp
-    
-    return {
+    -- Closures capture only `app` and `dataModule` (stable across frames), so
+    -- cache and rebuild only when either identity changes. Called several times
+    -- per frame and from context menus.
+    if callbacksCache and callbacksCacheApp == app and callbacksCacheData == dataModule then
+        return callbacksCache
+    end
+
+    local callbacks = {
         onRefresh = function()
             if app and app.features and app.features.friends then
                 app.features.friends:refresh()
@@ -893,6 +903,10 @@ function M.GetCallbacks(dataModule)
         
         onSaveState = M.SaveWindowState,
     }
+    callbacksCache = callbacks
+    callbacksCacheApp = app
+    callbacksCacheData = dataModule
+    return callbacks
 end
 
 -- Save window state

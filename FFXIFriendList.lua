@@ -341,7 +341,6 @@ ashita.events.register('load', 'ffxifriendlist_load', function()
     
     -- Load and register UI modules
     local friendListModule = require('modules.friendlist')
-    local optionsModule = require('modules.options')
     local notificationsModule = require('modules.notifications')
     
     -- Register modules in registry
@@ -349,13 +348,6 @@ ashita.events.register('load', 'ffxifriendlist_load', function()
         module = friendListModule,
         settingsKey = 'friendListSettings',
         configKey = 'showFriendList',
-        hasSetHidden = true
-    })
-    
-    local _ = moduleRegistry.Register('options', {
-        module = optionsModule,
-        settingsKey = 'optionsSettings',
-        configKey = 'showOptions',
         hasSetHidden = true
     })
     

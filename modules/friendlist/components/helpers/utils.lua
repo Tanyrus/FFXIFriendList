@@ -95,25 +95,14 @@ function M.capitalizeName(name)
     if not name or name == "" then
         return name or ""
     end
-    
-    local result = ""
-    local capitalizeNext = true
-    
-    for i = 1, #name do
-        local char = string.sub(name, i, i)
-        if char == " " then
-            capitalizeNext = true
-            result = result .. char
-        else
-            if capitalizeNext then
-                result = result .. string.upper(char)
-                capitalizeNext = false
-            else
-                result = result .. string.lower(char)
-            end
-        end
-    end
-    
+
+    -- Title-case on space boundaries. Single-pass gsub instead of the old
+    -- per-character string concatenation (O(n^2)), which ran per visible row
+    -- per frame. Only a literal space is a word boundary, so apostrophe names
+    -- like "Tar'on" keep the post-apostrophe letter lowercase.
+    local result = name:lower()
+    result = result:gsub("^%a", string.upper)
+    result = result:gsub(" %a", string.upper)
     return result
 end
 

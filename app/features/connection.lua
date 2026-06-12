@@ -656,18 +656,11 @@ end
 -- Complete the connection process after auth and set-active
 function M.Connection:completeConnection(characterName)
     self:setConnected()
-    
-    local app = _G.FFXIFriendListApp
-    if app and not app._startupRefreshCompleted then
-        local App = require("app.App")
-        if App and App._triggerStartupRefresh then
-            App._triggerStartupRefresh(app)
-            app._startupRefreshCompleted = true
-            -- Ensure WS connection requested (in case we came online later)
-            if app.features and app.features.wsConnectionManager then
-                app.features.wsConnectionManager:requestConnect()
-            end
-        end
+
+    -- Post-connect orchestration (startup refresh, WS connect) is injected by
+    -- App.create as onConnected, so this feature does not require app.App.
+    if self.onConnected then
+        self.onConnected()
     end
 end
 

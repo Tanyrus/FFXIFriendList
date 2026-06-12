@@ -1,6 +1,7 @@
 local imgui = require('imgui')
 local PresenceStatusPicker = require('ui.widgets.PresenceStatusPicker')
 local nations = require('core.nations')
+local Colors = require('constants.colors')
 
 local M = {}
 
@@ -390,7 +391,7 @@ function M.RenderPresencePreview(prefs)
         if isInvisible then
             imgui.TextDisabled("Hidden")
         else
-            imgui.TextColored({0.4, 0.65, 0.85, 1.0}, "Hidden")
+            imgui.TextColored(Colors.STATUS.ANONYMOUS, "Hidden")
             end
         end
         
@@ -423,7 +424,7 @@ function M.RenderPresencePreview(prefs)
             if isInvisible then
                 imgui.TextDisabled("Hidden")
             else
-                imgui.TextColored({0.4, 0.65, 0.85, 1.0}, "Hidden")
+                imgui.TextColored(Colors.STATUS.ANONYMOUS, "Hidden")
             end
         end
         
@@ -444,7 +445,7 @@ function M.RenderPresencePreview(prefs)
             if isInvisible then
                 imgui.TextDisabled("Hidden")
             else
-                imgui.TextColored({0.4, 0.65, 0.85, 1.0}, "Hidden")
+                imgui.TextColored(Colors.STATUS.ANONYMOUS, "Hidden")
             end
         end
 end

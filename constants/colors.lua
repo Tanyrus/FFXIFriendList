@@ -25,6 +25,7 @@ M.STATUS = {
     AWAY = {1.0, 0.7, 0.2, 1.0},          -- Orange/amber
     INVISIBLE = {0.3, 0.3, 0.3, 1.0},     -- Dark gray
     ANONYMOUS = {0.4, 0.65, 0.85, 1.0},   -- Dark sky blue
+    ANONYMOUS_DIM = {0.3, 0.45, 0.6, 1.0},-- Dimmed anon (offline rows)
 }
 
 --------------------------------------------------------------------------------

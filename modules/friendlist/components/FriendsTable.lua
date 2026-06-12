@@ -7,6 +7,7 @@ local PresenceStatusPicker = require('ui.widgets.PresenceStatusPicker')
 local tagcore = require('core.tagcore')
 local nations = require('core.nations')
 local IconText = require('ui.helpers.IconText')
+local Colors = require('constants.colors')
 
 local M = {}
 
@@ -155,8 +156,8 @@ function M.RenderJobCell(friend)
         jobText = ""
     end
     
-    local anonColor = {0.4, 0.65, 0.85, 1.0}  -- Dark sky blue
-    local anonColorDim = {0.3, 0.45, 0.6, 1.0}  -- Dimmed for offline
+    local anonColor = Colors.STATUS.ANONYMOUS
+    local anonColorDim = Colors.STATUS.ANONYMOUS_DIM
     
     if jobText == "" then
         if isOnline then
@@ -181,8 +182,8 @@ function M.RenderZoneCell(friend)
         zoneText = ""
     end
     
-    local anonColor = {0.4, 0.65, 0.85, 1.0}  -- Dark sky blue
-    local anonColorDim = {0.3, 0.45, 0.6, 1.0}  -- Dimmed for offline
+    local anonColor = Colors.STATUS.ANONYMOUS
+    local anonColorDim = Colors.STATUS.ANONYMOUS_DIM
     
     if zoneText == "" then
         if isOnline then
@@ -212,8 +213,8 @@ function M.RenderNationRankCell(friend)
     end
     
     local rankNum = rank:match("%d+") or ""
-    local anonColor = {0.4, 0.65, 0.85, 1.0}  -- Dark sky blue
-    local anonColorDim = {0.3, 0.45, 0.6, 1.0}  -- Dimmed for offline
+    local anonColor = Colors.STATUS.ANONYMOUS
+    local anonColorDim = Colors.STATUS.ANONYMOUS_DIM
     
     -- Use nations module for icon lookup (supports both numeric and string values)
     local nationIcon = nations.getIconName(nation)

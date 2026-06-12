@@ -5,6 +5,7 @@ local tagcore = require('core.tagcore')
 local TagSelectDropdown = require('modules.friendlist.components.TagSelectDropdown')
 local FontManager = require('app.ui.FontManager')
 local nations = require('core.nations')
+local Colors = require('constants.colors')
 
 local M = {}
 
@@ -112,7 +113,7 @@ function M.Render(friend, state, callbacks)
         FontManager.withFont(fontSizePx, function()
         local displayName = friendName
         local isOnline = friend.isOnline
-        local anonColor = {0.4, 0.65, 0.85, 1.0}  -- Dark sky blue
+        local anonColor = Colors.STATUS.ANONYMOUS
         
         -- Name
         imgui.Text("Name: " .. utils.capitalizeName(getValueOrUnknown(displayName, "string")))

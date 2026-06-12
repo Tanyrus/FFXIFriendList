@@ -8,16 +8,14 @@ local M = {}
 M.PRIORITY = {
     Main = 1,
     QuickOnline = 2,
-    NoteEditor = 3,
-    ServerSelection = 4  -- Only shown when needed, highest priority to dismiss
+    NoteEditor = 3
 }
 
 -- Window ID to module name mapping
 local WINDOW_IDS = {
     NoteEditor = "noteEditor",
     QuickOnline = "quickOnline",
-    Main = "friendList",
-    ServerSelection = "serverSelection"
+    Main = "friendList"
 }
 
 -- Get window visibility and lock state
@@ -36,8 +34,7 @@ local function getWindowStates()
     local windowConfigs = {
         { name = "NoteEditor", moduleName = "noteEditor", configKey = "noteEditor" },
         { name = "QuickOnline", moduleName = "quickOnline", configKey = "quickOnline" },
-        { name = "Main", moduleName = "friendList", configKey = "friendList" },
-        { name = "ServerSelection", moduleName = "serverSelection", configKey = "serverSelection" }
+        { name = "Main", moduleName = "friendList", configKey = "friendList" }
     }
     
     for _, config in ipairs(windowConfigs) do

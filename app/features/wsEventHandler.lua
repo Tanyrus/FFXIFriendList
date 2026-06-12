@@ -245,19 +245,19 @@ function M.WsEventHandler:_handleFriendOnline(payload)
     status.isOnline = true
     status.isAway = isAway
     
-    -- Only update fields that are present in state
+    -- The server sends the COMPLETE privacy-filtered state, so apply it
+    -- authoritatively (same convention as the snapshot's _addFriendFromPayload):
+    -- a hidden field arrives as nil and is cleared, so turning off a privacy
+    -- toggle actually retracts already-shown data. (Requires the server to send
+    -- full state on this event — the Python backend does; the old Node server
+    -- sent partials, so ship this with the cutover.)
     if state then
-        if state.job ~= nil or state.subJob ~= nil or state.jobLevel ~= nil or state.subJobLevel ~= nil then
-            local formattedJob = formatJobFromState(state)
-            if formattedJob ~= "" then
-                status.job = formattedJob
-            end
-        end
-        if state.zone ~= nil then status.zone = state.zone end
-        if state.nation ~= nil then status.nation = state.nation end
-        if state.rank ~= nil then status.rank = state.rank end
+        status.job = formatJobFromState(state)
+        status.zone = state.zone or ""
+        status.nation = state.nation
+        status.rank = state.rank
     end
-    
+
     friends.friendList:updateFriendStatus(status)
     friends.lastUpdatedAt = self:_getTime()
 
@@ -324,21 +324,17 @@ function M.WsEventHandler:_handleFriendStateChanged(payload)
         if friend.friendAccountId == accountId then
             local status = friends.friendList:getFriendStatus(friend.name)
             if status then
-                -- Only update fields that are actually present in the partial state
-                -- This prevents zone-only updates from wiping job/nation data
-                
-                -- Check if ANY job field is present before formatting
-                if state.job ~= nil or state.subJob ~= nil or state.jobLevel ~= nil or state.subJobLevel ~= nil then
-                    local formattedJob = formatJobFromState(state)
-                    if formattedJob ~= "" then 
-                        status.job = formattedJob 
-                    end
-                end
-                
-                if state.zone ~= nil then status.zone = state.zone end
-                if state.nation ~= nil then status.nation = state.nation end
-                if state.rank ~= nil then status.rank = state.rank end
-                
+                -- The server sends the COMPLETE privacy-filtered state on every
+                -- friend_state_changed, so apply it authoritatively — a hidden
+                -- field arrives as nil and is cleared. This is what makes a privacy
+                -- toggle (e.g. shareLocation off) retract already-shown data on
+                -- screen. (Requires the Python server, which always sends full
+                -- state here; the old Node server sent partials.)
+                status.job = formatJobFromState(state)
+                status.zone = state.zone or ""
+                status.nation = state.nation
+                status.rank = state.rank
+
                 friends.friendList:updateFriendStatus(status)
             end
             break

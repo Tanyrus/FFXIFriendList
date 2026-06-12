@@ -5,6 +5,8 @@
 
 local imgui = require('imgui')
 local ThemeHelper = require('libs.themehelper')
+local ThemeApplier = require('ui.helpers.ThemeApplier')
+local UrlOpener = require('platform.services.UrlOpener')
 local icons = require('libs.icons')
 local scaling = require('scaling')
 local InputHelper = require('ui.helpers.InputHelper')
@@ -945,6 +947,14 @@ function M.SaveWindowState()
 end
 
 -- Simple error window when server auto-detection fails
+function M.ApplyTheme()
+    return ThemeApplier.apply("QuickOnline Display")
+end
+
+function M.PopTheme(themePushed)
+    ThemeApplier.pop(themePushed, "QuickOnline Display")
+end
+
 function M.RenderServerNotDetectedWindow()
     local screenWidth = scaling.window.w
     local screenHeight = scaling.window.h
@@ -997,7 +1007,7 @@ function M.RenderServerNotDetectedWindow()
     imgui.Spacing()
     
     if imgui.Button("Join Discord Server", {200, 30}) then
-        os.execute('start https://discord.gg/horizonfriendlist')
+        UrlOpener.open('https://discord.gg/horizonfriendlist')
     end
     if imgui.IsItemHovered() then
         imgui.SetTooltip("Click to open Discord (opens in default browser)")

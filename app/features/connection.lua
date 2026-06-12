@@ -515,48 +515,53 @@ function M.Connection:autoConnect(characterName)
     return attemptConnect()
 end
 
+-- Mark the connection failed and schedule a backed-off retry. Used by BOTH the
+-- network-failure and the envelope-decode-failure paths so neither can busy-loop
+-- auth requests (a 200 with a non-envelope body — captive portal/proxy error
+-- page — previously fell through with no backoff and stormed the server).
+-- lastError is assigned BEFORE setFailed() so setFailed's log carries the cause.
+function M.Connection:scheduleAuthRetry(errorMsg)
+    self.lastError = errorMsg or "Connection error"
+    self:setFailed()
+    -- Schedule retry with exponential backoff + jitter (shared helper)
+    local attempt = math.max(1, self.retryAttemptCount + 1)
+    local delay = Backoff.compute(attempt, {
+        baseMs = self.backoffBaseMs,
+        maxMs = self.backoffMaxMs,
+        jitterPercent = 0.2,
+        minMs = 250,
+    })
+    self.nextAutoConnectAt = self._timeMs() + delay
+    self.retryAttemptCount = attempt
+    self.autoConnectAttempted = false
+    -- Surface ONE user-facing notice once the failures persist, instead of
+    -- silently retrying forever. Reset on a successful connect (below).
+    if attempt >= 3 and not self.authFailureEchoed then
+        self.authFailureEchoed = true
+        if print then
+            print("[FFXIFriendList] Trouble reaching the friend list server - retrying in the background...")
+        end
+    end
+    if self.logger and self.logger.warn then
+        self.logger.warn(string.format("[Connection] Auth failed; retry in %.1fs (attempt %d)", delay / 1000, attempt))
+    end
+    if self.logger and self.logger.error then
+        self.logger.error("[Connection] Auth failed: " .. tostring(self.lastError))
+    end
+end
+
 function M.Connection:handleAuthResponse(success, response, characterName, fallbackApiKey)
     self.autoConnectInProgress = false
-    
+
     if not success then
-        self:setFailed()
-        self.lastError = response or "Network error"
-        -- Schedule retry with exponential backoff + jitter (shared helper)
-        local attempt = math.max(1, self.retryAttemptCount + 1)
-        local delay = Backoff.compute(attempt, {
-            baseMs = self.backoffBaseMs,
-            maxMs = self.backoffMaxMs,
-            jitterPercent = 0.2,
-            minMs = 250,
-        })
-        self.nextAutoConnectAt = self._timeMs() + delay
-        self.retryAttemptCount = attempt
-        self.autoConnectAttempted = false
-        -- Surface ONE user-facing notice once the failures persist, instead of
-        -- silently retrying forever. Reset on a successful connect (below).
-        if attempt >= 3 and not self.authFailureEchoed then
-            self.authFailureEchoed = true
-            if print then
-                print("[FFXIFriendList] Trouble reaching the friend list server - retrying in the background...")
-            end
-        end
-        if self.logger and self.logger.warn then
-            self.logger.warn(string.format("[Connection] Auth failed; retry in %.1fs (attempt %d)", delay / 1000, attempt))
-        end
-        if self.logger and self.logger.error then
-            self.logger.error("[Connection] Auth failed: " .. tostring(self.lastError))
-        end
+        self:scheduleAuthRetry(response or "Network error")
         return
     end
-    
+
     -- Use new envelope decoder for { success, data, timestamp } format
     local ok, result, errorMsg = Envelope.decode(response)
     if not ok then
-        self:setFailed()
-        self.lastError = errorMsg or result or "Failed to decode response"
-        if self.logger and self.logger.error then
-            self.logger.error("[Connection] Envelope decode failed: " .. tostring(self.lastError))
-        end
+        self:scheduleAuthRetry(errorMsg or result or "Failed to decode response")
         return
     end
     

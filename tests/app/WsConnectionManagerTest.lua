@@ -171,7 +171,13 @@ if testPath then
     package.path = basePath .. "?.lua;" .. basePath .. "?/init.lua;" .. package.path
 end
 
--- Mock the dependencies that WsConnectionManager requires
+-- Mock the dependencies that WsConnectionManager requires. Save the originals so
+-- they can be restored after this suite — these are SHARED, cached modules, and
+-- leaving the stubs in package.loaded would corrupt every test loaded afterwards
+-- (e.g. WsClientAsyncTest, whose code reads constants this stub omits).
+local _origTimingConstants = package.loaded["core.TimingConstants"]
+local _origLimits = package.loaded["constants.limits"]
+
 package.loaded["core.TimingConstants"] = {
     WS_BASE_RECONNECT_DELAY_MS = 1000,
     WS_MAX_RECONNECT_DELAY_MS = 60000,
@@ -650,6 +656,8 @@ print("\n=== WsConnectionManager Tests ===\n")
 
 print(string.format("\n=== Results: %d passed, %d failed ===\n", testsPassed, testsFailed))
 
-if testsFailed > 0 then
-    os.exit(1)
-end
+-- Restore the shared modules so later suites see the real constants.
+package.loaded["core.TimingConstants"] = _origTimingConstants
+package.loaded["constants.limits"] = _origLimits
+
+return { passed = testsPassed, failed = testsFailed }

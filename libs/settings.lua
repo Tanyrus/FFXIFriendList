@@ -386,8 +386,11 @@ local function saveToDisk(settings)
     -- Write to file
     local f = io.open(file, 'w+')
     if not f then
-        -- Try creating parent directories manually
-        os.execute('mkdir "' .. path:gsub('/', '\\') .. '" 2>nul')
+        -- Retry directory creation via Ashita's fs instead of spawning a
+        -- synchronous shell (os.execute mkdir) on the render thread.
+        if ashita and ashita.fs and ashita.fs.create_directory then
+            ashita.fs.create_directory(path)
+        end
         f = io.open(file, 'w+')
         if not f then
             return false

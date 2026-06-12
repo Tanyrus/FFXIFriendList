@@ -2,23 +2,14 @@ local imgui = require('imgui')
 local icons = require('libs.icons')
 local FontManager = require('app.ui.FontManager')
 local UI = require('constants.ui')
+local UrlOpener = require('platform.services.UrlOpener')
 
 local M = {}
 
 local URL_DISCORD = "https://discord.gg/JXsx7zf3Dx"
 local URL_GITHUB = "https://github.com/Tanyrus/FFXIFriendList"
 
-local function openUrl(url)
-    if os.execute then
-        local cmd
-        if package.config:sub(1, 1) == "\\" then
-            cmd = 'start "" "' .. url .. '"'
-        else
-            cmd = 'xdg-open "' .. url .. '" 2>/dev/null || open "' .. url .. '"'
-        end
-        os.execute(cmd)
-    end
-end
+local openUrl = UrlOpener.open
 
 function M.Render(state, dataModule, onRefresh, onLockChanged, onViewToggle, showAboutPopup)
     local isConnected = dataModule.IsConnected()

@@ -28,11 +28,14 @@ addTest("tests.app.BlocklistTest")
 addTest("tests.app.WsEventHandlerTest")
 addTest("tests.app.WsReconnectResyncTest")
 addTest("tests.app.BackoffTest")
+addTest("tests.app.NetTest")
+addTest("tests.app.TagsTest")
+addTest("tests.app.WsConnectionManagerTest")
+addTest("tests.app.WsClientAsyncTest")
 -- TODO: Add more tests:
 -- addTest("tests.app.ServerListTest")
 -- addTest("tests.app.PreferencesTest")
 -- addTest("tests.app.NotificationsTest")
--- addTest("tests.app.MailTest")
 
 local totalPassed = 0
 local totalFailed = 0

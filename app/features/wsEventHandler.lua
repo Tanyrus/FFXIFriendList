@@ -483,6 +483,7 @@ function M.WsEventHandler:_handleFriendRequestDeclined(payload)
     if declinedBy and declinedBy ~= "" then
         local notifications = self.deps.notifications
         if notifications then
+            local Notifications = require("app.features.notifications")
             notifications:push(Notifications.ToastType.FriendRequestRejected, {
                 title = "Friend Request Declined",
                 message = declinedBy .. " declined your friend request",

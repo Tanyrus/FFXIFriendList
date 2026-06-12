@@ -33,4 +33,14 @@ if not package.preload["json"] then
     end
 end
 
+-- --- common: Ashita's bootstrap lib, required for side effects only ----------
+-- libs/settings.lua does `require('common')` but uses none of its members; a
+-- bare table lets settings.lua (and anything that pulls it in, e.g. the Tags
+-- feature) load under the test runner.
+if not package.preload["common"] then
+    package.preload["common"] = function()
+        return {}
+    end
+end
+
 return true

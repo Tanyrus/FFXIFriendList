@@ -1,19 +1,29 @@
 -- run_all_tests.lua
 -- Run all protocol tests
 
+-- Register stand-ins for Ashita-only libs (sugar/json) so protocol modules load
+-- outside the client — same bootstrap the app suite uses.
+require("tests.support.bootstrap")
+
 print("=" .. string.rep("=", 60))
 print("Running Protocol Layer Tests")
 print("=" .. string.rep("=", 60))
 print()
 
-local tests = {
-    require("tests.protocol.JsonTest"),
-    require("tests.protocol.ProtocolVersionTest"),
-    require("tests.protocol.EnvelopeTest"),
-    require("tests.protocol.DecoderTest"),
-    require("tests.protocol.RequestEncoderTest"),
-    require("tests.protocol.WsEnvelopeTest")
-}
+-- Load explicitly: require() returns (module, loaderpath); a bare require() as
+-- the last element of a table constructor would leak the path string in as a
+-- phantom entry (and break test.runAllTests()).
+local tests = {}
+local function addTest(modulePath)
+    tests[#tests + 1] = require(modulePath)
+end
+
+addTest("tests.protocol.JsonTest")
+addTest("tests.protocol.ProtocolVersionTest")
+addTest("tests.protocol.EnvelopeTest")
+addTest("tests.protocol.DecoderTest")
+addTest("tests.protocol.RequestEncoderTest")
+addTest("tests.protocol.WsEnvelopeTest")
 
 local passed = 0
 local failed = 0

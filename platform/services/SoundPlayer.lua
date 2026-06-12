@@ -46,8 +46,8 @@ function M.SoundPlayer.new(guiManager, logger)
 end
 
 function M.SoundPlayer:playWavBytes(data, volume)
-    if self.logger then
-        self.logger:warning("playWavBytes not implemented")
+    if self.logger and self.logger.warn then
+        self.logger.warn("playWavBytes not implemented")
     end
     return false
 end
@@ -81,8 +81,8 @@ function M.SoundPlayer:playWavFile(path, volume)
         if success then
             return true
         end
-        if self.logger then
-            self.logger:debug("FFI PlaySound failed, falling back: " .. tostring(err))
+        if self.logger and self.logger.debug then
+            self.logger.debug("FFI PlaySound failed, falling back: " .. tostring(err))
         end
     end
     
@@ -108,8 +108,8 @@ function M.SoundPlayer:playWavFile(path, volume)
         end
     end
     
-    if self.logger then
-        self.logger:warning("No sound player available for this platform")
+    if self.logger and self.logger.warn then
+        self.logger.warn("No sound player available for this platform")
     end
     return false
 end

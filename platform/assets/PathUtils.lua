@@ -26,8 +26,12 @@ end
 
 function M.ensureDirectory(filePath)
     local dir = string.match(filePath, "(.*[/\\])")
-    if dir then
-        os.execute('mkdir "' .. dir .. '" 2>nul')
+    if dir and ashita and ashita.fs and ashita.fs.create_directory then
+        -- Use Ashita's fs rather than spawning a synchronous shell (os.execute
+        -- mkdir) on the render thread; a theme save calls this several times.
+        if not (ashita.fs.exists and ashita.fs.exists(dir)) then
+            ashita.fs.create_directory(dir)
+        end
     end
 end
 

@@ -21,8 +21,14 @@ end
 function M.runTests()
     local passed = 0
     local failed = 0
-    
+
+    -- Tags persists through the global gConfig (not the injected storage); give
+    -- each test a fresh one so cross-instance save/load round-trips, and restore
+    -- the original afterwards so this suite doesn't leak state into others.
+    local originalGConfig = _G.gConfig
+
     local function test(name, fn)
+        _G.gConfig = {}
         local success, err = pcall(fn)
         if success then
             passed = passed + 1
@@ -246,9 +252,13 @@ function M.runTests()
         assertEqual(2, #state.tagOrder)
     end)
     
+    _G.gConfig = originalGConfig
     print(string.format("\nTags Feature Tests: %d passed, %d failed", passed, failed))
     return failed == 0
 end
+
+-- Runner contract: expose run() alongside the original name.
+M.run = M.runTests
 
 return M
 

@@ -97,6 +97,7 @@ function M.Tags:save()
     end
     settings.save()
     self.dirty = false
+    self.pendingDirty = false  -- persisted above; otherwise cleanupExpiredPending re-saves every call
     return true
 end
 

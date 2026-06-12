@@ -122,6 +122,7 @@ package.loaded["constants.limits"] = {
 package.loaded["core.TimingConstants"] = {
     WS_BASE_RECONNECT_DELAY_MS = 1000,
     WS_MAX_RECONNECT_DELAY_MS = 60000,
+    WS_INBOUND_STALE_TIMEOUT_MS = 90000,
 }
 
 package.loaded["protocol.Endpoints"] = {
@@ -441,7 +442,7 @@ test("ConnectState enum values", function()
     -- Each state should have a unique value
     local seen = {}
     for name, value in pairs(states) do
-        assertFalse(seen[value], "Duplicate state value: " .. tostring(value))
+        assertTrue(seen[value] == nil, "Duplicate state value: " .. tostring(value))
         seen[value] = true
     end
     
@@ -535,6 +536,71 @@ test("tickMessages only processes when CONNECTED", function()
 end)
 
 --------------------------------------------------------------------------------
+-- Half-open socket detection (real class, fake socket)
+--------------------------------------------------------------------------------
+
+local WsClientAsync = require("platform.services.WsClientAsync")
+local TimingConstants = require("core.TimingConstants")
+
+-- A fake socket whose receive() always reports "timeout" — i.e. a silently
+-- half-open connection that delivers no bytes and never errors.
+local function silentSocket()
+    return {
+        receive = function() return nil, "timeout", "" end,
+        close = function() return true end,
+        settimeout = function() end,
+    }
+end
+
+local function connectedClient(now)
+    local clock = { t = now or 0 }
+    local client = WsClientAsync.WsClientAsync.new({ time = function() return clock.t end })
+    client.connectState = WsClientAsync.ConnectState.CONNECTED
+    client.socket = silentSocket()
+    client.lastInboundAt = clock.t
+    return client, clock
+end
+
+test("tickMessages force-disconnects a half-open socket after the stale window", function()
+    local client, clock = connectedClient(1000)
+    local closed = false
+    client.onClose = function() closed = true end
+
+    -- Just inside the window: stays connected.
+    clock.t = 1000 + TimingConstants.WS_INBOUND_STALE_TIMEOUT_MS - 1
+    client:tickMessages()
+    assertEq(client.connectState, WsClientAsync.ConnectState.CONNECTED, "should stay connected within stale window")
+    assertFalse(closed, "should not close within stale window")
+
+    -- Past the window with still no inbound: disconnect so reconnect can run.
+    clock.t = 1000 + TimingConstants.WS_INBOUND_STALE_TIMEOUT_MS + 1
+    client:tickMessages()
+    assertEq(client.connectState, WsClientAsync.ConnectState.IDLE, "should drop to IDLE when half-open")
+    assert(client.socket == nil, "socket should be torn down")
+    assertTrue(closed, "onClose should fire so the manager reconnects")
+end)
+
+test("inbound bytes refresh the half-open clock", function()
+    local client, clock = connectedClient(1000)
+    -- Socket that delivers a byte once, then goes silent.
+    local delivered = false
+    client.socket = {
+        receive = function()
+            if not delivered then delivered = true; return "x", nil, nil end
+            return nil, "timeout", ""
+        end,
+        close = function() return true end,
+        settimeout = function() end,
+    }
+
+    -- Advance near the edge, then receive a byte: lastInboundAt should reset.
+    clock.t = 1000 + TimingConstants.WS_INBOUND_STALE_TIMEOUT_MS - 10
+    client:tickMessages()
+    assertEq(client.connectState, WsClientAsync.ConnectState.CONNECTED, "byte received keeps it alive")
+    assertEq(client.lastInboundAt, clock.t, "lastInboundAt advanced to receive time")
+end)
+
+--------------------------------------------------------------------------------
 -- Run Tests
 --------------------------------------------------------------------------------
 
@@ -542,6 +608,4 @@ print("\n=== WsClientAsync Tests ===\n")
 
 print(string.format("\n=== Results: %d passed, %d failed ===\n", testsPassed, testsFailed))
 
-if testsFailed > 0 then
-    os.exit(1)
-end
+return { passed = testsPassed, failed = testsFailed }

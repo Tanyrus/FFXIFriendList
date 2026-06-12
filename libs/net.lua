@@ -20,6 +20,26 @@ local function getInFlightCount()
     return http.getActiveCount()
 end
 
+-- Drop a tracked request and ensure its callback fires exactly once. Cancelling
+-- or timing out a request must still notify the caller, otherwise feature-level
+-- in-flight flags (autoConnectInProgress, heartbeatInFlight, refreshInFlight, ...)
+-- that are only cleared from the callback wedge permanently. `settled` guards
+-- against a double-fire if the underlying http callback later runs anyway.
+local function dropRequest(id, reason)
+    local req = requestQueue[id]
+    if requestIdMap[id] and http and http.cancel then
+        http.cancel(requestIdMap[id])
+    end
+    requestQueue[id] = nil
+    requestIdMap[id] = nil
+    if req and not req.settled then
+        req.settled = true
+        if req.callback then
+            pcall(req.callback, false, "", reason, nil)
+        end
+    end
+end
+
 function M.request(options)
     if not http then
         if options and options.callback then
@@ -42,11 +62,7 @@ function M.request(options)
             end
         end
         if oldestId then
-            if requestIdMap[oldestId] and http.cancel then
-                http.cancel(requestIdMap[oldestId])
-            end
-            requestQueue[oldestId] = nil
-            requestIdMap[oldestId] = nil
+            dropRequest(oldestId, "Request evicted: in-flight limit reached")
         end
     end
     
@@ -73,6 +89,7 @@ function M.request(options)
         body = options.body or "",
         callback = options.callback,
         status = 'pending',
+        settled = false,
         timestamp = os.clock(),
         enqueueTimeMs = timeMs,
         sendTimeMs = nil,
@@ -87,8 +104,12 @@ function M.request(options)
     local logger = app and app.deps and app.deps.logger
     
     local wrappedCallback = function(body, err, status)
+        if req.settled then
+            return
+        end
+        req.settled = true
         req.status = 'completed'
-        
+
         local app = _G.FFXIFriendListApp
         local logger = app and app.deps and app.deps.logger
         local completeTimeMs = 0
@@ -153,6 +174,7 @@ function M.request(options)
         moduleRequestId = http.delete(req.url, headers, wrappedCallback)
     else
         req.status = 'error'
+        req.settled = true
         if req.callback then
             req.callback(false, "", "Unsupported HTTP method: " .. req.method)
         end
@@ -172,6 +194,7 @@ function M.request(options)
         req.sendTimeMs = sendTimeMs
     else
         req.status = 'error'
+        req.settled = true
         if req.callback then
             req.callback(false, "", "Failed to submit request")
         end
@@ -200,11 +223,7 @@ function M.cleanup()
     local now = os.clock()
     for id, req in pairs(requestQueue) do
         if (now - req.timestamp > TimingConstants.REQUEST_CLEANUP_TIMEOUT_SECONDS) or (req.status == 'error') then
-            if requestIdMap[id] and http.cancel then
-                http.cancel(requestIdMap[id])
-            end
-            requestQueue[id] = nil
-            requestIdMap[id] = nil
+            dropRequest(id, "Request timed out")
         end
     end
 end
@@ -217,11 +236,7 @@ function M.cancel(requestId)
     if not http then
         return
     end
-    if requestIdMap[requestId] and http.cancel then
-        http.cancel(requestIdMap[requestId])
-    end
-    requestQueue[requestId] = nil
-    requestIdMap[requestId] = nil
+    dropRequest(requestId, "Request cancelled")
 end
 
 return M

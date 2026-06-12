@@ -789,8 +789,10 @@ function M.Friends:refreshFriendRequests()
 end
 
 function M.Friends:handleFriendRequestsResponse(success, response, requestType)
-    self.friendRequestsInFlight = false
-    
+    -- The in-flight flag is cleared by the OUTGOING callback only (see
+    -- refreshFriendRequests), after BOTH the pending and outgoing fetches return.
+    -- Clearing it here would reopen the gate as soon as the first response (pending)
+    -- arrived while outgoing was still in flight.
     if not success then
         if self.deps.logger and self.deps.logger.warn then
             self.deps.logger.warn("[Friends] Failed to refresh friend requests: " .. tostring(response))

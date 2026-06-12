@@ -1,5 +1,7 @@
 local imgui = require('imgui')
 local ThemeHelper = require('libs.themehelper')
+local ThemeApplier = require('ui.helpers.ThemeApplier')
+local UrlOpener = require('platform.services.UrlOpener')
 local UIConstants = require('core.UIConstants')
 local scaling = require('scaling')
 local FontManager = require('app.ui.FontManager')
@@ -479,42 +481,11 @@ function M.RenderBlockAndRemoveModal(state, callbacks)
 end
 
 function M.ApplyTheme()
-    local themePushed = false
-    local app = _G.FFXIFriendListApp
-    if app and app.features and app.features.themes then
-        local success, err = pcall(function()
-            local themesFeature = app.features.themes
-            local themeIndex = themesFeature:getThemeIndex()
-            
-            if themeIndex ~= -2 then
-                local themeColors = themesFeature:getCurrentThemeColors()
-                local backgroundAlpha = themesFeature:getBackgroundAlpha()
-                local textAlpha = themesFeature:getTextAlpha()
-                
-                if themeColors then
-                    themePushed = ThemeHelper.pushThemeStyles(themeColors, backgroundAlpha, textAlpha)
-                end
-            end
-        end)
-        if not success then
-            if app.deps and app.deps.logger and app.deps.logger.error then
-                app.deps.logger.error("[FriendList Display] Theme application failed: " .. tostring(err))
-            end
-        end
-    end
-    return themePushed
+    return ThemeApplier.apply("FriendList Display")
 end
 
 function M.PopTheme(themePushed)
-    if themePushed then
-        local success, err = pcall(ThemeHelper.popThemeStyles)
-        if not success then
-            local app = _G.FFXIFriendListApp
-            if app and app.deps and app.deps.logger and app.deps.logger.error then
-                app.deps.logger.error("[FriendList Display] Theme pop failed: " .. tostring(err))
-            end
-        end
-    end
+    ThemeApplier.pop(themePushed, "FriendList Display")
 end
 
 function M.RenderContent(dataModule)
@@ -1361,7 +1332,7 @@ function M.RenderServerNotDetectedWindow()
     imgui.Spacing()
     
     if imgui.Button("Join Discord Server", {200, 30}) then
-        os.execute('start https://discord.gg/horizonfriendlist')
+        UrlOpener.open('https://discord.gg/horizonfriendlist')
     end
     if imgui.IsItemHovered() then
         imgui.SetTooltip("Click to open Discord (opens in default browser)")

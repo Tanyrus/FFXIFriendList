@@ -136,6 +136,10 @@ function M.SetVisible(visible)
         if gConfig.showQuickOnline ~= newValue then
             gConfig.showQuickOnline = newValue
             M.SaveWindowState()
+            local settings = require('libs.settings')
+            if settings and settings.save then
+                settings.save()
+            end
         end
     end
 end
@@ -328,6 +332,10 @@ function M.DrawWindow(settings, dataModule)
                     gConfig.showQuickOnline = false
                 end
                 M.SaveWindowState()
+                local settings = require('libs.settings')
+                if settings and settings.save then
+                    settings.save()
+                end
             end
         end
     end
@@ -659,6 +667,10 @@ function M.RenderFriendsTable(dataModule, overlayEnabled, disableInteraction, to
         if not overlayEnabled and not disableInteraction and imgui.IsItemClicked() then
             state.collapsedOnlineSection = not state.collapsedOnlineSection
             M.SaveWindowState()
+            local settings = require('libs.settings')
+            if settings and settings.save then
+                settings.save()
+            end
         end
         
         if onlineExpanded then
@@ -688,6 +700,10 @@ function M.RenderFriendsTable(dataModule, overlayEnabled, disableInteraction, to
         if not overlayEnabled and not disableInteraction and imgui.IsItemClicked() then
             state.collapsedOfflineSection = not state.collapsedOfflineSection
             M.SaveWindowState()
+            local settings = require('libs.settings')
+            if settings and settings.save then
+                settings.save()
+            end
         end
         
         if offlineExpanded then
@@ -934,12 +950,10 @@ function M.SaveWindowState()
     -- Note: groupByOnlineStatus and hideTopBar are controlled by General tab, don't overwrite them here
     settings.collapsedOnlineSection = state.collapsedOnlineSection
     settings.collapsedOfflineSection = state.collapsedOfflineSection
-    
-    -- Persist to disk
-    local settings = require('libs.settings')
-    if settings and settings.save then
-        settings.save()
-    end
+    -- gConfig mirror ONLY — no disk write. This runs every frame (see DrawWindow),
+    -- so persistence is left to the event-driven settings.save() calls below
+    -- (visibility/close/collapse/checkbox handlers) and to unload, mirroring the
+    -- friendlist window. Writing the full settings file here hitched every frame.
 end
 
 -- Simple error window when server auto-detection fails

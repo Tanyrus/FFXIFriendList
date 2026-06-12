@@ -5,6 +5,7 @@
 local WsEnvelope = require("protocol.WsEnvelope")
 local FriendList = require("core.friendlist")
 local utils = require("modules.friendlist.components.helpers.utils")
+local TimingConstants = require("core.TimingConstants")
 
 local M = {}
 
@@ -72,8 +73,44 @@ end
 -- Main event handler function (called by App.lua which gets events from WsEventRouter)
 -- Signature matches router callback: (payload, eventType, seq, timestamp)
 function M.WsEventHandler:handleEvent(payload, eventType, seq, timestamp)
+    -- Detect missed events via the per-event sequence number BEFORE dispatch.
+    self:_trackSeq(eventType, seq)
     -- Call internal handler with appropriate event type
     self:_dispatch(eventType, payload)
+end
+
+-- Track the WS event sequence and reconcile via a one-shot HTTP refresh when a
+-- forward gap reveals we missed events (presence updates are WS-only, so a gap
+-- otherwise leaves stale online/offline state). connected/friends_snapshot are
+-- full re-syncs: they reset the baseline and are never treated as a gap, so a
+-- reconnect's lower seq is not mistaken for a missed event.
+function M.WsEventHandler:_trackSeq(eventType, seq)
+    if eventType == "connected" or eventType == "friends_snapshot" then
+        self.lastSeq = (type(seq) == "number") and seq or nil
+        return
+    end
+
+    if type(seq) ~= "number" then
+        return
+    end
+
+    local last = self.lastSeq
+    self.lastSeq = seq
+    if last ~= nil and seq > last + 1 then
+        self:_requestReconcile()
+    end
+end
+
+-- One-shot reconcile: pull the authoritative friend list over HTTP. friends:refresh
+-- is already guarded (connection check + in-flight dedup), so repeated gaps coalesce.
+function M.WsEventHandler:_requestReconcile()
+    local friends = self.deps.friends
+    if friends and friends.refresh then
+        if self.logger and self.logger.info then
+            self.logger.info("[WsEventHandler] WS sequence gap detected; reconciling via HTTP refresh")
+        end
+        friends:refresh()
+    end
 end
 
 -- Internal dispatch by event type
@@ -120,6 +157,20 @@ function M.WsEventHandler:_handleConnected(payload)
     if self.deps.connection and self.deps.connection.setConnected then
         self.deps.connection:setConnected()
     end
+
+    -- Open the re-sync grace window: the server is about to re-send the full
+    -- online set, which must not be toasted as fresh online events.
+    self:_openResyncGraceWindow()
+end
+
+-- Open the online re-sync grace window (suppresses friend_online toasts).
+function M.WsEventHandler:_openResyncGraceWindow()
+    self.onlineResyncGraceUntil = self:_getTime() + TimingConstants.WS_ONLINE_RESYNC_GRACE_MS
+end
+
+-- True while online toasts should be suppressed as part of a reconnect re-sync.
+function M.WsEventHandler:_inResyncGraceWindow()
+    return self.onlineResyncGraceUntil ~= nil and self:_getTime() < self.onlineResyncGraceUntil
 end
 
 -- Handle 'friends_snapshot' event - full friend list
@@ -133,11 +184,30 @@ function M.WsEventHandler:_handleFriendsSnapshot(payload)
     end
     
     local friendsData = payload.friends or {}
-    
+
     for _, friendData in ipairs(friendsData) do
         self:_addFriendFromPayload(friendData)
     end
-    
+
+    -- Seed/refresh the online-state baseline from the snapshot. The first call
+    -- establishes the baseline silently; later snapshots (reconnect) diff against
+    -- it and toast only genuine transitions. This routes the bulk re-sync through
+    -- the same diff engine the live friend_online path uses.
+    if friends.checkForStatusChanges then
+        local statuses = {}
+        for _, friendData in ipairs(friendsData) do
+            table.insert(statuses, {
+                characterName = friendData.characterName,
+                displayName = friendData.characterName,
+                isOnline = friendData.isOnline == true,
+            })
+        end
+        friends:checkForStatusChanges(statuses)
+    end
+
+    -- A snapshot may precede a friend_online re-send burst; suppress those.
+    self:_openResyncGraceWindow()
+
     -- Update last updated timestamp
     friends.lastUpdatedAt = self:_getTime()
     friends.state = "idle"
@@ -175,24 +245,32 @@ function M.WsEventHandler:_handleFriendOnline(payload)
     status.isOnline = true
     status.isAway = isAway
     
-    -- Only update fields that are present in state
+    -- The server sends the COMPLETE privacy-filtered state, so apply it
+    -- authoritatively (same convention as the snapshot's _addFriendFromPayload):
+    -- a hidden field arrives as nil and is cleared, so turning off a privacy
+    -- toggle actually retracts already-shown data. (Requires the server to send
+    -- full state on this event — the Python backend does; the old Node server
+    -- sent partials, so ship this with the cutover.)
     if state then
-        if state.job ~= nil or state.subJob ~= nil or state.jobLevel ~= nil or state.subJobLevel ~= nil then
-            local formattedJob = formatJobFromState(state)
-            if formattedJob ~= "" then
-                status.job = formattedJob
-            end
-        end
-        if state.zone ~= nil then status.zone = state.zone end
-        if state.nation ~= nil then status.nation = state.nation end
-        if state.rank ~= nil then status.rank = state.rank end
+        status.job = formatJobFromState(state)
+        status.zone = state.zone or ""
+        status.nation = state.nation
+        status.rank = state.rank
     end
-    
+
     friends.friendList:updateFriendStatus(status)
     friends.lastUpdatedAt = self:_getTime()
-    
-    -- Trigger notification
-    self:_notifyFriendOnline(characterName)
+
+    -- Only toast on a genuine offline->online transition. The online-state map
+    -- (shared with the snapshot baseline) suppresses re-sync re-sends, and the
+    -- grace window covers the burst right after (re)connect.
+    local isGenuineTransition = true
+    if friends.registerFriendOnline then
+        isGenuineTransition = friends:registerFriendOnline(characterName)
+    end
+    if isGenuineTransition and not self:_inResyncGraceWindow() then
+        self:_notifyFriendOnline(characterName)
+    end
 end
 
 -- Handle 'friend_offline' event
@@ -220,10 +298,15 @@ function M.WsEventHandler:_handleFriendOffline(payload)
             status.isAway = false
             status.lastSeenAt = lastSeenAt
             friends.friendList:updateFriendStatus(status)
+            -- Keep the online-state map in sync so a later return-to-online is
+            -- recognised as a genuine transition.
+            if friends.registerFriendOffline then
+                friends:registerFriendOffline(friend.name)
+            end
             break
         end
     end
-    
+
     friends.lastUpdatedAt = self:_getTime()
 end
 
@@ -241,21 +324,17 @@ function M.WsEventHandler:_handleFriendStateChanged(payload)
         if friend.friendAccountId == accountId then
             local status = friends.friendList:getFriendStatus(friend.name)
             if status then
-                -- Only update fields that are actually present in the partial state
-                -- This prevents zone-only updates from wiping job/nation data
-                
-                -- Check if ANY job field is present before formatting
-                if state.job ~= nil or state.subJob ~= nil or state.jobLevel ~= nil or state.subJobLevel ~= nil then
-                    local formattedJob = formatJobFromState(state)
-                    if formattedJob ~= "" then 
-                        status.job = formattedJob 
-                    end
-                end
-                
-                if state.zone ~= nil then status.zone = state.zone end
-                if state.nation ~= nil then status.nation = state.nation end
-                if state.rank ~= nil then status.rank = state.rank end
-                
+                -- The server sends the COMPLETE privacy-filtered state on every
+                -- friend_state_changed, so apply it authoritatively — a hidden
+                -- field arrives as nil and is cleared. This is what makes a privacy
+                -- toggle (e.g. shareLocation off) retract already-shown data on
+                -- screen. (Requires the Python server, which always sends full
+                -- state here; the old Node server sent partials.)
+                status.job = formatJobFromState(state)
+                status.zone = state.zone or ""
+                status.nation = state.nation
+                status.rank = state.rank
+
                 friends.friendList:updateFriendStatus(status)
             end
             break
@@ -400,6 +479,7 @@ function M.WsEventHandler:_handleFriendRequestDeclined(payload)
     if declinedBy and declinedBy ~= "" then
         local notifications = self.deps.notifications
         if notifications then
+            local Notifications = require("app.features.notifications")
             notifications:push(Notifications.ToastType.FriendRequestRejected, {
                 title = "Friend Request Declined",
                 message = declinedBy .. " declined your friend request",

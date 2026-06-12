@@ -76,6 +76,10 @@ function M.WsClientAsync.new(deps)
     
     -- Message buffer
     self.readBuffer = ""
+
+    -- Half-open detection: timestamp (ms) of the last inbound bytes seen while
+    -- CONNECTED. nil until the socket connects.
+    self.lastInboundAt = nil
     
     -- Event router
     self.eventRouter = WsEventRouter.WsEventRouter.new({ logger = self.logger })
@@ -272,8 +276,21 @@ function M.WsClientAsync:tickMessages()
     if self.connectState ~= M.ConnectState.CONNECTED or not self.socket then
         return
     end
-    
+
     self:_processMessages()
+
+    -- Half-open detection: a CONNECTED socket silently dropped (NAT timeout, no
+    -- RST) returns only "timeout" from receive() forever and would stay CONNECTED
+    -- indefinitely, so server pushes stop with no reconnect. If no inbound bytes
+    -- have arrived within the stale window, force a disconnect so the connection
+    -- manager's backoff path takes over. _processMessages may already have torn
+    -- the socket down on a hard error, so re-check state.
+    if self.connectState == M.ConnectState.CONNECTED and self.lastInboundAt then
+        if (self.time() - self.lastInboundAt) > TimingConstants.WS_INBOUND_STALE_TIMEOUT_MS then
+            self:_log("warn", "[WsClientAsync] No inbound data within stale window; assuming half-open socket")
+            self:_handleDisconnect()
+        end
+    end
 end
 
 --------------------------------------------------------------------------------
@@ -426,6 +443,7 @@ function M.WsClientAsync:_stepReceiveUpgrade()
         self.connectState = M.ConnectState.CONNECTED
         self.readBuffer = self.upgradeBuffer:sub(headerEnd + 4)  -- Keep any extra data
         self.upgradeBuffer = ""
+        self.lastInboundAt = self.time()  -- start the half-open clock
         
         self:_log("info", "[WsClientAsync] WebSocket connected")
         
@@ -485,6 +503,7 @@ function M.WsClientAsync:_processMessages()
     
     if chunk and #chunk > 0 then
         self.readBuffer = self.readBuffer .. chunk
+        self.lastInboundAt = self.time()  -- any inbound traffic = socket alive
     end
     
     -- Handle errors

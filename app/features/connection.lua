@@ -4,6 +4,7 @@ local Envelope = require("protocol.Envelope")
 local Endpoints = require("protocol.Endpoints")
 local ServerConfig = require("core.ServerConfig")
 local VersionCore = require("core.versioncore")
+local Backoff = require("core.Backoff")
 
 M.ConnectionState = {
     Disconnected = "Disconnected",
@@ -104,6 +105,11 @@ function M.Connection.new(deps)
     self._timeMs = deps.time or function() return os.clock() * 1000 end
     
     self.state = M.ConnectionState.Disconnected
+    -- Realtime (WebSocket) health, tracked SEPARATELY from the auth/API `state`
+    -- above. The HTTP API stays reachable while the WS reconnects, so this must
+    -- NOT gate windows or flip isConnected() — it only drives a subtle indicator.
+    -- One of: "disconnected" | "connecting" | "connected" | "reconnecting" | "failed".
+    self.realtimeState = "disconnected"
     self.apiKey = ""  -- Single API key for the account
     self.savedServerId = nil
     self.savedServerBaseUrl = nil
@@ -116,6 +122,9 @@ function M.Connection.new(deps)
     self.autoConnectInProgress = false
     self.lastCharacterName = ""
     self.retryAttemptCount = 0
+    -- Whether we've already shown the user a "trouble connecting" notice for the
+    -- current failure streak (so we echo once, not on every backoff retry).
+    self.authFailureEchoed = false
     self.nextAutoConnectAt = nil
     self.backoffBaseMs = 2000
     self.backoffMaxMs = 60000
@@ -164,8 +173,28 @@ function M.Connection:getState()
         isConnecting = self:isConnecting(),
         hasServer = self:hasSavedServer(),
         baseUrl = self:getBaseUrl(),
-        lastError = self.lastError
+        lastError = self.lastError,
+        realtimeState = self.realtimeState
     }
+end
+
+-- Realtime (WebSocket) health, independent of the auth/API state. Set by the
+-- WsConnectionManager as the socket connects/drops/reconnects. Purely
+-- informational: drives a subtle "reconnecting" hint, never gates windows.
+function M.Connection:setRealtimeState(realtimeState)
+    if realtimeState then
+        self.realtimeState = realtimeState
+    end
+end
+
+function M.Connection:getRealtimeState()
+    return self.realtimeState
+end
+
+-- True when realtime updates are flowing (WS connected). Distinct from
+-- isConnected() which reflects HTTP/API auth.
+function M.Connection:isRealtimeConnected()
+    return self.realtimeState == "connected"
 end
 
 function M.Connection:tick(dtSeconds)
@@ -379,18 +408,20 @@ function M.Connection:getHeaders(characterName)
         headers["X-Realm-Id"] = realmIdForHeader
     end
     
-    -- Add Authorization header (Bearer token format)
-    if characterName ~= "" then
-        local apiKey = self:getApiKey(characterName)
-        if apiKey ~= "" then
-            headers["Authorization"] = "Bearer " .. apiKey
-        else
-            if self.logger and self.logger.warn then
-                self.logger.warn("[Connection] Headers: No API key for " .. characterName)
-            end
+    -- Add Authorization header (Bearer token format). The API key is
+    -- ACCOUNT-level, so attach it whenever we have one, regardless of whether a
+    -- character name is available. Gating this on characterName ~= "" caused
+    -- intermittent "API connected but WS won't authenticate" failures on
+    -- zone/reload, when the name isn't known yet but the token is.
+    local apiKey = self:getApiKey(characterName)
+    if apiKey ~= "" then
+        headers["Authorization"] = "Bearer " .. apiKey
+    else
+        if self.logger and self.logger.warn then
+            self.logger.warn("[Connection] Headers: No API key available")
         end
     end
-    
+
     return headers
 end
 
@@ -484,39 +515,53 @@ function M.Connection:autoConnect(characterName)
     return attemptConnect()
 end
 
+-- Mark the connection failed and schedule a backed-off retry. Used by BOTH the
+-- network-failure and the envelope-decode-failure paths so neither can busy-loop
+-- auth requests (a 200 with a non-envelope body — captive portal/proxy error
+-- page — previously fell through with no backoff and stormed the server).
+-- lastError is assigned BEFORE setFailed() so setFailed's log carries the cause.
+function M.Connection:scheduleAuthRetry(errorMsg)
+    self.lastError = errorMsg or "Connection error"
+    self:setFailed()
+    -- Schedule retry with exponential backoff + jitter (shared helper)
+    local attempt = math.max(1, self.retryAttemptCount + 1)
+    local delay = Backoff.compute(attempt, {
+        baseMs = self.backoffBaseMs,
+        maxMs = self.backoffMaxMs,
+        jitterPercent = 0.2,
+        minMs = 250,
+    })
+    self.nextAutoConnectAt = self._timeMs() + delay
+    self.retryAttemptCount = attempt
+    self.autoConnectAttempted = false
+    -- Surface ONE user-facing notice once the failures persist, instead of
+    -- silently retrying forever. Reset on a successful connect (below).
+    if attempt >= 3 and not self.authFailureEchoed then
+        self.authFailureEchoed = true
+        if print then
+            print("[FFXIFriendList] Trouble reaching the friend list server - retrying in the background...")
+        end
+    end
+    if self.logger and self.logger.warn then
+        self.logger.warn(string.format("[Connection] Auth failed; retry in %.1fs (attempt %d)", delay / 1000, attempt))
+    end
+    if self.logger and self.logger.error then
+        self.logger.error("[Connection] Auth failed: " .. tostring(self.lastError))
+    end
+end
+
 function M.Connection:handleAuthResponse(success, response, characterName, fallbackApiKey)
     self.autoConnectInProgress = false
-    
+
     if not success then
-        self:setFailed()
-        self.lastError = response or "Network error"
-        -- Schedule retry with exponential backoff + jitter
-        local attempt = math.max(1, self.retryAttemptCount + 1)
-        local delay = self.backoffBaseMs * (2 ^ (attempt - 1))
-        delay = math.min(delay, self.backoffMaxMs)
-        local jitterRange = math.floor(delay * 0.2)
-        local jitter = (math.random(0, jitterRange * 2) - jitterRange)
-        delay = math.max(250, delay + jitter)
-        self.nextAutoConnectAt = self._timeMs() + delay
-        self.retryAttemptCount = attempt
-        self.autoConnectAttempted = false
-        if self.logger and self.logger.warn then
-            self.logger.warn(string.format("[Connection] Auth failed; retry in %.1fs (attempt %d)", delay / 1000, attempt))
-        end
-        if self.logger and self.logger.error then
-            self.logger.error("[Connection] Auth failed: " .. tostring(self.lastError))
-        end
+        self:scheduleAuthRetry(response or "Network error")
         return
     end
-    
+
     -- Use new envelope decoder for { success, data, timestamp } format
     local ok, result, errorMsg = Envelope.decode(response)
     if not ok then
-        self:setFailed()
-        self.lastError = errorMsg or result or "Failed to decode response"
-        if self.logger and self.logger.error then
-            self.logger.error("[Connection] Envelope decode failed: " .. tostring(self.lastError))
-        end
+        self:scheduleAuthRetry(errorMsg or result or "Failed to decode response")
         return
     end
     
@@ -557,6 +602,7 @@ function M.Connection:handleAuthResponse(success, response, characterName, fallb
     self.lastSetActiveAt = nil
     -- Reset backoff on success
     self.retryAttemptCount = 0
+    self.authFailureEchoed = false
     self.nextAutoConnectAt = nil
     
     -- If we have a character ID, call set-active to ensure this is the active character
@@ -610,18 +656,11 @@ end
 -- Complete the connection process after auth and set-active
 function M.Connection:completeConnection(characterName)
     self:setConnected()
-    
-    local app = _G.FFXIFriendListApp
-    if app and not app._startupRefreshCompleted then
-        local App = require("app.App")
-        if App and App._triggerStartupRefresh then
-            App._triggerStartupRefresh(app)
-            app._startupRefreshCompleted = true
-            -- Ensure WS connection requested (in case we came online later)
-            if app.features and app.features.wsConnectionManager then
-                app.features.wsConnectionManager:requestConnect()
-            end
-        end
+
+    -- Post-connect orchestration (startup refresh, WS connect) is injected by
+    -- App.create as onConnected, so this feature does not require app.App.
+    if self.onConnected then
+        self.onConnected()
     end
 end
 

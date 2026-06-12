@@ -142,6 +142,22 @@ function M.IsWsConnected()
     return state.wsConnectionState == "CONNECTED"
 end
 
+-- Raw WebSocket connection state (CONNECTED/CONNECTING/BACKING_OFF/FAILED/DISCONNECTED)
+function M.GetWsConnectionState()
+    return state.wsConnectionState or "DISCONNECTED"
+end
+
+-- Manual reconnect affordance for when realtime updates have given up (FAILED).
+-- Resets the backoff and requests a fresh connection.
+function M.RetryWsConnection()
+    local app = _G.FFXIFriendListApp
+    local mgr = app and app.features and app.features.wsConnectionManager
+    if mgr then
+        if mgr.reset then mgr:reset() end
+        if mgr.requestConnect then mgr:requestConnect() end
+    end
+end
+
 -- Get blocked players list
 function M.GetBlockedPlayers()
     local app = _G.FFXIFriendListApp

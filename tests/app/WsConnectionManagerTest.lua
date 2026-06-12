@@ -171,7 +171,13 @@ if testPath then
     package.path = basePath .. "?.lua;" .. basePath .. "?/init.lua;" .. package.path
 end
 
--- Mock the dependencies that WsConnectionManager requires
+-- Mock the dependencies that WsConnectionManager requires. Save the originals so
+-- they can be restored after this suite — these are SHARED, cached modules, and
+-- leaving the stubs in package.loaded would corrupt every test loaded afterwards
+-- (e.g. WsClientAsyncTest, whose code reads constants this stub omits).
+local _origTimingConstants = package.loaded["core.TimingConstants"]
+local _origLimits = package.loaded["constants.limits"]
+
 package.loaded["core.TimingConstants"] = {
     WS_BASE_RECONNECT_DELAY_MS = 1000,
     WS_MAX_RECONNECT_DELAY_MS = 60000,
@@ -566,6 +572,83 @@ test("Single in-flight connection guard", function()
 end)
 
 --------------------------------------------------------------------------------
+-- WS lifecycle is reflected into the connection feature (item 1b)
+--------------------------------------------------------------------------------
+
+local function createMockConnection()
+    return {
+        realtimeStates = {},
+        realtimeState = nil,
+        setRealtimeState = function(self, s)
+            self.realtimeState = s
+            table.insert(self.realtimeStates, s)
+        end,
+        getRealtimeState = function(self) return self.realtimeState end,
+    }
+end
+
+local function newConnectedManager(mockTime, mockWs, mockConn)
+    local manager = WsConnectionManager.WsConnectionManager.new({
+        time = mockTime.get,
+        wsClient = mockWs,
+        logger = createMockLogger(),
+        connection = mockConn,
+    })
+    mockWs.simulateSuccess = true
+    manager:requestConnect()
+    manager:tick()  -- triggers connect -> success
+    return manager
+end
+
+test("connect success reflects 'connected' into connection feature", function()
+    local mockTime = createMockTime()
+    local mockWs = createMockWsClient()
+    local mockConn = createMockConnection()
+    local manager = newConnectedManager(mockTime, mockWs, mockConn)
+
+    assertEq(manager:getState(), "CONNECTED")
+    assertEq(mockConn:getRealtimeState(), "connected",
+        "manager should reflect connected realtime state")
+end)
+
+test("onConnectionLost reflects 'reconnecting' into connection feature", function()
+    local mockTime = createMockTime()
+    local mockWs = createMockWsClient()
+    local mockConn = createMockConnection()
+    local manager = newConnectedManager(mockTime, mockWs, mockConn)
+
+    -- Server force-closes a healthy connection.
+    mockWs.onCloseCallback("server closed")
+
+    assertEq(mockConn:getRealtimeState(), "reconnecting",
+        "after losing a live connection the connection feature should show reconnecting")
+end)
+
+test("max attempts reached reflects 'failed' into connection feature", function()
+    local mockTime = createMockTime()
+    local mockWs = createMockWsClient()
+    local mockConn = createMockConnection()
+    local manager = WsConnectionManager.WsConnectionManager.new({
+        time = mockTime.get,
+        wsClient = mockWs,
+        logger = createMockLogger(),
+        connection = mockConn,
+    })
+
+    mockWs.simulateError = "boom"
+    manager:requestConnect()
+    -- Drive enough attempts to exhaust maxAttempts (10).
+    for i = 1, 40 do
+        mockTime.advance(120000)
+        manager:tick()
+    end
+
+    assertEq(manager:getState(), "FAILED")
+    assertEq(mockConn:getRealtimeState(), "failed",
+        "exhausting reconnect attempts should reflect failed realtime state")
+end)
+
+--------------------------------------------------------------------------------
 -- Run Tests
 --------------------------------------------------------------------------------
 
@@ -573,6 +656,8 @@ print("\n=== WsConnectionManager Tests ===\n")
 
 print(string.format("\n=== Results: %d passed, %d failed ===\n", testsPassed, testsFailed))
 
-if testsFailed > 0 then
-    os.exit(1)
-end
+-- Restore the shared modules so later suites see the real constants.
+package.loaded["core.TimingConstants"] = _origTimingConstants
+package.loaded["constants.limits"] = _origLimits
+
+return { passed = testsPassed, failed = testsFailed }

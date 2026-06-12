@@ -210,7 +210,10 @@ end
 -- Logging helper
 function M.ServerProfileFetcher:_log(level, message)
     if self.logger and self.logger[level] then
-        self.logger[level](self.logger, "[ServerProfileFetcher] " .. message)
+        -- Project logger is function-style: logger.warn(msg). Passing self.logger
+        -- as the first arg made every line print the logger table and drop the
+        -- real message.
+        self.logger[level]("[ServerProfileFetcher] " .. message)
     end
 end
 

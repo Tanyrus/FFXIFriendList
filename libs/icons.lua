@@ -128,23 +128,27 @@ end
 
 -- Get or load an icon by name
 function M.GetIcon(iconName)
-    -- Return from cache if already loaded
-    if iconCache[iconName] then
-        return iconCache[iconName];
+    -- Cache holds the texture on success, or `false` once a load has failed.
+    -- nil means "not attempted yet". Negative-caching the failure is essential:
+    -- otherwise a missing PNG re-runs the synchronous D3DX disk load every frame.
+    local cached = iconCache[iconName];
+    if cached ~= nil then
+        if cached == false then
+            return nil;
+        end
+        return cached;
     end
-    
+
     -- Get filename for this icon
     local filename = iconFiles[iconName];
     if not filename then
         return nil;
     end
-    
-    -- Load the texture
+
+    -- Load the texture (cache the failure too)
     local texture = LoadTexture(filename);
-    if texture then
-        iconCache[iconName] = texture;
-    end
-    
+    iconCache[iconName] = texture or false;
+
     return texture;
 end
 

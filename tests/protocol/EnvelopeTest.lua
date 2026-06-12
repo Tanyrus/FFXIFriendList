@@ -1,8 +1,10 @@
 -- EnvelopeTest.lua
--- Test envelope decoding and validation (payload-only mode)
+-- Tests the LIVE HTTP envelope contract decoded by connection/feature handlers:
+--   success: { success = true, data = T, timestamp = string }
+--   error:   { success = false, error = { code, message }, timestamp }
+-- (The old protocolVersion/type/payload shape is retired — see protocol/Envelope.lua.)
 
 local Envelope = require("protocol.Envelope")
-local ProtocolVersion = require("protocol.ProtocolVersion")
 local Json = require("protocol.Json")
 
 local function assert(condition, message)
@@ -11,117 +13,105 @@ local function assert(condition, message)
     end
 end
 
-local function testEnvelopeDecodeValid()
+local function testDecodeSuccess()
     local jsonStr = Json.encode({
-        protocolVersion = ProtocolVersion.PROTOCOL_VERSION,
-        type = "FriendsListResponse",
         success = true,
-        payload = {
-            friends = {},
-            serverTime = 1234567890
-        }
+        data = { friends = {}, serverTime = 1234567890 },
+        timestamp = "2026-06-11T00:00:00Z",
     })
-    
+
     local ok, envelope = Envelope.decode(jsonStr)
-    assert(ok, "Should decode valid envelope")
-    assert(envelope.protocolVersion == ProtocolVersion.PROTOCOL_VERSION, "Protocol version should match")
-    assert(envelope.type == "FriendsListResponse", "Type should match")
-    assert(envelope.success == true, "Success should be true")
-    assert(type(envelope.payload) == "table", "Payload should be table")
-    assert(envelope.payload.friends ~= nil, "Payload should contain friends")
-    print("✓ testEnvelopeDecodeValid passed")
+    assert(ok, "Should decode a valid success envelope")
+    assert(envelope.success == true, "success should be true")
+    assert(type(envelope.data) == "table", "data should be a table")
+    assert(envelope.data.friends ~= nil, "data should carry the payload (friends)")
+    assert(envelope.timestamp == "2026-06-11T00:00:00Z", "timestamp should be preserved")
+    print("✓ testDecodeSuccess passed")
 end
 
-local function testEnvelopeDecodeMissingPayload()
+local function testDecodeSuccessDefaultsData()
+    -- A success envelope with no data field yields an empty table, not nil.
+    local jsonStr = Json.encode({ success = true })
+    local ok, envelope = Envelope.decode(jsonStr)
+    assert(ok, "Should decode success even without data")
+    assert(type(envelope.data) == "table", "missing data defaults to empty table")
+    assert(envelope.timestamp == "", "missing timestamp defaults to empty string")
+    print("✓ testDecodeSuccessDefaultsData passed")
+end
+
+local function testDecodeErrorResponse()
     local jsonStr = Json.encode({
-        protocolVersion = ProtocolVersion.PROTOCOL_VERSION,
-        type = "FriendsListResponse",
-        success = true
-        -- Missing payload
-    })
-    
-    local ok, errorType, errorMsg = Envelope.decode(jsonStr)
-    assert(not ok, "Should reject missing payload")
-    assert(errorType == Envelope.DecodeError.MissingPayload, "Should return MissingPayload error")
-    print("✓ testEnvelopeDecodeMissingPayload passed")
-end
-
-local function testEnvelopeDecodeInvalidJson()
-    local jsonStr = "{ invalid json }"
-    
-    local ok, errorType, errorMsg = Envelope.decode(jsonStr)
-    assert(not ok, "Should reject invalid JSON")
-    assert(errorType == Envelope.DecodeError.InvalidJson, "Should return InvalidJson error")
-    print("✓ testEnvelopeDecodeInvalidJson passed")
-end
-
-local function testEnvelopeDecodeMissingProtocolVersion()
-    local jsonStr = Json.encode({
-        type = "FriendsListResponse",
-        success = true,
-        payload = {}
-    })
-    
-    local ok, errorType, errorMsg = Envelope.decode(jsonStr)
-    assert(not ok, "Should reject missing protocolVersion")
-    assert(errorType == Envelope.DecodeError.MissingProtocolVersion, "Should return MissingProtocolVersion error")
-    print("✓ testEnvelopeDecodeMissingProtocolVersion passed")
-end
-
-local function testEnvelopeDecodeMissingType()
-    local jsonStr = Json.encode({
-        protocolVersion = ProtocolVersion.PROTOCOL_VERSION,
-        success = true,
-        payload = {}
-    })
-    
-    local ok, errorType, errorMsg = Envelope.decode(jsonStr)
-    assert(not ok, "Should reject missing type")
-    assert(errorType == Envelope.DecodeError.MissingType, "Should return MissingType error")
-    print("✓ testEnvelopeDecodeMissingType passed")
-end
-
-local function testEnvelopeDecodeMissingSuccess()
-    local jsonStr = Json.encode({
-        protocolVersion = ProtocolVersion.PROTOCOL_VERSION,
-        type = "FriendsListResponse",
-        payload = {}
-    })
-    
-    local ok, errorType, errorMsg = Envelope.decode(jsonStr)
-    assert(not ok, "Should reject missing success")
-    assert(errorType == Envelope.DecodeError.MissingSuccess, "Should return MissingSuccess error")
-    print("✓ testEnvelopeDecodeMissingSuccess passed")
-end
-
-local function testEnvelopeDecodeErrorResponse()
-    local jsonStr = Json.encode({
-        protocolVersion = ProtocolVersion.PROTOCOL_VERSION,
-        type = "Error",
         success = false,
-        error = "Test error",
-        errorCode = "TEST_ERROR",
-        payload = {}
+        error = { code = "TEST_ERROR", message = "Test error" },
+        timestamp = "2026-06-11T00:00:00Z",
     })
-    
-    local ok, envelope = Envelope.decode(jsonStr)
-    assert(ok, "Should decode error response")
-    assert(envelope.success == false, "Success should be false")
-    assert(envelope.error == "Test error", "Error message should match")
-    assert(envelope.errorCode == "TEST_ERROR", "Error code should match")
-    assert(type(envelope.payload) == "table", "Payload should be table (even if empty)")
-    print("✓ testEnvelopeDecodeErrorResponse passed")
+
+    local ok, errorType, message, code = Envelope.decode(jsonStr)
+    assert(not ok, "Error envelope should decode as failure")
+    assert(errorType == Envelope.DecodeError.ServerError, "Should classify as ServerError")
+    assert(message == "Test error", "Error message should be surfaced")
+    assert(code == "TEST_ERROR", "Error code should be surfaced")
+    print("✓ testDecodeErrorResponse passed")
+end
+
+local function testDecodeErrorDefaults()
+    -- success=false with no error object still yields safe defaults.
+    local jsonStr = Json.encode({ success = false })
+    local ok, errorType, message, code = Envelope.decode(jsonStr)
+    assert(not ok, "Should be a failure")
+    assert(errorType == Envelope.DecodeError.ServerError, "Should classify as ServerError")
+    assert(message == "Unknown server error", "Should default the message")
+    assert(code == "UNKNOWN_ERROR", "Should default the code")
+    print("✓ testDecodeErrorDefaults passed")
+end
+
+local function testDecodeMissingSuccess()
+    local jsonStr = Json.encode({ data = {} })
+    local ok, errorType = Envelope.decode(jsonStr)
+    assert(not ok, "Should reject an envelope with no success field")
+    assert(errorType == Envelope.DecodeError.MissingSuccess, "Should return MissingSuccess")
+    print("✓ testDecodeMissingSuccess passed")
+end
+
+local function testDecodeInvalidJson()
+    local ok, errorType = Envelope.decode("{ invalid json }")
+    assert(not ok, "Should reject invalid JSON")
+    assert(errorType == Envelope.DecodeError.InvalidJson, "Should return InvalidJson")
+    print("✓ testDecodeInvalidJson passed")
+end
+
+local function testDecodeEmpty()
+    local ok, errorType = Envelope.decode("")
+    assert(not ok, "Should reject an empty response")
+    assert(errorType == Envelope.DecodeError.InvalidJson, "Empty response is InvalidJson")
+    print("✓ testDecodeEmpty passed")
+end
+
+local function testDecodeData()
+    -- decodeData unwraps to just the data payload on success.
+    local jsonStr = Json.encode({ success = true, data = { apiKey = "abc" } })
+    local ok, data = Envelope.decodeData(jsonStr)
+    assert(ok, "decodeData should succeed")
+    assert(data.apiKey == "abc", "decodeData should return the inner data")
+
+    -- And forwards the error message/code on failure.
+    local errStr = Json.encode({ success = false, error = { code = "NOPE", message = "no" } })
+    local ok2, msg, code = Envelope.decodeData(errStr)
+    assert(not ok2, "decodeData should fail on an error envelope")
+    assert(msg == "no" and code == "NOPE", "decodeData should forward message and code")
+    print("✓ testDecodeData passed")
 end
 
 local function runAllTests()
     print("Running Envelope tests...")
-    testEnvelopeDecodeValid()
-    testEnvelopeDecodeMissingPayload()
-    testEnvelopeDecodeInvalidJson()
-    testEnvelopeDecodeMissingProtocolVersion()
-    testEnvelopeDecodeMissingType()
-    testEnvelopeDecodeMissingSuccess()
-    testEnvelopeDecodeErrorResponse()
+    testDecodeSuccess()
+    testDecodeSuccessDefaultsData()
+    testDecodeErrorResponse()
+    testDecodeErrorDefaults()
+    testDecodeMissingSuccess()
+    testDecodeInvalidJson()
+    testDecodeEmpty()
+    testDecodeData()
     print("All Envelope tests passed!")
 end
 
@@ -132,4 +122,3 @@ end
 return {
     runAllTests = runAllTests
 }
-

@@ -5,6 +5,8 @@
 
 local imgui = require('imgui')
 local ThemeHelper = require('libs.themehelper')
+local ThemeApplier = require('ui.helpers.ThemeApplier')
+local UrlOpener = require('platform.services.UrlOpener')
 local icons = require('libs.icons')
 local scaling = require('scaling')
 local InputHelper = require('ui.helpers.InputHelper')
@@ -49,10 +51,6 @@ local state = {
         status = true
     },
     lastCloseKeyState = false,  -- For edge detection of close key
-    -- Server selection state
-    serverSelectionOpened = false,
-    serverWindowNeedsCenter = false,
-    serverListRefreshTriggered = false,
     -- Online/Offline grouping (groupByOnlineStatus and hideTopBar are read directly from gConfig)
     collapsedOnlineSection = false,
     collapsedOfflineSection = false
@@ -138,6 +136,10 @@ function M.SetVisible(visible)
         if gConfig.showQuickOnline ~= newValue then
             gConfig.showQuickOnline = newValue
             M.SaveWindowState()
+            local settings = require('libs.settings')
+            if settings and settings.save then
+                settings.save()
+            end
         end
     end
 end
@@ -330,6 +332,10 @@ function M.DrawWindow(settings, dataModule)
                     gConfig.showQuickOnline = false
                 end
                 M.SaveWindowState()
+                local settings = require('libs.settings')
+                if settings and settings.save then
+                    settings.save()
+                end
             end
         end
     end
@@ -661,6 +667,10 @@ function M.RenderFriendsTable(dataModule, overlayEnabled, disableInteraction, to
         if not overlayEnabled and not disableInteraction and imgui.IsItemClicked() then
             state.collapsedOnlineSection = not state.collapsedOnlineSection
             M.SaveWindowState()
+            local settings = require('libs.settings')
+            if settings and settings.save then
+                settings.save()
+            end
         end
         
         if onlineExpanded then
@@ -690,6 +700,10 @@ function M.RenderFriendsTable(dataModule, overlayEnabled, disableInteraction, to
         if not overlayEnabled and not disableInteraction and imgui.IsItemClicked() then
             state.collapsedOfflineSection = not state.collapsedOfflineSection
             M.SaveWindowState()
+            local settings = require('libs.settings')
+            if settings and settings.save then
+                settings.save()
+            end
         end
         
         if offlineExpanded then
@@ -835,10 +849,20 @@ function M.RenderCompactFriendsList(friends, sectionTag, dataModule, disableInte
 end
 
 -- Get callbacks for shared components (matches main window pattern)
+local callbacksCache = nil
+local callbacksCacheApp = nil
+local callbacksCacheData = nil
+
 function M.GetCallbacks(dataModule)
     local app = _G.FFXIFriendListApp
-    
-    return {
+    -- Closures capture only `app` and `dataModule` (stable across frames), so
+    -- cache and rebuild only when either identity changes. Called several times
+    -- per frame and from context menus.
+    if callbacksCache and callbacksCacheApp == app and callbacksCacheData == dataModule then
+        return callbacksCache
+    end
+
+    local callbacks = {
         onRefresh = function()
             if app and app.features and app.features.friends then
                 app.features.friends:refresh()
@@ -879,6 +903,10 @@ function M.GetCallbacks(dataModule)
         
         onSaveState = M.SaveWindowState,
     }
+    callbacksCache = callbacks
+    callbacksCacheApp = app
+    callbacksCacheData = dataModule
+    return callbacks
 end
 
 -- Save window state
@@ -936,15 +964,21 @@ function M.SaveWindowState()
     -- Note: groupByOnlineStatus and hideTopBar are controlled by General tab, don't overwrite them here
     settings.collapsedOnlineSection = state.collapsedOnlineSection
     settings.collapsedOfflineSection = state.collapsedOfflineSection
-    
-    -- Persist to disk
-    local settings = require('libs.settings')
-    if settings and settings.save then
-        settings.save()
-    end
+    -- gConfig mirror ONLY — no disk write. This runs every frame (see DrawWindow),
+    -- so persistence is left to the event-driven settings.save() calls below
+    -- (visibility/close/collapse/checkbox handlers) and to unload, mirroring the
+    -- friendlist window. Writing the full settings file here hitched every frame.
 end
 
 -- Simple error window when server auto-detection fails
+function M.ApplyTheme()
+    return ThemeApplier.apply("QuickOnline Display")
+end
+
+function M.PopTheme(themePushed)
+    ThemeApplier.pop(themePushed, "QuickOnline Display")
+end
+
 function M.RenderServerNotDetectedWindow()
     local screenWidth = scaling.window.w
     local screenHeight = scaling.window.h
@@ -997,7 +1031,7 @@ function M.RenderServerNotDetectedWindow()
     imgui.Spacing()
     
     if imgui.Button("Join Discord Server", {200, 30}) then
-        os.execute('start https://discord.gg/horizonfriendlist')
+        UrlOpener.open('https://discord.gg/horizonfriendlist')
     end
     if imgui.IsItemHovered() then
         imgui.SetTooltip("Click to open Discord (opens in default browser)")
@@ -1005,162 +1039,6 @@ function M.RenderServerNotDetectedWindow()
     
     imgui.End()
     M.PopTheme(themePushed)
-end
-
--- DEPRECATED: Server selection window replaced by auto-detection only
-function M.RenderServerSelectionWindow()
-    local serverSelectionData = require('modules.serverselection.data')
-    
-    -- Ensure data module is initialized
-    if not serverSelectionData.GetServers or #(serverSelectionData.GetServers() or {}) == 0 then
-        if serverSelectionData.Initialize then
-            serverSelectionData.Initialize({})
-        end
-    end
-    
-    if serverSelectionData.Update then
-        serverSelectionData.Update()
-    end
-    
-    local screenWidth = scaling.window.w
-    local screenHeight = scaling.window.h
-    
-    local windowFlags = bit.bor(
-        ImGuiWindowFlags_NoCollapse,
-        ImGuiWindowFlags_NoScrollbar,
-        ImGuiWindowFlags_AlwaysAutoResize
-    )
-    
-    -- Center on screen when first opened
-    if state.serverWindowNeedsCenter then
-        local windowWidth = 350
-        local windowHeight = 300
-        local posX = (screenWidth - windowWidth) / 2
-        local posY = (screenHeight - windowHeight) / 2
-        imgui.SetNextWindowPos({posX, posY}, ImGuiCond_Always)
-        state.serverWindowNeedsCenter = false
-    end
-    
-    imgui.SetNextWindowSize({350, 0}, ImGuiCond_FirstUseEver)
-    
-    -- Apply theme
-    local themePushed = false
-    local app = _G.FFXIFriendListApp
-    if app and app.features and app.features.themes then
-        local success, err = pcall(function()
-            local themesFeature = app.features.themes
-            local themeIndex = themesFeature:getThemeIndex()
-            if themeIndex ~= -2 then
-                local themeColors = themesFeature:getCurrentThemeColors()
-                local backgroundAlpha = themesFeature:getBackgroundAlpha()
-                local textAlpha = themesFeature:getTextAlpha()
-                if themeColors then
-                    themePushed = ThemeHelper.pushThemeStyles(themeColors, backgroundAlpha, textAlpha)
-                end
-            end
-        end)
-    end
-    
-    local windowOpenTable = {true}
-    if not imgui.Begin("Select Server##serverselection_qo", windowOpenTable, windowFlags) then
-        imgui.End()
-        if themePushed then ThemeHelper.popThemeStyles() end
-        return
-    end
-    
-    if not windowOpenTable[1] then
-        state.serverSelectionOpened = false
-        imgui.End()
-        if themePushed then ThemeHelper.popThemeStyles() end
-        return
-    end
-    
-    -- Apply button rounding for this popup
-    imgui.PushStyleVar(ImGuiStyleVar_FrameRounding, 4)
-    
-    imgui.TextWrapped("Please select your server to connect to the FFXIFriendList service.")
-    imgui.Separator()
-    imgui.TextColored({1.0, 0.8, 0.0, 1.0}, "Warning:")
-    imgui.TextWrapped("If you select the wrong server, you may not be able to find your friends.")
-    imgui.Separator()
-    
-    local servers = serverSelectionData.GetServers() or {}
-    local draftServerId = serverSelectionData.GetDraftSelectedServerId() or ""
-    local detectedServerId = serverSelectionData.GetDetectedServerId()
-    local detectedServerName = serverSelectionData.GetDetectedServerName()
-    
-    if #servers == 0 and not state.serverListRefreshTriggered then
-        serverSelectionData.RefreshServerList()
-        state.serverListRefreshTriggered = true
-    end
-    
-    if detectedServerId and detectedServerName then
-        imgui.Text("Detected server: " .. detectedServerName)
-        imgui.Spacing()
-    end
-    
-    if #servers == 0 then
-        imgui.Text("Loading servers...")
-        if imgui.Button("Refresh") then
-            serverSelectionData.RefreshServerList()
-        end
-    else
-        local previewText = "Select a server..."
-        for _, server in ipairs(servers) do
-            if server.id == draftServerId then
-                previewText = server.name or server.id
-                break
-            end
-        end
-        
-        if imgui.BeginCombo("Server", previewText) then
-            for _, server in ipairs(servers) do
-                local isSelected = (server.id == draftServerId)
-                if detectedServerId and server.id == detectedServerId then
-                    imgui.PushStyleColor(ImGuiCol_Text, {0.0, 1.0, 0.0, 1.0})
-                end
-                if imgui.Selectable(server.name or server.id, isSelected) then
-                    serverSelectionData.SetDraftSelectedServerId(server.id)
-                end
-                if detectedServerId and server.id == detectedServerId then
-                    imgui.PopStyleColor()
-                end
-                if isSelected then
-                    imgui.SetItemDefaultFocus()
-                end
-            end
-            imgui.EndCombo()
-        end
-    end
-    
-    imgui.Separator()
-    
-    local canSave = draftServerId ~= "" and draftServerId ~= nil
-    if canSave then
-        if imgui.Button("Save", {120, 0}) then
-            serverSelectionData.SaveServerSelection(draftServerId)
-            state.serverSelectionOpened = false
-        end
-    else
-        imgui.PushStyleColor(ImGuiCol_Button, {0.3, 0.3, 0.3, 1.0})
-        imgui.PushStyleColor(ImGuiCol_ButtonHovered, {0.3, 0.3, 0.3, 1.0})
-        imgui.PushStyleColor(ImGuiCol_ButtonActive, {0.3, 0.3, 0.3, 1.0})
-        imgui.PushStyleColor(ImGuiCol_Text, {0.5, 0.5, 0.5, 1.0})
-        imgui.Button("Save", {120, 0})
-        imgui.PopStyleColor(4)
-    end
-    
-    imgui.SameLine()
-    
-    if imgui.Button("Close", {120, 0}) then
-        state.serverSelectionOpened = false
-    end
-    
-    -- Pop button rounding
-    imgui.PopStyleVar()
-    
-    imgui.End()
-    if themePushed then ThemeHelper.popThemeStyles() end
 end
 
 -- Cleanup

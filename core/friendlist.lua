@@ -134,7 +134,16 @@ function M.FriendList.new()
     local self = setmetatable({}, M.FriendList)
     self.friends = {}
     self.friendStatuses = {}
+    -- Monotonic mutation counter. Consumers (e.g. Friends:getState) cache derived
+    -- snapshots keyed on this, which is reliable where wall-clock timestamps are
+    -- only 1s-resolution. Bumped on every friend/status mutation below.
+    self.revision = 0
     return self
+end
+
+-- Bump the mutation counter to invalidate downstream caches.
+function M.FriendList:_touch()
+    self.revision = (self.revision or 0) + 1
 end
 
 function M.FriendList:addFriend(friend)
@@ -171,6 +180,7 @@ function M.FriendList:addFriend(friend)
     newFriend.realmId = friend.realmId
     
     table.insert(self.friends, newFriend)
+    self:_touch()
     return true
 end
 
@@ -188,7 +198,8 @@ function M.FriendList:removeFriend(name)
     if statusIndex ~= #self.friendStatuses + 1 then
         table.remove(self.friendStatuses, statusIndex)
     end
-    
+
+    self:_touch()
     return true
 end
 
@@ -220,6 +231,7 @@ function M.FriendList:updateFriend(friend)
     updatedFriend.rank = friend.rank
     
     self.friends[index] = updatedFriend
+    self:_touch()
     return true
 end
 
@@ -238,6 +250,7 @@ end
 function M.FriendList:clear()
     self.friends = {}
     self.friendStatuses = {}
+    self:_touch()
 end
 
 function M.FriendList:getFriendNames()
@@ -277,6 +290,7 @@ function M.FriendList:updateFriendStatus(status)
     else
         self.friendStatuses[index] = updatedStatus
     end
+    self:_touch()
 end
 
 function M.FriendList:getFriendStatus(name)

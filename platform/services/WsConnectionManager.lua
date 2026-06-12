@@ -5,6 +5,7 @@
 
 local TimingConstants = require("core.TimingConstants")
 local Limits = require("constants.limits")
+local Backoff = require("core.Backoff")
 
 local M = {}
 
@@ -44,11 +45,17 @@ function M.WsConnectionManager.new(deps)
     self.deps = deps
     self.logger = deps.logger
     self.wsClient = deps.wsClient
+    -- The connection feature: WS lifecycle is reflected into it (item 1b) so the
+    -- UI can show a subtle realtime "reconnecting" hint without gating windows.
+    self.connection = deps.connection
     self.time = deps.time or function() return os.clock() * 1000 end
-    
+
     -- State machine
     self.state = M.State.DISCONNECTED
     self.connectAttemptInFlight = false
+    -- Whether the socket has ever been up; distinguishes first-connect
+    -- ("connecting") from re-establishing a dropped socket ("reconnecting").
+    self.hasEverConnected = false
     
     -- Backoff tracking
     self.config = {}
@@ -136,11 +143,11 @@ function M.WsConnectionManager:tick()
         self.nextAttemptAt = nil
         self:_attemptConnect()
     end
-    
-    -- Tick the underlying WsClient (non-blocking message processing only)
-    if self.wsClient and self.state == M.State.CONNECTED then
-        self.wsClient:tickMessages()
-    end
+
+    -- NOTE: the WsClient message/connect pumps are owned by App.tick (it calls
+    -- wsClient:tickConnect() + wsClient:tickMessages() once per frame). This
+    -- manager used to also call tickMessages() while CONNECTED, which double-
+    -- processed the inbound queue every frame. Single ownership lives in App.
 end
 
 -- Get current state
@@ -226,8 +233,9 @@ function M.WsConnectionManager:_handleConnectSuccess()
     self.connectAttemptInFlight = false
     self.state = M.State.CONNECTED
     self.lastConnectedAt = self.time()
+    self.hasEverConnected = true
     self.errorCount = 0
-    
+
     self:_updateStatus()
     self:_logThrottled("info", "[WsConnectionManager] Connected")
 end
@@ -262,16 +270,12 @@ function M.WsConnectionManager:_handleConnectFailed(errorMsg)
 end
 
 function M.WsConnectionManager:_calculateBackoff()
-    -- Exponential backoff: base * 2^(attempt-1)
-    local delay = self.config.baseDelayMs * (2 ^ (self.attemptCount - 1))
-    delay = math.min(delay, self.config.maxDelayMs)
-    
-    -- Add jitter: ±jitterPercent
-    local jitterRange = delay * self.config.jitterPercent
-    local jitter = (math.random() * 2 - 1) * jitterRange
-    delay = math.floor(delay + jitter)
-    
-    return math.max(100, delay)  -- Minimum 100ms
+    return Backoff.compute(self.attemptCount, {
+        baseMs = self.config.baseDelayMs,
+        maxMs = self.config.maxDelayMs,
+        jitterPercent = self.config.jitterPercent,
+        minMs = 100,
+    })
 end
 
 function M.WsConnectionManager:_updateStatus()
@@ -297,6 +301,31 @@ function M.WsConnectionManager:_updateStatus()
         self.statusText = "Disconnected"
         self.statusDetail = ""
     end
+
+    -- Reflect realtime health into the connection feature (non-gating).
+    self:_reflectRealtimeState()
+end
+
+-- Map the WS state machine onto the connection feature's realtime channel.
+-- This is the single choke point: _updateStatus() runs on every transition.
+function M.WsConnectionManager:_reflectRealtimeState()
+    if not self.connection or not self.connection.setRealtimeState then
+        return
+    end
+
+    local realtime
+    if self.state == M.State.CONNECTED then
+        realtime = "connected"
+    elseif self.state == M.State.FAILED then
+        realtime = "failed"
+    elseif self.state == M.State.DISCONNECTED then
+        realtime = "disconnected"
+    else
+        -- CONNECTING or BACKING_OFF: distinguish first connect from a re-sync.
+        realtime = self.hasEverConnected and "reconnecting" or "connecting"
+    end
+
+    self.connection:setRealtimeState(realtime)
 end
 
 function M.WsConnectionManager:_logThrottled(level, message, errorKey)

@@ -94,7 +94,21 @@ function App.create(deps)
             app.features.wsClient.eventRouter:registerHandler(eventType, handler)
         end
     end
-    
+
+    -- Inject the post-connect orchestration so the connection feature doesn't
+    -- reach up into app.App (DI: App composes connection, not the reverse).
+    app.features.connection.onConnected = function()
+        if app._startupRefreshCompleted then
+            return
+        end
+        App._triggerStartupRefresh(app)
+        app._startupRefreshCompleted = true
+        -- Ensure WS connection requested (in case we came online later)
+        if app.features and app.features.wsConnectionManager then
+            app.features.wsConnectionManager:requestConnect()
+        end
+    end
+
     return app
 end
 

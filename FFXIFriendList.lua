@@ -341,7 +341,6 @@ ashita.events.register('load', 'ffxifriendlist_load', function()
     
     -- Load and register UI modules
     local friendListModule = require('modules.friendlist')
-    local optionsModule = require('modules.options')
     local notificationsModule = require('modules.notifications')
     
     -- Register modules in registry
@@ -349,13 +348,6 @@ ashita.events.register('load', 'ffxifriendlist_load', function()
         module = friendListModule,
         settingsKey = 'friendListSettings',
         configKey = 'showFriendList',
-        hasSetHidden = true
-    })
-    
-    local _ = moduleRegistry.Register('options', {
-        module = optionsModule,
-        settingsKey = 'optionsSettings',
-        configKey = 'showOptions',
         hasSetHidden = true
     })
     
@@ -383,18 +375,9 @@ ashita.events.register('load', 'ffxifriendlist_load', function()
         hasSetHidden = true
     })
     
-    -- ServerSelection module - DISABLED: Now handled by friendlist and quickonline modules
-    -- local serverSelectionModule = require('modules.serverselection')
-    -- local _ = moduleRegistry.Register('serverSelection', {
-    --     module = serverSelectionModule,
-    --     settingsKey = 'serverSelectionSettings',
-    --     configKey = 'showServerSelection',
-    --     hasSetHidden = true
-    -- })
-    
-    -- Themes functionality is now integrated into the main window's Themes tab
-    -- No separate themes window module needed
-    
+    -- Server selection and Themes are integrated into the friendlist/quickonline
+    -- windows; there are no separate window modules for them.
+
     -- Presence selector (shown before character detection)
     local presenceSelectorModule = require('modules.presenceselector')
     local _ = moduleRegistry.Register('presenceSelector', {
@@ -648,12 +631,9 @@ ashita.events.register('command', 'ffxifriendlist_command', function(e)
         if #command_args > 1 then
             local subcmd = command_args[2]
             
-            -- /fl debug - toggle debug window (if implemented)
-            if subcmd == "debug" then
-                -- TODO: Implement debug window toggle
-                return
-            end
-            
+            -- NOTE: '/fl debug <0-4>' (set log level) is handled below; do not add
+            -- an early stub here or it will dead-end before the real handler.
+
             -- /fl perf - print performance summary (if implemented)
             if subcmd == "perf" then
                 -- TODO: Implement performance summary

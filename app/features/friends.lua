@@ -141,34 +141,46 @@ local function formatJobFromState(state)
 end
 
 function M.Friends:getState()
-    local rawFriends = self.friendList:getFriends()
-    local friendsWithPresence = {}
-    
-    for _, friend in ipairs(rawFriends) do
-        local status = self.friendList:getFriendStatus(friend.name)
-        
-        local friendCopy = {
-            name = friend.name,
-            friendedAs = friend.friendedAs,
-            linkedCharacters = friend.linkedCharacters,
-            isOnline = status and status.isOnline or false,
-            isAway = status and status.isAway or false,
-            isPending = friend.isPending or false,
-            friendAccountId = friend.friendAccountId,
-            sharesOnlineStatus = status and status.showOnlineStatus ~= false or true,
-            lastSeenAt = status and status.lastSeenAt or 0,
-            realmId = friend.realmId,
-            presence = {
-                job = status and status.job or "",
-                zone = status and status.zone or "",
-                rank = status and status.rank or "",
-                nation = status and status.nation or -1,
-                lastSeenAt = status and status.lastSeenAt or 0
+    -- The friends array (with per-friend presence) is the expensive part to
+    -- rebuild and getState() is called every frame. Rebuild it only when the
+    -- underlying FriendList actually mutates (tracked by its monotonic revision),
+    -- which matters at the 1000-friend cap. The cheap fields below (requests,
+    -- state, lastError) are always read fresh.
+    local revision = self.friendList.revision
+    local friendsWithPresence
+    if self._friendsCache ~= nil and self._friendsCacheRevision == revision then
+        friendsWithPresence = self._friendsCache
+    else
+        friendsWithPresence = {}
+        local rawFriends = self.friendList:getFriends()
+        for _, friend in ipairs(rawFriends) do
+            local status = self.friendList:getFriendStatus(friend.name)
+
+            local friendCopy = {
+                name = friend.name,
+                friendedAs = friend.friendedAs,
+                linkedCharacters = friend.linkedCharacters,
+                isOnline = status and status.isOnline or false,
+                isAway = status and status.isAway or false,
+                isPending = friend.isPending or false,
+                friendAccountId = friend.friendAccountId,
+                sharesOnlineStatus = status and status.showOnlineStatus ~= false or true,
+                lastSeenAt = status and status.lastSeenAt or 0,
+                realmId = friend.realmId,
+                presence = {
+                    job = status and status.job or "",
+                    zone = status and status.zone or "",
+                    rank = status and status.rank or "",
+                    nation = status and status.nation or -1,
+                    lastSeenAt = status and status.lastSeenAt or 0
+                }
             }
-        }
-        table.insert(friendsWithPresence, friendCopy)
+            table.insert(friendsWithPresence, friendCopy)
+        end
+        self._friendsCache = friendsWithPresence
+        self._friendsCacheRevision = revision
     end
-    
+
     return {
         friends = friendsWithPresence,
         incomingRequests = self.incomingRequests,
@@ -303,7 +315,10 @@ function M.Friends:handleRefreshResponse(success, response)
     local decodeTime = stateUpdateStartMs - decodeStartMs
     
     self.friendList:clear()
-    
+
+    -- Collected for the online-state diff engine (baseline seed / gap reconcile).
+    local statuses = {}
+
     -- New server returns { friends: FriendInfo[] }
     local friends = result.friends or {}
     for _, friendData in ipairs(friends) do
@@ -341,10 +356,17 @@ function M.Friends:handleRefreshResponse(success, response)
         status.rank = friend.rank or ""
         status.lastSeenAt = friend.lastSeenAt
         status.showOnlineStatus = true
-        
+
         self.friendList:updateFriendStatus(status)
+        table.insert(statuses, status)
     end
-    
+
+    -- Feed the diff engine: the first refresh seeds the online-state baseline
+    -- silently; a gap-triggered reconcile diffs against it and surfaces any
+    -- transitions we missed while WS events were dropped. Shared with the WS
+    -- snapshot path so both agree on what is "new".
+    self:checkForStatusChanges(statuses)
+
     self.state = "idle"
     self.lastError = nil
     self.lastUpdatedAt = getTime(self)
@@ -767,8 +789,10 @@ function M.Friends:refreshFriendRequests()
 end
 
 function M.Friends:handleFriendRequestsResponse(success, response, requestType)
-    self.friendRequestsInFlight = false
-    
+    -- The in-flight flag is cleared by the OUTGOING callback only (see
+    -- refreshFriendRequests), after BOTH the pending and outgoing fetches return.
+    -- Clearing it here would reopen the gate as soon as the first response (pending)
+    -- arrived while outgoing was still in flight.
     if not success then
         if self.deps.logger and self.deps.logger.warn then
             self.deps.logger.warn("[Friends] Failed to refresh friend requests: " .. tostring(response))
@@ -839,24 +863,13 @@ function M.Friends:handlePCUpdate(packet)
     if not packet or packet.type ~= "pc_update" then
         return
     end
-    
-    -- Skip during zone cooldown
-    if self.lastZoneOnlyUpdateAt then
-        local timeSinceZoneUpdate = getTime(self) - self.lastZoneOnlyUpdateAt
-        if timeSinceZoneUpdate < 4000 then
-            return  -- Skip during zone cooldown
-        end
-    end
-    
-    -- Track anonymous status from packet
-    local currentAnon = packet.isAnonymous
-    
-    if self.lastKnownAnonStatus ~= currentAnon then
-        self.lastKnownAnonStatus = currentAnon
-        
-        self.presenceChangedAt = getTime(self)
-        self:updatePresence()
-    end
+
+    -- NOTE: 0x00D (PC Update) is BROADCAST for every nearby PC, so its anonymous
+    -- bit reflects whoever's packet just arrived — not necessarily the local
+    -- player. Driving our own /anon status from it caused it to flip to false in
+    -- crowded zones (e.g. Port Jeuno) as non-anon passers-by updated. Self-anon is
+    -- now driven solely by the authoritative self packet 0x037 (handleUpdateChar).
+    -- 0x00D no longer touches lastKnownAnonStatus.
 end
 
 function M.Friends:handleUpdateChar(packet)
@@ -1241,6 +1254,36 @@ function M.Friends:checkForStatusChanges(currentStatuses)
     
     -- Update previous status with current
     self.previousOnlineStatus = currentOnlineStatus
+end
+
+-- Records a live "friend online" event in the online-state map and reports
+-- whether it is a genuine offline->online transition worth notifying about.
+-- Suppresses notifications before the baseline scan is established and for
+-- friends already known to be online (reconnect re-sync re-sends the full set).
+-- Shares previousOnlineStatus/initialStatusScanComplete with checkForStatusChanges
+-- so the snapshot (bulk) and live (per-event) paths agree on what is "new".
+function M.Friends:registerFriendOnline(characterName)
+    local key = string.lower(characterName or "")
+    if key == "" then return false end
+
+    local wasPreviouslyOnline = self.previousOnlineStatus[key] == true
+    self.previousOnlineStatus[key] = true
+
+    -- No baseline yet: we cannot tell new-online from already-online, stay quiet.
+    if not self.initialStatusScanComplete then
+        return false
+    end
+
+    -- Only a true offline(or unknown)->online flip is worth a toast.
+    return not wasPreviouslyOnline
+end
+
+-- Records a live "friend offline" event so a later return to online is detected
+-- as a genuine transition by registerFriendOnline.
+function M.Friends:registerFriendOffline(characterName)
+    local key = string.lower(characterName or "")
+    if key == "" then return end
+    self.previousOnlineStatus[key] = false
 end
 
 -- Check for new friend requests and trigger notifications

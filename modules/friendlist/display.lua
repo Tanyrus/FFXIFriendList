@@ -1,5 +1,7 @@
 local imgui = require('imgui')
 local ThemeHelper = require('libs.themehelper')
+local ThemeApplier = require('ui.helpers.ThemeApplier')
+local UrlOpener = require('platform.services.UrlOpener')
 local UIConstants = require('core.UIConstants')
 local scaling = require('scaling')
 local FontManager = require('app.ui.FontManager')
@@ -53,10 +55,6 @@ local state = {
     showAboutPopup = false,
     aboutPopupJustOpened = false,
     menuDetectionExpanded = true,
-    showServerSelectionPopup = false,
-    serverSelectionPopupOpened = false,
-    serverListRefreshTriggered = false,
-    serverWindowNeedsCenter = false,
     themeColorBuffers = {
         windowBg = {1.0, 1.0, 1.0, 1.0},
         childBg = {1.0, 1.0, 1.0, 1.0},
@@ -479,42 +477,11 @@ function M.RenderBlockAndRemoveModal(state, callbacks)
 end
 
 function M.ApplyTheme()
-    local themePushed = false
-    local app = _G.FFXIFriendListApp
-    if app and app.features and app.features.themes then
-        local success, err = pcall(function()
-            local themesFeature = app.features.themes
-            local themeIndex = themesFeature:getThemeIndex()
-            
-            if themeIndex ~= -2 then
-                local themeColors = themesFeature:getCurrentThemeColors()
-                local backgroundAlpha = themesFeature:getBackgroundAlpha()
-                local textAlpha = themesFeature:getTextAlpha()
-                
-                if themeColors then
-                    themePushed = ThemeHelper.pushThemeStyles(themeColors, backgroundAlpha, textAlpha)
-                end
-            end
-        end)
-        if not success then
-            if app.deps and app.deps.logger and app.deps.logger.error then
-                app.deps.logger.error("[FriendList Display] Theme application failed: " .. tostring(err))
-            end
-        end
-    end
-    return themePushed
+    return ThemeApplier.apply("FriendList Display")
 end
 
 function M.PopTheme(themePushed)
-    if themePushed then
-        local success, err = pcall(ThemeHelper.popThemeStyles)
-        if not success then
-            local app = _G.FFXIFriendListApp
-            if app and app.deps and app.deps.logger and app.deps.logger.error then
-                app.deps.logger.error("[FriendList Display] Theme pop failed: " .. tostring(err))
-            end
-        end
-    end
+    ThemeApplier.pop(themePushed, "FriendList Display")
 end
 
 function M.RenderContent(dataModule)
@@ -1024,10 +991,28 @@ function M.RenderTaggedFriendSections(dataModule, callbacks)
     imgui.Spacing()
     
     if #friends == 0 then
-        imgui.Text("No friends" .. (filterText ~= "" and " matching filter" or ""))
+        if filterText ~= "" then
+            imgui.Text("No friends matching filter")
+        else
+            -- Distinguish empty / loading / error instead of always "No friends".
+            local friendsState = dataModule.GetFriendsState and dataModule.GetFriendsState() or "idle"
+            local lastError = dataModule.GetLastError and dataModule.GetLastError() or nil
+            if friendsState == "syncing" then
+                imgui.TextDisabled("Loading friends...")
+            elseif friendsState == "error" or lastError then
+                local msg = (type(lastError) == "table" and lastError.message) or "Couldn't reach the server"
+                imgui.TextColored({0.95, 0.55, 0.45, 1.0}, "Couldn't load friends")
+                imgui.TextDisabled(tostring(msg))
+                if imgui.SmallButton("Retry##friends_error") then
+                    if callbacks and callbacks.onRefresh then callbacks.onRefresh() end
+                end
+            else
+                imgui.TextDisabled("No friends yet - add one above")
+            end
+        end
         return
     end
-    
+
     local tagOrder = {}
     if tagsFeature then
         tagOrder = tagsFeature:getAllTags() or {}
@@ -1343,7 +1328,7 @@ function M.RenderServerNotDetectedWindow()
     imgui.Spacing()
     
     if imgui.Button("Join Discord Server", {200, 30}) then
-        os.execute('start https://discord.gg/horizonfriendlist')
+        UrlOpener.open('https://discord.gg/horizonfriendlist')
     end
     if imgui.IsItemHovered() then
         imgui.SetTooltip("Click to open Discord (opens in default browser)")
@@ -1353,175 +1338,22 @@ function M.RenderServerNotDetectedWindow()
     M.PopTheme(themePushed)
 end
 
--- DEPRECATED: Server selection window replaced by auto-detection only
-function M.RenderServerSelectionWindow()
-    -- Use the serverselection data module for draft selection
-    local serverSelectionData = require('modules.serverselection.data')
-    
-    -- Ensure data module is initialized and synced with app state
-    if not serverSelectionData.GetServers or #(serverSelectionData.GetServers() or {}) == 0 then
-        -- Initialize if needed
-        if serverSelectionData.Initialize then
-            serverSelectionData.Initialize({})
-        end
-    end
-    
-    -- Update data from app state
-    if serverSelectionData.Update then
-        serverSelectionData.Update()
-    end
-    
-    local screenWidth = scaling.window.w
-    local screenHeight = scaling.window.h
-    
-    -- Window flags - regular window with no collapse
-    local windowFlags = bit.bor(
-        ImGuiWindowFlags_NoCollapse,
-        ImGuiWindowFlags_NoScrollbar,
-        ImGuiWindowFlags_AlwaysAutoResize
-    )
-    
-    -- Center on screen when first opened
-    if state.serverWindowNeedsCenter then
-        local windowWidth = 350
-        local windowHeight = 300
-        local posX = (screenWidth - windowWidth) / 2
-        local posY = (screenHeight - windowHeight) / 2
-        imgui.SetNextWindowPos({posX, posY}, ImGuiCond_Always)
-        state.serverWindowNeedsCenter = false
-    end
-    
-    -- Set size for first use
-    imgui.SetNextWindowSize({350, 0}, ImGuiCond_FirstUseEver)
-    
-    -- Apply theme
-    local themePushed = M.ApplyTheme()
-    
-    -- Begin regular window (like original auto-popup)
-    local windowOpenTable = {true}
-    if not imgui.Begin("Select Server##serverselection", windowOpenTable, windowFlags) then
-        imgui.End()
-        M.PopTheme(themePushed)
-        return
-    end
-    
-    -- Handle X button close
-    if not windowOpenTable[1] then
-        state.serverSelectionPopupOpened = false
-        imgui.End()
-        M.PopTheme(themePushed)
-        return
-    end
-    
-    imgui.TextWrapped("Please select your server to connect to the FFXIFriendList service.")
-    
-    imgui.Separator()
-    
-    imgui.TextColored({1.0, 0.8, 0.0, 1.0}, "Warning:")
-    imgui.TextWrapped("If you select the wrong server, you may not be able to find your friends.")
-    
-    imgui.Separator()
-    
-    -- Get server list data from serverselection data module
-    local servers = serverSelectionData.GetServers() or {}
-    local draftServerId = serverSelectionData.GetDraftSelectedServerId() or ""
-    local detectedServerId = serverSelectionData.GetDetectedServerId()
-    local detectedServerName = serverSelectionData.GetDetectedServerName()
-    
-    -- Auto-refresh if no servers loaded
-    if #servers == 0 and not state.serverListRefreshTriggered then
-        serverSelectionData.RefreshServerList()
-        state.serverListRefreshTriggered = true
-    end
-    
-    -- Show detected server if available
-    if detectedServerId and detectedServerName then
-        imgui.Text("Detected server: " .. detectedServerName)
-        imgui.Spacing()
-    end
-    
-    -- Server combo
-    if #servers == 0 then
-        imgui.Text("Loading servers...")
-        if imgui.Button("Refresh") then
-            serverSelectionData.RefreshServerList()
-        end
-    else
-        local previewText = "Select a server..."
-        for _, server in ipairs(servers) do
-            if server.id == draftServerId then
-                previewText = server.name or server.id
-                break
-            end
-        end
-        
-        if imgui.BeginCombo("Server", previewText) then
-            for _, server in ipairs(servers) do
-                local isSelected = (server.id == draftServerId)
-                
-                -- Highlight detected server in green
-                if detectedServerId and server.id == detectedServerId then
-                    imgui.PushStyleColor(ImGuiCol_Text, {0.0, 1.0, 0.0, 1.0})
-                end
-                
-                if imgui.Selectable(server.name or server.id, isSelected) then
-                    serverSelectionData.SetDraftSelectedServerId(server.id)
-                end
-                
-                if detectedServerId and server.id == detectedServerId then
-                    imgui.PopStyleColor()
-                end
-                
-                if isSelected then
-                    imgui.SetItemDefaultFocus()
-                end
-            end
-            imgui.EndCombo()
-        end
-    end
-    
-    imgui.Separator()
-    
-    -- Buttons
-    local canSave = draftServerId ~= "" and draftServerId ~= nil
-    
-    if canSave then
-        if imgui.Button("Save", {120, 0}) then
-            serverSelectionData.SaveServerSelection(draftServerId)
-            state.serverSelectionPopupOpened = false
-            
-            -- Check if help tab should auto-open
-            if serverSelectionData.ShouldAutoOpenHelpTab() then
-                state.selectedTab = 8
-                local settings = require('libs.settings')
-                if settings and settings.save then
-                    settings.save()
-                end
-            end
-        end
-    else
-        imgui.PushStyleColor(ImGuiCol_Button, {0.3, 0.3, 0.3, 1.0})
-        imgui.PushStyleColor(ImGuiCol_ButtonHovered, {0.3, 0.3, 0.3, 1.0})
-        imgui.PushStyleColor(ImGuiCol_ButtonActive, {0.3, 0.3, 0.3, 1.0})
-        imgui.PushStyleColor(ImGuiCol_Text, {0.5, 0.5, 0.5, 1.0})
-        imgui.Button("Save", {120, 0})
-        imgui.PopStyleColor(4)
-    end
-    
-    imgui.SameLine()
-    
-    if imgui.Button("Close", {120, 0}) then
-        state.serverSelectionPopupOpened = false
-    end
-    
-    imgui.End()
-    M.PopTheme(themePushed)
-end
+local callbacksCache = nil
+local callbacksCacheApp = nil
+local callbacksCacheData = nil
 
 function M.GetCallbacks(dataModule)
     local app = _G.FFXIFriendListApp
-    
-    return {
+    -- These closures capture only `app` and `dataModule` (stable across frames)
+    -- plus module-level state, so cache the table and rebuild only when either
+    -- identity changes (e.g. app nil -> instance at boot). GetCallbacks is called
+    -- several times per frame and recursively from onRenderContextMenu, so this
+    -- avoids ~20 closure allocations each time.
+    if callbacksCache and callbacksCacheApp == app and callbacksCacheData == dataModule then
+        return callbacksCache
+    end
+
+    local callbacks = {
         onRefresh = function()
             if app and app.features and app.features.friends then
                 app.features.friends:refresh()
@@ -1692,6 +1524,10 @@ function M.GetCallbacks(dataModule)
             FriendContextMenu.Render(friend, state, M.GetCallbacks(dataModule))
         end,
     }
+    callbacksCache = callbacks
+    callbacksCacheApp = app
+    callbacksCacheData = dataModule
+    return callbacks
 end
 
 return M

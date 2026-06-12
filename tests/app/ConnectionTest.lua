@@ -2,6 +2,7 @@
 -- Unit tests for app/features/connection.lua
 
 local Connection = require("app.features.connection")
+local ServerConfig = require("core.ServerConfig")
 
 local function createFakeDeps()
     return {
@@ -19,29 +20,30 @@ end
 
 local function testConnectionStateTransitions()
     local deps = createFakeDeps()
-    local conn = Connection.Connection.new(deps.logger, deps.net, deps.session, deps.storage)
+    local conn = Connection.Connection.new(deps)
     
-    assert(conn:getState() == Connection.ConnectionState.Disconnected, "Should start disconnected")
+    -- getState() returns a snapshot table; .state holds the enum value.
+    assert(conn:getState().state == Connection.ConnectionState.Disconnected, "Should start disconnected")
     assert(not conn:isConnected(), "Should not be connected initially")
     assert(not conn:isConnecting(), "Should not be connecting initially")
-    
+
     conn:startConnecting()
-    assert(conn:getState() == Connection.ConnectionState.Connecting, "Should be connecting")
+    assert(conn:getState().state == Connection.ConnectionState.Connecting, "Should be connecting")
     assert(conn:isConnecting(), "Should report as connecting")
-    
+
     conn:setConnected()
-    assert(conn:getState() == Connection.ConnectionState.Connected, "Should be connected")
+    assert(conn:getState().state == Connection.ConnectionState.Connected, "Should be connected")
     assert(conn:isConnected(), "Should report as connected")
-    
+
     conn:setDisconnected()
-    assert(conn:getState() == Connection.ConnectionState.Disconnected, "Should be disconnected")
+    assert(conn:getState().state == Connection.ConnectionState.Disconnected, "Should be disconnected")
     
     return true
 end
 
 local function testConnectionApiKeys()
     local deps = createFakeDeps()
-    local conn = Connection.Connection.new(deps.logger, deps.net, deps.session, deps.storage)
+    local conn = Connection.Connection.new(deps)
     
     assert(not conn:hasApiKey("TestChar"), "Should not have API key initially")
     
@@ -57,7 +59,7 @@ end
 
 local function testConnectionServerSelection()
     local deps = createFakeDeps()
-    local conn = Connection.Connection.new(deps.logger, deps.net, deps.session, deps.storage)
+    local conn = Connection.Connection.new(deps)
     
     assert(not conn:hasSavedServer(), "Should not have saved server initially")
     assert(conn:isBlocked(), "Should be blocked without server")
@@ -69,14 +71,14 @@ local function testConnectionServerSelection()
     
     conn:clearSavedServer()
     assert(not conn:hasSavedServer(), "Should not have saved server after clearing")
-    assert(conn:getBaseUrl() == "https://api.horizonfriendlist.com", "Should return default URL")
+    assert(conn:getBaseUrl() == ServerConfig.DEFAULT_SERVER_URL, "Should return default URL")
     
     return true
 end
 
 local function testConnectionHeaders()
     local deps = createFakeDeps()
-    local conn = Connection.Connection.new(deps.logger, deps.net, deps.session, deps.storage)
+    local conn = Connection.Connection.new(deps)
     
     conn:setApiKey("TestChar", "test-key")
     conn:setSavedServer("server1", "https://api.example.com")
@@ -86,8 +88,16 @@ local function testConnectionHeaders()
     -- New auth format: Authorization: Bearer <apiKey>
     assert(headers["Authorization"] == "Bearer test-key", "Should have Authorization Bearer header")
     assert(headers["X-Character-Name"] == "TestChar", "Should have X-Character-Name header")
-    assert(headers["X-Session-Id"] == "test-session", "Should have session ID header")
-    
+
+    -- The Bearer token is ACCOUNT-level, so Authorization must be attached even
+    -- when no character name is available (e.g. WS auth on zone/reload). The
+    -- X-Character-Name header is correctly omitted when the name is empty.
+    local anonHeaders = conn:getHeaders("")
+    assert(anonHeaders["Authorization"] == "Bearer test-key",
+        "Authorization should be attached even without a character name")
+    assert(anonHeaders["X-Character-Name"] == nil,
+        "Should omit X-Character-Name when name is empty")
+
     return true
 end
 

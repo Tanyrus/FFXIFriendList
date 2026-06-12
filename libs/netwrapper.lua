@@ -59,7 +59,13 @@ function M.request(options)
         
         -- If connection feature available, use its getHeaders method
         if self.connection and self.connection.getHeaders then
-            local characterName = ""  -- TODO: Get from session
+            -- Source the active character name from the connection when known.
+            -- Auth no longer depends on it (the Bearer token is account-level),
+            -- but it lets character-bound endpoints get X-Character-Name.
+            local characterName = ""
+            if self.connection.getCharacterName then
+                characterName = self.connection:getCharacterName() or ""
+            end
             local connHeaders = self.connection:getHeaders(characterName)
             -- Merge connection headers (they take precedence)
             for k, v in pairs(connHeaders) do
@@ -119,7 +125,12 @@ function M.create(sessionManager, realmDetector, connection)
             
             -- If connection feature available, use its getHeaders method
             if wrapper.connection and wrapper.connection.getHeaders then
-                local characterName = ""  -- TODO: Get from session
+                -- Source the active character name from the connection when known
+                -- (auth is account-level; this only adds X-Character-Name).
+                local characterName = ""
+                if wrapper.connection.getCharacterName then
+                    characterName = wrapper.connection:getCharacterName() or ""
+                end
                 local connHeaders = wrapper.connection:getHeaders(characterName)
                 for k, v in pairs(connHeaders) do
                     headers[k] = v

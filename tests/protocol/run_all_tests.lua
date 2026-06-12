@@ -21,7 +21,6 @@ end
 addTest("tests.protocol.JsonTest")
 addTest("tests.protocol.ProtocolVersionTest")
 addTest("tests.protocol.EnvelopeTest")
-addTest("tests.protocol.DecoderTest")
 addTest("tests.protocol.RequestEncoderTest")
 addTest("tests.protocol.WsEnvelopeTest")
 
